@@ -1,8 +1,22 @@
 import { Tabs } from 'expo-router';
+import CustomTabBar from '@components/CustomTabBar';
 
 export default function TabLayout() {
   return (
-    <Tabs>
+    <Tabs
+      tabBar={(props) => {
+        const routeName = props.state.routes[props.state.index].name;
+        return (
+          <CustomTabBar
+            activeTab={routeName}
+            onTabPress={(key) => {
+              props.navigation.navigate(key);
+            }}
+          />
+        );
+      }}
+      screenOptions={{ headerShown: false }}
+    >
       <Tabs.Screen
         name="index"
         options={{
@@ -10,9 +24,27 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="connection"
         options={{
-          title: 'Explore',
+          title: 'Connection',
+        }}
+      />
+      <Tabs.Screen
+        name="reels"
+        options={{
+          title: 'Reels',
+        }}
+      />
+      <Tabs.Screen
+        name="notification"
+        options={{
+          title: 'Notification',
+        }}
+      />
+      <Tabs.Screen
+        name="groups"
+        options={{
+          title: 'Groups',
         }}
       />
     </Tabs>
