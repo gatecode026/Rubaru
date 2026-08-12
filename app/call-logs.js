@@ -1,11 +1,11 @@
 import { Stack } from 'expo-router';
-import ChatsScreen from '../../src/screens/ChatsScreen';
+import CallLogsScreen from '../src/screens/CallLogsScreen';
 
-export default function IndexScreen() {
+export default function CallLogsRoute() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ChatsScreen />
+      <CallLogsScreen />
     </>
   );
 }

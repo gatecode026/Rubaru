@@ -1,11 +1,11 @@
 import { Stack } from 'expo-router';
-import ChatsScreen from '../../src/screens/ChatsScreen';
+import GroupsScreen from '../src/screens/GroupsScreen';
 
-export default function IndexScreen() {
+export default function GroupsRoute() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ChatsScreen />
+      <GroupsScreen />
     </>
   );
 }
