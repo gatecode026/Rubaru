@@ -27,7 +27,7 @@ const newUsersData = [
     age: 19,
     city: 'JAIPUR',
     distance: '16 km away',
-    imageUri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop',
+    imageUri: 'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?auto=compress&cs=tinysrgb&w=800',
     isNew: true,
     isOnline: true,
   },
@@ -37,7 +37,7 @@ const newUsersData = [
     age: 18,
     city: 'MUMBAI',
     distance: '4.8 km away',
-    imageUri: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&auto=format&fit=crop',
+    imageUri: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=800',
     isNew: true,
     isOnline: false,
   },
@@ -47,7 +47,7 @@ const newUsersData = [
     age: 20,
     city: 'DELHI',
     distance: '2.2 km away',
-    imageUri: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=800&auto=format&fit=crop',
+    imageUri: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=800',
     isNew: true,
     isOnline: true,
   },
@@ -57,7 +57,7 @@ const newUsersData = [
     age: 21,
     city: 'PUNE',
     distance: '1.2 km away',
-    imageUri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800&auto=format&fit=crop',
+    imageUri: 'https://images.pexels.com/photos/1462637/pexels-photo-1462637.jpeg?auto=compress&cs=tinysrgb&w=800',
     isNew: true,
     isOnline: true,
   },
@@ -247,46 +247,6 @@ export default function ConnectionScreen() {
             </View>
           </View>
         </ScrollView>
-
-        {/* Fixed Pinned Bottom Navigation Tab Bar */}
-        <View style={styles.tabBar}>
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/explore')}
-          >
-            <Ionicons name="home-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tabItem} activeOpacity={0.6}>
-            <Ionicons name="pulse" size={24} color="#E63956" />
-            <Text style={[styles.tabLabel, styles.activeTabLabel]}>Connection</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/reels')}
-          >
-            <Ionicons name="play-circle-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Reels</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/notification')}
-          >
-            <Ionicons name="notifications-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Notification</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/groups')}
-          >
-            <Ionicons name="people-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Groups</Text>
-          </TouchableOpacity>
-        </View>
       </LinearGradient>
     </SafeAreaView>
   );
@@ -526,38 +486,5 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 26,
-  },
-  tabBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#EFEFF4',
-    paddingTop: 10,
-    paddingBottom: 24,
-    elevation: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    zIndex: 20,
-  },
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  tabLabel: {
-    fontSize: 10,
-    color: '#000000',
-    marginTop: 4,
-  },
-  activeTabLabel: {
-    color: '#E63956',
-    fontWeight: '700',
   },
 });

@@ -25,3 +25,6 @@ yarn-error.log*
 
 # Nested duplicate project directory (safeguard)
 Rubaru/
+
+# package-lock.json (if remote ignores it)
+package-lock.json

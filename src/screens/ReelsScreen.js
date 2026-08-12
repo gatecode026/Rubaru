@@ -134,46 +134,6 @@ export default function ReelsScreen() {
           />
         )}
       </View>
-
-      {/* Fixed Pinned Bottom Navigation Tab Bar */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          activeOpacity={0.6}
-          onPress={() => router.push('/explore')}
-        >
-          <Ionicons name="home-outline" size={24} color="#000000" />
-          <Text style={styles.tabLabel}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          activeOpacity={0.6}
-          onPress={() => router.push('/connection')}
-        >
-          <Ionicons name="pulse-outline" size={24} color="#000000" />
-          <Text style={styles.tabLabel}>Connection</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.tabItem} activeOpacity={0.6}>
-          <Ionicons name="play-circle" size={24} color="#E63956" />
-          <Text style={[styles.tabLabel, styles.activeTabLabel]}>Reels</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          activeOpacity={0.6}
-          onPress={() => router.push('/notification')}
-        >
-          <Ionicons name="notifications-outline" size={24} color="#000000" />
-          <Text style={styles.tabLabel}>Notification</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          activeOpacity={0.6}
-          onPress={() => router.push('/groups')}
-        >
-          <Ionicons name="people-outline" size={24} color="#000000" />
-          <Text style={styles.tabLabel}>Groups</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -186,35 +146,5 @@ const styles = StyleSheet.create({
   feedWrapper: {
     flex: 1,
     overflow: 'hidden',
-  },
-  tabBar: {
-    height: 64,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#EFEFF4',
-    paddingTop: 8,
-    paddingBottom: 16,
-    elevation: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    zIndex: 20,
-  },
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  tabLabel: {
-    fontSize: 10,
-    color: '#000000',
-    marginTop: 4,
-  },
-  activeTabLabel: {
-    color: '#E63956',
-    fontWeight: '700',
   },
 });

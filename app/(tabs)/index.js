@@ -1,11 +1,5 @@
-import { Stack } from 'expo-router';
-import ChatsScreen from '../../src/screens/ChatsScreen';
+import HomeScreen from '@screens/HomeScreen';
 
-export default function IndexScreen() {
-  return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
-      <ChatsScreen />
-    </>
-  );
+export default function HomeTab() {
+  return <HomeScreen />;
 }

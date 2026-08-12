@@ -33,7 +33,7 @@ const feedCardsData = [
     id: 'feed-1',
     category: 'Travel',
     categoryEmoji: '🌴',
-    imageUri: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&auto=format&fit=crop',
+    imageUri: 'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?auto=compress&cs=tinysrgb&w=800',
     caption: 'If you could live anywhere in the world, where would you pick?',
     userName: 'Anjana_Kumawat',
     userAvatar: 'https://i.pravatar.cc/150?img=44',
@@ -44,7 +44,7 @@ const feedCardsData = [
     id: 'feed-2',
     category: 'Football',
     categoryEmoji: '⚽',
-    imageUri: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&auto=format&fit=crop',
+    imageUri: 'https://images.pexels.com/photos/1462637/pexels-photo-1462637.jpeg?auto=compress&cs=tinysrgb&w=800',
     caption: 'Who is your favorite football player of all time?',
     userName: 'Pooja_Singh',
     userAvatar: 'https://i.pravatar.cc/150?img=32',
@@ -55,7 +55,7 @@ const feedCardsData = [
     id: 'feed-3',
     category: 'Music',
     categoryEmoji: '🎵',
-    imageUri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop',
+    imageUri: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=800',
     caption: 'What song is on repeat for you right now?',
     userName: 'Sonali_Thakur',
     userAvatar: 'https://i.pravatar.cc/150?img=49',
@@ -66,7 +66,7 @@ const feedCardsData = [
     id: 'feed-4',
     category: 'Coffee',
     categoryEmoji: '☕',
-    imageUri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800&auto=format&fit=crop',
+    imageUri: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=800',
     caption: 'Morning coffee or evening tea?',
     userName: 'Deepika_Sharma',
     userAvatar: 'https://i.pravatar.cc/150?img=47',
@@ -82,7 +82,11 @@ export default function HomeScreen() {
   const renderFixedHeader = () => (
     <View style={styles.topHeaderContainer}>
       {/* Left Profile Avatar with Gradient Border */}
-      <TouchableOpacity activeOpacity={0.8} style={styles.avatarGradientBorder}>
+      <TouchableOpacity
+        activeOpacity={0.8}
+        style={styles.avatarGradientBorder}
+        onPress={() => router.push('/user-profile')}
+      >
         <Image
           source={{ uri: 'https://i.pravatar.cc/150?img=60' }}
           style={styles.headerAvatarImage}
@@ -108,7 +112,7 @@ export default function HomeScreen() {
         {/* Chat Speech Bubble Button */}
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => router.push('/')}
+          onPress={() => router.push('/chats')}
         >
           <LinearGradient
             colors={['#EE6876', '#C63449']}
@@ -200,50 +204,6 @@ export default function HomeScreen() {
           contentContainerStyle={styles.feedContentContainer}
           showsVerticalScrollIndicator={false}
         />
-
-        {/* Fixed Pinned Bottom Navigation Tab Bar */}
-        <View style={styles.tabBar}>
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
-          >
-            <Ionicons name="home" size={24} color="#F04452" />
-            <Text style={[styles.tabLabel, styles.activeTabLabel]}>Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/connection')}
-          >
-            <Ionicons name="pulse-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Connection</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/reels')}
-          >
-            <Ionicons name="play-circle-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Reels</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/notification')}
-          >
-            <Ionicons name="notifications-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Notification</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/groups')}
-          >
-            <Ionicons name="people-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Groups</Text>
-          </TouchableOpacity>
-        </View>
       </LinearGradient>
     </SafeAreaView>
   );
@@ -368,38 +328,5 @@ const styles = StyleSheet.create({
   },
   feedContentContainer: {
     paddingBottom: 90,
-  },
-  tabBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#EFEFF4',
-    paddingTop: 10,
-    paddingBottom: 24,
-    elevation: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    zIndex: 20,
-  },
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  tabLabel: {
-    fontSize: 10,
-    color: '#000000',
-    marginTop: 4,
-  },
-  activeTabLabel: {
-    color: '#F04452',
-    fontWeight: '700',
   },
 });
