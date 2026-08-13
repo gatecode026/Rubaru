@@ -12,10 +12,13 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useRouter } from 'expo-router';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 24) : 44;
 
 export default function ReelItem({ item, height, onBackPress }) {
+  const router = useRouter();
   const [isLiked, setIsLiked] = useState(item.isLiked || false);
   const [likeCount, setLikeCount] = useState(item.likeCount || 8223);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -134,18 +137,24 @@ export default function ReelItem({ item, height, onBackPress }) {
       <View style={styles.bottomInfo}>
         {/* User row */}
         <View style={styles.userRow}>
-          <Image source={{ uri: item.userAvatar }} style={styles.userAvatar} />
-          <Text style={styles.userName} numberOfLines={1}>
-            {item.userName}
-          </Text>
-          {item.isVerified && (
-            <Ionicons
-              name="checkmark-circle"
-              size={16}
-              color="#3897F0"
-              style={styles.verifiedIcon}
-            />
-          )}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => router.push('/user-profile')}
+            style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}
+          >
+            <Image source={{ uri: item.userAvatar }} style={styles.userAvatar} />
+            <Text style={styles.userName} numberOfLines={1}>
+              {item.userName}
+            </Text>
+            {item.isVerified && (
+              <Ionicons
+                name="checkmark-circle"
+                size={16}
+                color="#3897F0"
+                style={styles.verifiedIcon}
+              />
+            )}
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.followBtn, isFollowing && styles.followingBtn]}
             activeOpacity={0.8}

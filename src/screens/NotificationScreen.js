@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import NotificationRow from '../components/common/NotificationRow';
 import SegmentedNotifCallsHeader from '../components/common/SegmentedNotifCallsHeader';
+import BottomTabBar from '../components/common/BottomTabBar';
 
 const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
 
@@ -108,7 +109,7 @@ const notificationsData = [
   },
 ];
 
-export default function NotificationScreen() {
+export default function NotificationScreen({ isNestedInPager }) {
   const router = useRouter();
 
   return (
@@ -129,6 +130,14 @@ export default function NotificationScreen() {
         contentContainerStyle={styles.listContentContainer}
         showsVerticalScrollIndicator={false}
       />
+      {!isNestedInPager && (
+        <BottomTabBar
+          activeTab="Notification"
+          onTabPress={(tabKey) => {
+            router.push(tabKey === 'index' ? '/(tabs)' : `/(tabs)/${tabKey}`);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

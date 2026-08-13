@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import ReelItem from '../components/common/ReelItem';
+import BottomTabBar from '../components/common/BottomTabBar';
 
 const reelsData = [
   {
@@ -77,7 +78,7 @@ const reelsData = [
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export default function ReelsScreen() {
+export default function ReelsScreen({ isNestedInPager }) {
   const router = useRouter();
   // Each reel is the full window height — the image fills behind the tab bar, matching the reference
   const [reelHeight, setReelHeight] = useState(SCREEN_HEIGHT);
@@ -134,6 +135,14 @@ export default function ReelsScreen() {
           />
         )}
       </View>
+      {!isNestedInPager && (
+        <BottomTabBar
+          activeTab="Reels"
+          onTabPress={(tabKey) => {
+            router.push(tabKey === 'index' ? '/(tabs)' : `/(tabs)/${tabKey}`);
+          }}
+        />
+      )}
     </View>
   );
 }

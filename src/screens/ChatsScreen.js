@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
+import BottomTabBar from '../components/common/BottomTabBar';
 
 const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
 import StoryAvatar from '../components/common/StoryAvatar';
@@ -176,49 +177,12 @@ export default function ChatsScreen() {
         />
       )}
 
-      {/* Fixed Custom Bottom Tab Bar */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          activeOpacity={0.6}
-          onPress={() => router.push('/explore')}
-        >
-          <Ionicons name="home-outline" size={24} color="#000000" />
-          <Text style={styles.tabLabel}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          activeOpacity={0.6}
-          onPress={() => router.push('/connection')}
-        >
-          <Ionicons name="pulse" size={24} color="#000000" />
-          <Text style={styles.tabLabel}>Connection</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          activeOpacity={0.6}
-          onPress={() => router.push('/reels')}
-        >
-          <Ionicons name="play-circle-outline" size={24} color="#000000" />
-          <Text style={styles.tabLabel}>Reels</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          activeOpacity={0.6}
-          onPress={() => router.push('/notification')}
-        >
-          <Ionicons name="notifications-outline" size={24} color="#000000" />
-          <Text style={styles.tabLabel}>Notification</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          activeOpacity={0.6}
-          onPress={() => router.push('/groups')}
-        >
-          <Ionicons name="people-outline" size={24} color="#000000" />
-          <Text style={styles.tabLabel}>Groups</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomTabBar
+        activeTab=""
+        onTabPress={(tabKey) => {
+          router.push(tabKey === 'index' ? '/(tabs)' : `/(tabs)/${tabKey}`);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -309,33 +273,5 @@ const styles = StyleSheet.create({
   },
   listContentContainer: {
     paddingBottom: 90,
-  },
-  tabBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#EFEFF4',
-    paddingTop: 10,
-    paddingBottom: 24,
-    elevation: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-  },
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  tabLabel: {
-    fontSize: 10,
-    color: '#000000',
-    marginTop: 4,
   },
 });

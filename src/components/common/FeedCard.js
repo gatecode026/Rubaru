@@ -10,10 +10,13 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useRouter } from 'expo-router';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 32;
 
 export default function FeedCard({ item }) {
+  const router = useRouter();
   const [isLiked, setIsLiked] = useState(item.isLiked || false);
 
   const { category, categoryEmoji, imageUri, caption, userName, userAvatar, location } = item;
@@ -69,13 +72,17 @@ export default function FeedCard({ item }) {
         <Text style={styles.captionText}>{caption}</Text>
 
         {/* User Info Row */}
-        <View style={styles.userRow}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => router.push('/user-profile')}
+          style={styles.userRow}
+        >
           <Image source={{ uri: userAvatar }} style={styles.avatarImage} />
           <View style={styles.userMeta}>
             <Text style={styles.userNameText}>{userName}</Text>
             <Text style={styles.locationText}>{location}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
       </LinearGradient>
     </View>
   );

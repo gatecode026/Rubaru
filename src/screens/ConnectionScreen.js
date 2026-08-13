@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import NewUserCard from '../components/common/NewUserCard';
 import InterestChip from '../components/common/InterestChip';
+import BottomTabBar from '../components/common/BottomTabBar';
 
 const newUsersData = [
   {
@@ -72,7 +73,7 @@ const interestsList = [
   { id: '6', label: 'Writing', emoji: '✍️' },
 ];
 
-export default function ConnectionScreen() {
+export default function ConnectionScreen({ isNestedInPager }) {
   const router = useRouter();
   const [selectedInterest, setSelectedInterest] = useState('Music');
 
@@ -248,6 +249,14 @@ export default function ConnectionScreen() {
           </View>
         </ScrollView>
       </LinearGradient>
+      {!isNestedInPager && (
+        <BottomTabBar
+          activeTab="Connection"
+          onTabPress={(tabKey) => {
+            router.push(tabKey === 'index' ? '/(tabs)' : `/(tabs)/${tabKey}`);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

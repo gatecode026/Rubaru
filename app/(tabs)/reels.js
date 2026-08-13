@@ -1,5 +1,10 @@
-import ReelsScreen from '@screens/ReelsScreen';
+import React, { useEffect } from 'react';
+import { useRouter } from 'expo-router';
 
 export default function ReelsTab() {
-  return <ReelsScreen />;
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/(tabs)?tab=reels');
+  }, []);
+  return null;
 }

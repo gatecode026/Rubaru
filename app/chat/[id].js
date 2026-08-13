@@ -582,11 +582,17 @@ export default function ChatConversationScreen() {
             <TouchableOpacity onPress={handleBack} style={styles.backButton}>
               <Ionicons name="chevron-back" size={28} color="#000000" />
             </TouchableOpacity>
-            <Image source={{ uri: displayAvatar }} style={styles.avatar} />
-            <View style={styles.headerMeta}>
-              <Text style={styles.nameText} numberOfLines={1}>{displayName}</Text>
-              <Text style={styles.statusText}>Online</Text>
-            </View>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => router.push('/user-profile')}
+              style={{ flexDirection: 'row', alignItems: 'center' }}
+            >
+              <Image source={{ uri: displayAvatar }} style={styles.avatar} />
+              <View style={styles.headerMeta}>
+                <Text style={styles.nameText} numberOfLines={1}>{displayName}</Text>
+                <Text style={styles.statusText}>Online</Text>
+              </View>
+            </TouchableOpacity>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity

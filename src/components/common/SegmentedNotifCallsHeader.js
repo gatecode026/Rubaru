@@ -97,7 +97,11 @@ export default function SegmentedNotifCallsHeader({
             </View>
           </View>
 
-          <TouchableOpacity activeOpacity={0.8} style={styles.profileBadge}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.profileBadge}
+            onPress={() => router.push('/user-profile')}
+          >
             <Text style={styles.profileBadgeText}>PS</Text>
           </TouchableOpacity>
         </View>

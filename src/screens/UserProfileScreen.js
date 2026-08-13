@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import BottomTabBar from '../components/common/BottomTabBar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_WIDTH = (SCREEN_WIDTH - 60) / 3;
@@ -297,32 +298,12 @@ export default function UserProfileScreen() {
           </ScrollView>
 
           {/* Integrated Bottom Navigation Tab Bar */}
-          <View style={[styles.bottomTabBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-            <Pressable onPress={() => router.replace('/(tabs)')} style={styles.tabBarItem}>
-              <Ionicons name="home-outline" size={22} color="#111827" />
-              <Text style={styles.tabBarLabel}>Home</Text>
-            </Pressable>
-
-            <Pressable onPress={() => router.replace('/(tabs)/connection')} style={styles.tabBarItem}>
-              <Ionicons name="pulse-outline" size={22} color="#111827" />
-              <Text style={styles.tabBarLabel}>Connection</Text>
-            </Pressable>
-
-            <Pressable onPress={() => router.replace('/(tabs)/reels')} style={styles.tabBarItem}>
-              <Ionicons name="aperture-outline" size={22} color="#111827" />
-              <Text style={styles.tabBarLabel}>Reels</Text>
-            </Pressable>
-
-            <Pressable onPress={() => router.replace('/(tabs)/notification')} style={styles.tabBarItem}>
-              <Ionicons name="notifications-outline" size={22} color="#111827" />
-              <Text style={styles.tabBarLabel}>Notification</Text>
-            </Pressable>
-
-            <Pressable onPress={() => router.replace('/(tabs)/groups')} style={styles.tabBarItem}>
-              <Ionicons name="people" size={22} color="#F44649" />
-              <Text style={[styles.tabBarLabel, { color: '#F44649', fontWeight: '700' }]}>Groups</Text>
-            </Pressable>
-          </View>
+          <BottomTabBar
+            activeTab=""
+            onTabPress={(tabKey) => {
+              router.push(tabKey === 'index' ? '/(tabs)' : `/(tabs)/${tabKey}`);
+            }}
+          />
 
         </View>
       </ImageBackground>
@@ -361,7 +342,10 @@ export default function UserProfileScreen() {
 
               {/* Notification Settings Option */}
               <Pressable
-                onPress={() => router.push('/notification-settings')}
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  router.push('/notification-settings');
+                }}
                 style={styles.settingItemRow}
               >
                 <View style={styles.bulletDot} />
@@ -396,7 +380,13 @@ export default function UserProfileScreen() {
                 <View style={styles.bulletDot} />
                 <Text style={styles.settingItemText}>Transactions</Text>
               </Pressable>
-              <Pressable style={styles.settingItemRow}>
+              <Pressable
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  router.push('/violations');
+                }}
+                style={styles.settingItemRow}
+              >
                 <View style={styles.bulletDot} />
                 <Text style={styles.settingItemText}>Warnings</Text>
               </Pressable>
@@ -407,7 +397,10 @@ export default function UserProfileScreen() {
                 <Text style={styles.sectionHeaderTitle}>Profile</Text>
               </View>
               <Pressable
-                onPress={() => router.push('/edit-profile')}
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  router.push('/edit-profile');
+                }}
                 style={styles.settingItemRow}
               >
                 <View style={styles.bulletDot} />
@@ -854,34 +847,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
-  },
-  bottomTabBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 68,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  tabBarItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabBarLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#6B7280',
-    marginTop: 2,
   },
   modalOverlay: {
     flex: 1,

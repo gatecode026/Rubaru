@@ -11,6 +11,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import BottomTabBar from '../components/common/BottomTabBar';
 
 export default function ActiveCallScreen() {
   const router = useRouter();
@@ -141,49 +142,12 @@ export default function ActiveCallScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Fixed Pinned Bottom Tab Bar */}
-        <View style={styles.tabBar}>
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/explore')}
-          >
-            <Ionicons name="home-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Home</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/connection')}
-          >
-            <Ionicons name="pulse-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Connection</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/reels')}
-          >
-            <Ionicons name="play-circle-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Reels</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabItem} activeOpacity={0.6}>
-            <Ionicons name="notifications" size={24} color="#F04452" />
-            <Text style={[styles.tabLabel, styles.activeTabLabel]}>Notification</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tabItem}
-            activeOpacity={0.6}
-            onPress={() => router.push('/groups')}
-          >
-            <Ionicons name="people-outline" size={24} color="#000000" />
-            <Text style={styles.tabLabel}>Groups</Text>
-          </TouchableOpacity>
-        </View>
+        <BottomTabBar
+          activeTab="Notification"
+          onTabPress={(tabKey) => {
+            router.push(tabKey === 'index' ? '/(tabs)' : `/(tabs)/${tabKey}`);
+          }}
+        />
       </LinearGradient>
     </SafeAreaView>
   );
@@ -254,39 +218,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
-  },
-  tabBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 64,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#EFEFF4',
-    paddingTop: 8,
-    paddingBottom: 16,
-    elevation: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    zIndex: 20,
-  },
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  tabLabel: {
-    fontSize: 10,
-    color: '#000000',
-    marginTop: 4,
-  },
-  activeTabLabel: {
-    color: '#F04452',
-    fontWeight: '700',
   },
 });

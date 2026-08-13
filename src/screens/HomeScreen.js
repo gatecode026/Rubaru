@@ -19,6 +19,7 @@ import { useRouter } from 'expo-router';
 import StoryAvatar from '../components/common/StoryAvatar';
 import SegmentedTabs from '../components/common/SegmentedTabs';
 import FeedCard from '../components/common/FeedCard';
+import BottomTabBar from '../components/common/BottomTabBar';
 
 const storiesData = [
   { id: '1', name: 'Sapna_Singh', imageUrl: 'https://i.pravatar.cc/150?img=32', isFirst: true },
@@ -75,7 +76,7 @@ const feedCardsData = [
   },
 ];
 
-export default function HomeScreen() {
+export default function HomeScreen({ isNestedInPager }) {
   const router = useRouter();
   const flatListRef = React.useRef(null);
 
@@ -109,21 +110,16 @@ export default function HomeScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Chat Speech Bubble Button */}
+        {/* Chat Icon Button */}
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => router.push('/chats')}
         >
-          <LinearGradient
-            colors={['#EE6876', '#C63449']}
-            style={styles.chatCircleButton}
-          >
-            <View style={styles.chatLinesContainer}>
-              <View style={styles.chatLineTop} />
-              <View style={styles.chatLineBottom} />
-            </View>
-            <View style={styles.chatSpeechTail} />
-          </LinearGradient>
+          <Image
+            source={require('../assets/icons/chat_icon.png')}
+            style={styles.chatIconImage}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
       </View>
     </View>
@@ -205,6 +201,14 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         />
       </LinearGradient>
+      {!isNestedInPager && (
+        <BottomTabBar
+          activeTab="Home"
+          onTabPress={(tabKey) => {
+            router.push(tabKey === 'index' ? '/(tabs)' : `/(tabs)/${tabKey}`);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -280,44 +284,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
-  chatCircleButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-    shadowColor: '#8C162E',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 5,
-    elevation: 5,
-  },
-  chatLinesContainer: {
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  chatLineTop: {
-    width: 14,
-    height: 3.5,
-    borderRadius: 2,
-    backgroundColor: '#FFFFFF',
-    marginBottom: 3,
-  },
-  chatLineBottom: {
-    width: 9,
-    height: 3.5,
-    borderRadius: 2,
-    backgroundColor: '#FFFFFF',
-  },
-  chatSpeechTail: {
-    position: 'absolute',
-    bottom: 5,
-    left: 4,
-    width: 7,
-    height: 7,
-    backgroundColor: '#C63449',
-    transform: [{ rotate: '45deg' }],
+  chatIconImage: {
+    width: 44,
+    height: 44,
   },
   storiesContainer: {
     marginTop: 8,

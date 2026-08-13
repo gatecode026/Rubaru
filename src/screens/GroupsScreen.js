@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import QuickActionAvatar from '../components/common/QuickActionAvatar';
 import GroupCard from '../components/common/GroupCard';
+import BottomTabBar from '../components/common/BottomTabBar';
 
 const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
 
@@ -125,7 +126,7 @@ const groupsMockData = [
   },
 ];
 
-export default function GroupsScreen() {
+export default function GroupsScreen({ isNestedInPager }) {
   const router = useRouter();
 
   const handleBack = () => {
@@ -215,6 +216,14 @@ export default function GroupsScreen() {
           showsVerticalScrollIndicator={false}
         />
       </LinearGradient>
+      {!isNestedInPager && (
+        <BottomTabBar
+          activeTab="Groups"
+          onTabPress={(tabKey) => {
+            router.push(tabKey === 'index' ? '/(tabs)' : `/(tabs)/${tabKey}`);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
