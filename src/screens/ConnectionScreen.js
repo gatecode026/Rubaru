@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   SafeAreaView,
   View,
@@ -11,6 +11,7 @@ import {
   StatusBar,
   Platform,
   StatusBar as RNStatusBar,
+  TextInput,
 } from 'react-native';
 
 const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
@@ -130,7 +131,7 @@ export default function ConnectionScreen({ isNestedInPager }) {
               <Text style={styles.discoverTitle}>Discover</Text>
             </View>
             <View style={styles.headerButtonsRow}>
-              <TouchableOpacity style={styles.circleIconButton} activeOpacity={0.8}>
+              <TouchableOpacity style={styles.circleIconButton} activeOpacity={0.8} onPress={() => router.push('/search-friends')}>
                 <Ionicons name="search" size={20} color="#000000" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.circleIconButton} activeOpacity={0.8}>
@@ -353,6 +354,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
+  },
+  searchBarContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    height: 44,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#FFE3E8',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#000000',
+    paddingHorizontal: 8,
+    paddingVertical: 0,
   },
   carouselContainer: {
     marginBottom: 20,

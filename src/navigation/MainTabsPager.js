@@ -66,6 +66,8 @@ export default function MainTabsPager() {
         style={styles.pager}
         initialPage={initialIndex}
         onPageSelected={onPageSelected}
+        overScrollMode="never"
+        bounces={false}
       >
         <View key="0" style={styles.page}>
           <HomeScreen isNestedInPager={true} />

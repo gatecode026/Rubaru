@@ -380,7 +380,7 @@ All tab screens below are hosted within the [MainTabsPager.js](file:///c:/Users/
     * **Route Mapping**: `/report-problem`
     * **Description**: Report bugs or interface rendering glitches.
     * **Key Components**: Category selector, description input field, attachment slot box.
-    * **Navigation Logic**:
+    * **Navigation Logic**:2qas
       * Pushed from help hub or privacy options.
       * Returns back on submit action.
 

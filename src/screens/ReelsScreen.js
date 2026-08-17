@@ -16,7 +16,7 @@ import BottomTabBar from '../components/common/BottomTabBar';
 const reelsData = [
   {
     id: '1',
-    userName: 'Samridhi Vijayvargi',
+    userName: 'Vibhu',
     isVerified: true,
     userAvatar: 'https://i.pravatar.cc/150?img=32',
     imageUri: 'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?auto=compress&cs=tinysrgb&w=800',
@@ -31,7 +31,7 @@ const reelsData = [
   },
   {
     id: '2',
-    userName: 'Ananya_Roy',
+    userName: 'Uttam',
     isVerified: true,
     userAvatar: 'https://i.pravatar.cc/150?img=49',
     imageUri: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=800',
@@ -46,7 +46,7 @@ const reelsData = [
   },
   {
     id: '3',
-    userName: 'Pooja_Singh',
+    userName: 'Garv',
     isVerified: false,
     userAvatar: 'https://i.pravatar.cc/150?img=47',
     imageUri: 'https://images.pexels.com/photos/1462637/pexels-photo-1462637.jpeg?auto=compress&cs=tinysrgb&w=800',
@@ -61,7 +61,7 @@ const reelsData = [
   },
   {
     id: '4',
-    userName: 'Kavya_Sharma',
+    userName: 'Rahul',
     isVerified: true,
     userAvatar: 'https://i.pravatar.cc/150?img=44',
     imageUri: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=800',
@@ -102,13 +102,20 @@ export default function ReelsScreen({ isNestedInPager }) {
     itemVisiblePercentThreshold: 50,
   }).current;
 
+  const handleLayout = (event) => {
+    const { height } = event.nativeEvent.layout;
+    if (height > 0) {
+      setReelHeight(height);
+    }
+  };
+
   return (
     <View style={styles.screenContainer}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       {/* Full-window feed — image fills behind everything */}
-      <View style={styles.feedWrapper}>
+      <View style={styles.feedWrapper} onLayout={handleLayout}>
         {reelHeight > 0 && (
           <FlatList
             data={reelsData}
