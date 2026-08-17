@@ -20,6 +20,7 @@ import StoryAvatar from '../components/common/StoryAvatar';
 import SegmentedTabs from '../components/common/SegmentedTabs';
 import FeedCard from '../components/common/FeedCard';
 import BottomTabBar from '../components/common/BottomTabBar';
+import { usePointsStore } from '../store/pointsStore';
 
 const storiesData = [
   { id: '1', name: 'Sapna_Singh', imageUrl: 'https://i.pravatar.cc/150?img=32', isFirst: true },
@@ -79,6 +80,7 @@ const feedCardsData = [
 export default function HomeScreen({ isNestedInPager }) {
   const router = useRouter();
   const flatListRef = React.useRef(null);
+  const balance = usePointsStore((state) => state.balance);
 
   const renderFixedHeader = () => (
     <View style={styles.topHeaderContainer}>
@@ -97,7 +99,7 @@ export default function HomeScreen({ isNestedInPager }) {
       {/* Right Action Buttons matching exact reference images */}
       <View style={styles.headerRightButtons}>
         {/* Heart Count Gradient Pill */}
-        <TouchableOpacity activeOpacity={0.8}>
+        <TouchableOpacity activeOpacity={0.8} onPress={() => router.push('/my-points')}>
           <LinearGradient
             colors={['#EE6876', '#C63449']}
             style={styles.heartPillButton}
@@ -106,7 +108,7 @@ export default function HomeScreen({ isNestedInPager }) {
               <Ionicons name="heart" size={22} color="#FFFFFF" />
               <Ionicons name="heart" size={11} color="#EE3B52" style={styles.innerHeart} />
             </View>
-            <Text style={styles.heartCountText}>250</Text>
+            <Text style={styles.heartCountText}>{balance}</Text>
           </LinearGradient>
         </TouchableOpacity>
 

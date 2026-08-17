@@ -495,6 +495,10 @@ export default function UserProfileScreen() {
                       router.push('/feedback');
                     } else if (item === 'Community Guidelines') {
                       router.push('/community-standards');
+                    } else if (item === 'Privacy Policy') {
+                      router.push('/privacy-policy');
+                    } else if (item === 'Terms of Use') {
+                      router.push('/terms-of-use');
                     }
                   }}
                   style={styles.settingItemRow}
