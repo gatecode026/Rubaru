@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../theme';
+import { useLanguage } from '../../localization/LanguageContext';
 
 const reelIcon = require('../../assets/icons/solar_reel.png');
 
@@ -51,6 +53,8 @@ export const TAB_ITEMS = [
 
 export default function BottomTabBar({ activeTab = 'index', onTabPress }) {
   const insets = useSafeAreaInsets();
+  const { colors, isDarkMode } = useTheme();
+  const { t } = useLanguage();
 
   const getIsActive = (itemKey, activeName) => {
     if (!activeName) return false;
@@ -61,13 +65,32 @@ export default function BottomTabBar({ activeTab = 'index', onTabPress }) {
     return normalizedActive === normalizedItem;
   };
 
+  const getTabLabel = (key, fallback) => {
+    if (key === 'index') return t('tabHome', 'Home');
+    if (key === 'connection') return t('tabConnection', 'Connection');
+    if (key === 'reels') return t('tabReels', 'Reels');
+    if (key === 'notification') return t('tabNotification', 'Notification');
+    if (key === 'groups') return t('tabGroups', 'Groups');
+    return fallback;
+  };
+
   return (
-    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.tabBarBg || (isDarkMode ? '#18181B' : '#FFFFFF'),
+          borderTopColor: colors.tabBarBorder || (isDarkMode ? '#27272A' : '#EFEFF4'),
+          paddingBottom: Math.max(insets.bottom, 10),
+        },
+      ]}
+    >
       <View style={styles.content}>
         {TAB_ITEMS.map((item) => {
           const isSelected = getIsActive(item.key, activeTab);
-          const iconColor = isSelected ? '#F04452' : '#000000';
+          const iconColor = isSelected ? '#FF2E63' : (isDarkMode ? '#9CA3AF' : '#000000');
           const iconName = isSelected ? item.activeIcon : item.inactiveIcon;
+          const displayLabel = getTabLabel(item.key, item.label);
 
           return (
             <Pressable
@@ -79,7 +102,7 @@ export default function BottomTabBar({ activeTab = 'index', onTabPress }) {
               ]}
               accessibilityRole="tab"
               accessibilityState={{ selected: isSelected }}
-              accessibilityLabel={item.label}
+              accessibilityLabel={displayLabel}
             >
               <View style={styles.iconContainer}>
                 {item.key === 'reels' ? (
@@ -91,11 +114,13 @@ export default function BottomTabBar({ activeTab = 'index', onTabPress }) {
               <Text
                 style={[
                   styles.tabLabel,
-                  isSelected ? styles.tabLabelActive : styles.tabLabelInactive,
+                  isSelected
+                    ? [styles.tabLabelActive, { color: '#FF2E63' }]
+                    : [styles.tabLabelInactive, { color: isDarkMode ? '#9CA3AF' : '#000000' }],
                 ]}
                 numberOfLines={1}
               >
-                {item.label}
+                {displayLabel}
               </Text>
             </Pressable>
           );
@@ -144,8 +169,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tabLabelActive: {
-    color: '#F04452',
-    fontWeight: '600',
+    color: '#FF2E63',
+    fontWeight: '700',
   },
   tabLabelInactive: {
     color: '#000000',

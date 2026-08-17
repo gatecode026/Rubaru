@@ -1,24 +1,22 @@
 import React, { useState } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   FlatList,
   StyleSheet,
   TouchableOpacity,
   StatusBar,
-  Platform,
-  StatusBar as RNStatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import BottomTabBar from '../components/common/BottomTabBar';
-
-const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
 import StoryAvatar from '../components/common/StoryAvatar';
 import ChatListItem from '../components/common/ChatListItem';
 import EmptyStateIllustration from '../components/common/EmptyStateIllustration';
+import { useTheme } from '../theme';
+import { useLanguage } from '../localization/LanguageContext';
 
 const storiesData = [
   { id: '1', name: 'Sapna_Singh', imageUrl: 'https://i.pravatar.cc/150?img=32', isFirst: true },
@@ -66,12 +64,52 @@ const initialChatsData = [
     messageText: 'Photo Lorem ipsum dolor sit amet consecte...',
     time: '4:30 PM',
   },
+  {
+    id: '5',
+    name: 'Epic Game',
+    avatarUrl: 'https://images.pexels.com/photos/163036/mario-yoschi-figures-funny-163036.jpeg?auto=compress&cs=tinysrgb&w=150',
+    onlineStatus: 'orange',
+    sender: 'John Paul',
+    mentionUser: 'Robert',
+    messageType: 'text',
+    messageText: 'Lorem ipsum dolor...',
+    time: '4:30 PM',
+    hasMention: true,
+    unreadCount: 24,
+  },
+  {
+    id: '6',
+    name: 'Govind Jain',
+    initials: 'SF',
+    hasAlert: true,
+    messageType: 'audio',
+    messageText: 'Audio',
+    time: '4:30 PM',
+  },
+  {
+    id: '7',
+    name: 'Omrishi Sharma',
+    avatarUrl: 'https://i.pravatar.cc/150?img=33',
+    messageType: 'emoji',
+    messageText: 'Emoji',
+    time: '4:30 PM',
+  },
+  {
+    id: '8',
+    name: 'Innovative Online Chatting Group',
+    avatarUrl: 'https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg?auto=compress&cs=tinysrgb&w=150',
+    messageType: 'thread',
+    messageText: 'Thread Lorem ipsum dolor sit amet consectetur...',
+    time: '4:30 PM',
+  },
 ];
 
 export default function ChatsScreen() {
   const router = useRouter();
-  // Toggle state to easily preview empty state vs active list
-  const [chats, setChats] = useState([]); // Default to empty array for Empty State UI demonstration
+  const insets = useSafeAreaInsets();
+  const { isDarkMode, colors } = useTheme();
+  const { t } = useLanguage();
+  const [chats, setChats] = useState(initialChatsData);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -82,33 +120,33 @@ export default function ChatsScreen() {
   };
 
   const renderHeader = () => (
-    <View style={styles.headerContainer}>
+    <View style={[styles.headerContainer, { backgroundColor: colors.headerBg, paddingTop: Math.max(insets.top + 6, 16) }]}>
       <View style={styles.topRow}>
         <TouchableOpacity
           activeOpacity={0.7}
           style={styles.backButtonContainer}
           onPress={handleBack}
         >
-          <Ionicons name="chevron-back" size={28} color="#000000" />
-          <Text style={styles.headerTitleText}>Chats</Text>
+          <Ionicons name="chevron-back" size={28} color={colors.textPrimary} />
+          <Text style={[styles.headerTitleText, { color: colors.textPrimary }]}>{t('chats', 'Chats')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           activeOpacity={0.8}
-          style={styles.profileBadge}
+          style={[styles.profileBadge, { backgroundColor: colors.avatarBg }]}
           onPress={() => setChats(chats.length === 0 ? initialChatsData : [])}
         >
-          <Text style={styles.profileText}>PS</Text>
+          <Text style={styles.profileText}>{colors.avatarInitials || (isDarkMode ? 'PS' : 'GB')}</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <View style={[styles.safeContainer, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={colors.headerBg} />
 
-      {/* Main Header (Plain white background) */}
+      {/* Main Header */}
       {renderHeader()}
 
       {/* Main Content Area */}
@@ -143,14 +181,14 @@ export default function ChatsScreen() {
           {/* Centered Empty State Content */}
           <View style={styles.emptyContentContainer}>
             <EmptyStateIllustration />
-            <Text style={styles.emptyTitleText}>No Conversations Yet</Text>
-            <Text style={styles.emptySubtextText}>
+            <Text style={[styles.emptyTitleText, { color: colors.textPrimary }]}>No Conversations Yet</Text>
+            <Text style={[styles.emptySubtextText, { color: colors.textSecondary }]}>
               Start a new chat or invite others to join the conversation.
             </Text>
           </View>
         </LinearGradient>
       ) : (
-        /* Populated Chats List View */
+        /* Populated Chats List View matching Image 1 */
         <FlatList
           data={chats}
           keyExtractor={(item) => item.id}
@@ -183,7 +221,7 @@ export default function ChatsScreen() {
           router.push(tabKey === 'index' ? '/(tabs)' : `/(tabs)/${tabKey}`);
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -194,7 +232,6 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     paddingHorizontal: 20,
-    paddingTop: STATUSBAR_HEIGHT + 6,
     paddingBottom: 6,
     backgroundColor: '#FFFFFF',
   },
@@ -211,7 +248,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   headerTitleText: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
     color: '#000000',
     marginLeft: 8,
@@ -221,14 +258,19 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#000000',
+    backgroundColor: '#FF2E63', // Pink GB profile avatar as in reference image
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   profileText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 15,
+    fontWeight: '800',
+    fontSize: 16,
   },
   gradientBackground: {
     flex: 1,
@@ -265,11 +307,11 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
   },
   storiesContainer: {
-    marginVertical: 12,
+    marginVertical: 10,
   },
   storiesContentContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 12,
   },
   listContentContainer: {
     paddingBottom: 90,

@@ -11,11 +11,15 @@ import {
   Modal,
   Switch,
   PanResponder,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import BottomTabBar from '../components/common/BottomTabBar';
+import { useTheme } from '../theme';
+import { useLanguage } from '../localization/LanguageContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_WIDTH = (SCREEN_WIDTH - 60) / 3;
@@ -24,29 +28,31 @@ export default function UserProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
+  const { language, setLanguage, t } = useLanguage();
   const [activeTab, setActiveTab] = useState('top');
   const [isFollowing, setIsFollowing] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  // Swipe Down PanResponder for Settings Modal Grab Handle
+  // Swipe-to-dismiss PanResponder for Settings Bottom Sheet Handle
   const handlePanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 2,
+      onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 5,
       onPanResponderRelease: (_, gestureState) => {
-        // If swiped down (dy > 12) or tapped on handle (dy near 0), close modal
-        if (gestureState.dy > 12 || Math.abs(gestureState.dy) < 8) {
+        if (gestureState.dy > 40 || gestureState.vy > 0.4) {
           setShowSettingsModal(false);
         }
       },
     })
   ).current;
 
-  useEffect(() => {
-    if (params?.openSettings === 'true') {
-      setShowSettingsModal(true);
-    }
-  }, [params?.openSettings]);
+  useFocusEffect(
+    React.useCallback(() => {
+      if (params?.openSettings === 'true') {
+        setShowSettingsModal(true);
+      }
+    }, [params?.openSettings])
+  );
 
   // 3-Step Delete Account Modal States
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -54,9 +60,28 @@ export default function UserProfileScreen() {
   const [selectedReason, setSelectedReason] = useState('Other');
 
   // Settings Toggles
-  const [isEnglishEnabled, setIsEnglishEnabled] = useState(true);
-  const [isHindiEnabled, setIsHindiEnabled] = useState(false);
-  const [isDarkModeEnabled, setIsDarkModeEnabled] = useState(true);
+  const { isDarkMode, toggleTheme, setDarkMode } = useTheme();
+  const isHindi = language === 'hi';
+
+  // Language flag slider animation (0 = English/Left, 1 = Hindi/Right)
+  const langAnim = useRef(new Animated.Value(isHindi ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(langAnim, {
+      toValue: isHindi ? 1 : 0,
+      friction: 7,
+      tension: 60,
+      useNativeDriver: false,
+    }).start();
+  }, [isHindi]);
+
+  const toggleLanguage = () => {
+    if (language === 'en') {
+      setLanguage('hi');
+    } else {
+      setLanguage('en');
+    }
+  };
 
   return (
     <View style={styles.rootContainer}>
@@ -65,9 +90,10 @@ export default function UserProfileScreen() {
         source={require('@assets/images/app_background.jpg')}
         style={styles.backgroundImage}
         resizeMode="cover"
+        blurRadius={showSettingsModal || showDeleteModal ? 4 : 0}
       >
         <View style={[styles.mainWrapper, { paddingTop: Math.max(insets.top + 12, 40) }]}>
-          
+
           {/* Top Header Row */}
           <View style={styles.topHeaderRow}>
             <Pressable
@@ -110,7 +136,7 @@ export default function UserProfileScreen() {
               </View>
 
               {/* Followers Count */}
-              <Text style={styles.followersText}>63K Followers</Text>
+              <Text style={styles.followersText}>{t('followersCount', '63K Followers')}</Text>
             </View>
 
             {/* Action Buttons Row (Follow, Message, Call) */}
@@ -124,20 +150,20 @@ export default function UserProfileScreen() {
                 ]}
               >
                 <Text style={[styles.actionPillText, isFollowing && styles.actionPillTextActive]}>
-                  {isFollowing ? 'Following' : 'Follow'}
+                  {isFollowing ? t('following', 'Following') : t('follow', 'Follow')}
                 </Text>
               </Pressable>
 
               <Pressable
                 style={({ pressed }) => [styles.actionPill, pressed && styles.buttonPressed]}
               >
-                <Text style={styles.actionPillText}>Message</Text>
+                <Text style={styles.actionPillText}>{t('message', 'Message')}</Text>
               </Pressable>
 
               <Pressable
                 style={({ pressed }) => [styles.actionPill, pressed && styles.buttonPressed]}
               >
-                <Text style={styles.actionPillText}>Call</Text>
+                <Text style={styles.actionPillText}>{t('call', 'Call')}</Text>
               </Pressable>
             </View>
 
@@ -149,7 +175,7 @@ export default function UserProfileScreen() {
                   style={styles.tabItem}
                 >
                   <Text style={[styles.tabText, activeTab === 'top' && styles.tabTextActive]}>
-                    Top
+                    {t('top', 'Top')}
                   </Text>
                 </Pressable>
 
@@ -158,7 +184,7 @@ export default function UserProfileScreen() {
                   style={styles.tabItem}
                 >
                   <Text style={[styles.tabText, activeTab === 'recent' && styles.tabTextActive]}>
-                    Recent
+                    {t('recent', 'Recent')}
                   </Text>
                 </Pressable>
 
@@ -167,7 +193,7 @@ export default function UserProfileScreen() {
                   style={styles.tabItem}
                 >
                   <Text style={[styles.tabText, activeTab === 'short' && styles.tabTextActive]}>
-                    Short
+                    {t('short', 'Short')}
                   </Text>
                 </Pressable>
               </View>
@@ -187,7 +213,7 @@ export default function UserProfileScreen() {
 
             {/* Staggered Masonry Grid Container */}
             <View style={styles.masonryGrid}>
-              
+
               {/* Column 1 */}
               <View style={styles.masonryColumn}>
                 {/* Card 1: Video Card with Wave Beach & Play Button */}
@@ -315,13 +341,23 @@ export default function UserProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowSettingsModal(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowSettingsModal(false)}
-        >
+        <View style={styles.modalOverlay}>
+          {/* Frosted Glass Blur Backdrop */}
+          <BlurView
+            intensity={25}
+            tint="dark"
+            style={StyleSheet.absoluteFillObject}
+          />
+
+          {/* Touch Backdrop to Close */}
           <Pressable
-            style={[styles.sidebarSheetContent, { paddingBottom: Math.max(insets.bottom + 20, 36) }]}
-            onPress={(e) => e.stopPropagation()}
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setShowSettingsModal(false)}
+          />
+
+          {/* Sidebar Sheet Container */}
+          <View
+            style={[styles.sidebarSheetContent, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}
           >
             {/* Top Grab Handle Indicator Bar Area - Touch or Swipe down to lower/close sidebar */}
             <View
@@ -332,12 +368,125 @@ export default function UserProfileScreen() {
               <View style={styles.sidebarGrabHandle} />
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: Dimensions.get('window').height * 0.78 }}>
-              
-              {/* Group 1: Settings */}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
+              scrollEventThrottle={16}
+              bounces={true}
+              overScrollMode="never"
+              keyboardShouldPersistTaps="handled"
+              style={{ maxHeight: Dimensions.get('window').height * 0.74 }}
+              contentContainerStyle={{ paddingBottom: 24 }}
+            >
+
+              {/* Group 1: Profile */}
               <View style={styles.sectionHeaderRow}>
+                <Ionicons name="time-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Text style={styles.sectionHeaderTitle}>{t('profile', 'Profile')}</Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  router.push('/edit-profile');
+                }}
+                style={styles.settingItemRow}
+              >
+                <View style={styles.bulletDot} />
+                <Text style={styles.settingItemText}>{t('editProfile', 'Edit Profile')}</Text>
+              </Pressable>
+
+              {/* Group 2: Quick Links */}
+              <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
+                <Ionicons name="globe-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Text style={styles.sectionHeaderTitle}>{t('quickLinks', 'Quick Links')}</Text>
+              </View>
+              <Pressable style={styles.settingItemRow}>
+                <View style={styles.bulletDot} />
+                <Text style={styles.settingItemText}>{t('wallet', 'Wallet')}</Text>
+              </Pressable>
+              <Pressable style={styles.settingItemRow}>
+                <View style={styles.bulletDot} />
+                <Text style={styles.settingItemText}>{t('transactions', 'Transactions')}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  router.push('/violations');
+                }}
+                style={styles.settingItemRow}
+              >
+                <View style={styles.bulletDot} />
+                <Text style={styles.settingItemText}>{t('warnings', 'Warnings')}</Text>
+              </Pressable>
+
+              {/* Group 3: Help & Support */}
+              <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
+                <Ionicons name="people-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Text style={styles.sectionHeaderTitle}>{t('helpAndSupport', 'Help & Support')}</Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  router.push('/help-support');
+                }}
+                style={styles.settingItemRow}
+              >
+                <View style={styles.bulletDot} />
+                <Text style={styles.settingItemText}>{t('helpAndSupport', 'Help & Support')}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  router.push('/feedback');
+                }}
+                style={styles.settingItemRow}
+              >
+                <View style={styles.bulletDot} />
+                <Text style={styles.settingItemText}>{t('feedback', 'Feedback')}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  router.push('/faqs');
+                }}
+                style={styles.settingItemRow}
+              >
+                <View style={styles.bulletDot} />
+                <Text style={styles.settingItemText}>{t('faqs', 'FAQs')}</Text>
+              </Pressable>
+
+              {/* Group 4: Others */}
+              <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
+                <Ionicons name="star-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Text style={styles.sectionHeaderTitle}>{t('others', 'Others')}</Text>
+              </View>
+              {[
+                { key: 'blockedChats', label: 'Blocked Chats', route: '/blocked-chats' },
+                { key: 'privacyPolicy', label: 'Privacy Policy' },
+                { key: 'termsOfUse', label: 'Terms of Use' },
+                { key: 'communityGuidelines', label: 'Community Guidelines', route: '/community-standards' },
+                { key: 'permissionGrantKey', label: 'Permission Grant Key', route: '/permission-grant' },
+                { key: 'aboutUs', label: 'About Us', route: '/about-us' },
+              ].map((item, idx) => (
+                <Pressable
+                  key={idx}
+                  onPress={() => {
+                    setShowSettingsModal(false);
+                    if (item.route) {
+                      router.push(item.route);
+                    }
+                  }}
+                  style={styles.settingItemRow}
+                >
+                  <View style={styles.bulletDot} />
+                  <Text style={styles.settingItemText}>{t(item.key, item.label)}</Text>
+                </Pressable>
+              ))}
+
+              {/* Group 5: Settings */}
+              <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
                 <Ionicons name="settings-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
-                <Text style={styles.sectionHeaderTitle}>Settings</Text>
+                <Text style={styles.sectionHeaderTitle}>{t('settings', 'Settings')}</Text>
               </View>
 
               {/* Notification Settings Option */}
@@ -349,7 +498,7 @@ export default function UserProfileScreen() {
                 style={styles.settingItemRow}
               >
                 <View style={styles.bulletDot} />
-                <Text style={styles.settingItemText}>Notification Settings</Text>
+                <Text style={styles.settingItemText}>{t('notificationSettings', 'Notification Settings')}</Text>
               </Pressable>
 
               {/* Delete Account Option -> Opens 3-Step Delete Modal */}
@@ -364,155 +513,45 @@ export default function UserProfileScreen() {
                 style={styles.settingItemRow}
               >
                 <View style={styles.bulletDot} />
-                <Text style={styles.settingItemText}>Delete Account</Text>
+                <Text style={styles.settingItemText}>{t('deleteAccount', 'Delete Account')}</Text>
               </Pressable>
 
-              {/* Group 2: Quick Links */}
-              <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
-                <Ionicons name="globe-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
-                <Text style={styles.sectionHeaderTitle}>Quick Links</Text>
-              </View>
-              <Pressable style={styles.settingItemRow}>
-                <View style={styles.bulletDot} />
-                <Text style={styles.settingItemText}>Wallet</Text>
-              </Pressable>
-              <Pressable style={styles.settingItemRow}>
-                <View style={styles.bulletDot} />
-                <Text style={styles.settingItemText}>Transactions</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setShowSettingsModal(false);
-                  router.push('/violations');
-                }}
-                style={styles.settingItemRow}
-              >
-                <View style={styles.bulletDot} />
-                <Text style={styles.settingItemText}>Warnings</Text>
-              </Pressable>
-
-              {/* Group 3: Profile */}
-              <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
-                <Ionicons name="time-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
-                <Text style={styles.sectionHeaderTitle}>Profile</Text>
-              </View>
-              <Pressable
-                onPress={() => {
-                  setShowSettingsModal(false);
-                  router.push('/edit-profile');
-                }}
-                style={styles.settingItemRow}
-              >
-                <View style={styles.bulletDot} />
-                <Text style={styles.settingItemText}>Edit Profile</Text>
-              </Pressable>
-
-              {/* Group 4: Help & Support */}
-              <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
-                <Ionicons name="people-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
-                <Text style={styles.sectionHeaderTitle}>Help & Support</Text>
-              </View>
-              <Pressable
-                onPress={() => {
-                  setShowSettingsModal(false);
-                  router.push('/help-support');
-                }}
-                style={styles.settingItemRow}
-              >
-                <View style={styles.bulletDot} />
-                <Text style={styles.settingItemText}>Help & Support</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setShowSettingsModal(false);
-                  router.push('/feedback');
-                }}
-                style={styles.settingItemRow}
-              >
-                <View style={styles.bulletDot} />
-                <Text style={styles.settingItemText}>Feedback</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setShowSettingsModal(false);
-                  router.push('/faqs');
-                }}
-                style={styles.settingItemRow}
-              >
-                <View style={styles.bulletDot} />
-                <Text style={styles.settingItemText}>FAQs</Text>
-              </Pressable>
-
-              {/* Group 5: App Language */}
-              <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
-                <Ionicons name="language-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
-                <Text style={styles.sectionHeaderTitle}>App Language</Text>
-              </View>
-              <View style={styles.settingSwitchRow}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <View style={styles.bulletDot} />
-                  <Text style={styles.settingItemText}>English</Text>
-                </View>
-                <Switch
-                  value={isEnglishEnabled}
-                  onValueChange={setIsEnglishEnabled}
-                  trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                  thumbColor="#FFFFFF"
-                />
-              </View>
-              <View style={styles.settingSwitchRow}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <View style={styles.bulletDot} />
-                  <Text style={styles.settingItemText}>Hindi</Text>
-                </View>
-                <Switch
-                  value={isHindiEnabled}
-                  onValueChange={setIsHindiEnabled}
-                  trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                  thumbColor="#FFFFFF"
-                />
+              {/* Group 6: App Language — Segmented Pill Control */}
+              <View style={[styles.sectionHeaderRow, { marginTop: 18, marginBottom: 10 }]}>
+                <Text style={styles.langSectionIcon}>文A</Text>
+                <Text style={[styles.sectionHeaderTitle, { marginLeft: 6 }]}>{t('appLanguage', 'App Language')}</Text>
               </View>
 
-              {/* Group 6: Others */}
-              <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
-                <Ionicons name="star-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
-                <Text style={styles.sectionHeaderTitle}>Others</Text>
-              </View>
-              {[
-                'Blocked Chats',
-                'Feed Back',
-                'Privacy Policy',
-                'Terms of Use',
-                'Community Guidelines',
-                'Permission Grant Key',
-                'About Us',
-              ].map((item, idx) => (
+              {/* Segmented pill — EN / हिंदी */}
+              <View style={styles.langSegmentTrack}>
+                {/* English pill */}
                 <Pressable
-                  key={idx}
-                  onPress={() => {
-                    setShowSettingsModal(false);
-                    if (item === 'Feed Back') {
-                      router.push('/feedback');
-                    } else if (item === 'Community Guidelines') {
-                      router.push('/community-standards');
-                    }
-                  }}
-                  style={styles.settingItemRow}
+                  onPress={() => setLanguage('en')}
+                  style={[styles.langSegmentBtn, !isHindi && styles.langSegmentBtnActive]}
                 >
-                  <View style={styles.bulletDot} />
-                  <Text style={styles.settingItemText}>{item}</Text>
+                  <Text style={[styles.langSegmentCode, !isHindi && styles.langSegmentCodeActive]}>EN</Text>
+                  <Text style={[styles.langSegmentName, !isHindi && styles.langSegmentNameActive]}>English</Text>
                 </Pressable>
-              ))}
+
+                {/* Hindi pill */}
+                <Pressable
+                  onPress={() => setLanguage('hi')}
+                  style={[styles.langSegmentBtn, isHindi && styles.langSegmentBtnActive]}
+                >
+                  <Text style={[styles.langSegmentCode, isHindi && styles.langSegmentCodeActive]}>हि</Text>
+                  <Text style={[styles.langSegmentName, isHindi && styles.langSegmentNameActive]}>हिंदी</Text>
+                </Pressable>
+              </View>
 
               {/* Group 7: Mode */}
               <View style={[styles.settingSwitchRow, { marginTop: 18 }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Ionicons name="options-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
-                  <Text style={styles.sectionHeaderTitle}>Mode</Text>
+                  <Text style={styles.sectionHeaderTitle}>{t('mode', 'Mode')}</Text>
                 </View>
                 <Switch
-                  value={isDarkModeEnabled}
-                  onValueChange={setIsDarkModeEnabled}
+                  value={isDarkMode}
+                  onValueChange={toggleTheme}
                   trackColor={{ false: '#E5E7EB', true: '#F44649' }}
                   thumbColor="#FFFFFF"
                 />
@@ -527,12 +566,12 @@ export default function UserProfileScreen() {
                 style={[styles.sectionHeaderRow, { marginTop: 24, marginBottom: 16 }]}
               >
                 <Ionicons name="log-out-outline" size={22} color="#111827" style={{ marginRight: 10 }} />
-                <Text style={styles.sectionHeaderTitle}>Log out</Text>
+                <Text style={styles.sectionHeaderTitle}>{t('logout', 'Log out')}</Text>
               </Pressable>
 
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* 3-Step Delete Account Card Modal */}
@@ -543,8 +582,13 @@ export default function UserProfileScreen() {
         onRequestClose={() => setShowDeleteModal(false)}
       >
         <Pressable style={styles.modalOverlayCenter} onPress={() => setShowDeleteModal(false)}>
+          <BlurView
+            intensity={30}
+            tint="dark"
+            style={StyleSheet.absoluteFillObject}
+          />
           <Pressable style={styles.deleteCardBox} onPress={(e) => e.stopPropagation()}>
-            
+
             {/* Top Close 'X' Button */}
             <Pressable
               onPress={() => setShowDeleteModal(false)}
@@ -558,7 +602,7 @@ export default function UserProfileScreen() {
             {deleteStep === 1 && (
               <View style={styles.deleteStepContent}>
                 <Text style={styles.deleteWarningText}>
-                  Are you sure you want to delete your account? This action is permanent and cannot be undone. Your profile, chats, matches, wallet history, and other account data will be permanently removed.
+                  {t('deleteAccountWarning', 'Are you sure you want to delete your account? This action is permanent and cannot be undone. Your profile, chats, matches, wallet history, and other account data will be permanently removed.')}
                 </Text>
 
                 <View style={styles.deleteButtonRow}>
@@ -566,14 +610,14 @@ export default function UserProfileScreen() {
                     onPress={() => setShowDeleteModal(false)}
                     style={[styles.deleteActionButton, { backgroundColor: '#EF4444' }]}
                   >
-                    <Text style={styles.deleteButtonText}>Cancel</Text>
+                    <Text style={styles.deleteButtonText}>{t('cancel', 'Cancel')}</Text>
                   </Pressable>
 
                   <Pressable
                     onPress={() => setDeleteStep(2)}
                     style={[styles.deleteActionButton, { backgroundColor: '#10B981' }]}
                   >
-                    <Text style={styles.deleteButtonText}>Confirm</Text>
+                    <Text style={styles.deleteButtonText}>{t('confirm', 'Confirm')}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -582,28 +626,28 @@ export default function UserProfileScreen() {
             {/* Step 2: Reason Selection Options Card */}
             {deleteStep === 2 && (
               <View style={styles.deleteStepContent}>
-                <Text style={styles.deleteReasonHeader}>Reason for deleting (Optional)</Text>
+                <Text style={styles.deleteReasonHeader}>{t('reasonForDeleting', 'Reason for deleting (Optional)')}</Text>
 
                 <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
                   {[
-                    'I found someone ♥',
-                    'Privacy concerns',
-                    'Too many notifications',
-                    'Not using the app anymore',
-                    'Created another account',
-                    'Poor experience',
-                    'Other',
-                  ].map((reason, idx) => {
-                    const isSelected = selectedReason === reason;
+                    { key: 'foundSomeone', label: 'I found someone ♥' },
+                    { key: 'privacyConcerns', label: 'Privacy concerns' },
+                    { key: 'tooManyNotifications', label: 'Too many notifications' },
+                    { key: 'notUsingApp', label: 'Not using the app anymore' },
+                    { key: 'createdAnotherAccount', label: 'Created another account' },
+                    { key: 'poorExperience', label: 'Poor experience' },
+                    { key: 'other', label: 'Other' },
+                  ].map((reasonItem, idx) => {
+                    const isSelected = selectedReason === reasonItem.key;
                     return (
                       <Pressable
                         key={idx}
-                        onPress={() => setSelectedReason(reason)}
+                        onPress={() => setSelectedReason(reasonItem.key)}
                         style={styles.reasonOptionRow}
                       >
                         <View style={styles.reasonBulletRow}>
                           <View style={styles.bulletDot} />
-                          <Text style={styles.reasonOptionText}>{reason}</Text>
+                          <Text style={styles.reasonOptionText}>{t(reasonItem.key, reasonItem.label)}</Text>
                         </View>
 
                         <View style={[styles.radioCircle, isSelected && styles.radioCircleSelected]}>
@@ -619,7 +663,7 @@ export default function UserProfileScreen() {
                   style={styles.nextLinkButton}
                   hitSlop={12}
                 >
-                  <Text style={styles.nextLinkText}>Next →</Text>
+                  <Text style={styles.nextLinkText}>{t('next', 'Next')} →</Text>
                 </Pressable>
               </View>
             )}
@@ -627,14 +671,14 @@ export default function UserProfileScreen() {
             {/* Step 3: Final Permanent Profile Deletion Confirmation */}
             {deleteStep === 3 && (
               <View style={styles.deleteStepContent}>
-                <Text style={styles.deleteFinalTitle}>Delete my profile permanently.</Text>
+                <Text style={styles.deleteFinalTitle}>{t('deleteAccountFinalTitle', 'Delete my profile permanently.')}</Text>
 
                 <View style={[styles.deleteButtonRow, { marginTop: 28 }]}>
                   <Pressable
                     onPress={() => setShowDeleteModal(false)}
                     style={[styles.deleteActionButton, { backgroundColor: '#EF4444' }]}
                   >
-                    <Text style={styles.deleteButtonText}>Cancel</Text>
+                    <Text style={styles.deleteButtonText}>{t('cancel', 'Cancel')}</Text>
                   </Pressable>
 
                   <Pressable
@@ -644,7 +688,7 @@ export default function UserProfileScreen() {
                     }}
                     style={[styles.deleteActionButton, { backgroundColor: '#10B981' }]}
                   >
-                    <Text style={styles.deleteButtonText}>Confirm</Text>
+                    <Text style={styles.deleteButtonText}>{t('confirm', 'Confirm')}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -900,7 +944,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    paddingVertical: 2,
     paddingLeft: 8,
   },
   bulletDot: {
@@ -914,6 +958,52 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#374151',
+  },
+  /* ─── App Language Segmented Pill ─── */
+  langSectionIcon: {
+    fontSize: 18,
+    color: '#111827',
+  },
+  langSegmentTrack: {
+    flexDirection: 'row',
+    backgroundColor: '#F3E8ED',
+    borderRadius: 14,
+    padding: 4,
+    marginVertical: 4,
+  },
+  langSegmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
+  },
+  langSegmentBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#E63956',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  langSegmentCode: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#9CA3AF',
+  },
+  langSegmentCodeActive: {
+    color: '#E63956',
+  },
+  langSegmentName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9CA3AF',
+  },
+  langSegmentNameActive: {
+    color: '#374151',
+    fontWeight: '700',
   },
   modalOverlayCenter: {
     flex: 1,

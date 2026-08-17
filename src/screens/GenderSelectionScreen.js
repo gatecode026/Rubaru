@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   skipText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: '#FF2E63',
   },
   formContainer: {
     width: Math.min(SCREEN_WIDTH - 48, 340),
@@ -223,13 +223,13 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   optionCardSelected: {
-    backgroundColor: '#111827',
-    borderColor: '#111827',
-    shadowColor: '#000',
+    backgroundColor: '#FF2E63',
+    borderColor: '#FF2E63',
+    shadowColor: '#FF2E63',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 4,
   },
   optionText: {
     fontSize: 16,
@@ -247,15 +247,15 @@ const styles = StyleSheet.create({
   continueButton: {
     width: '100%',
     height: 56,
-    backgroundColor: '#111827',
+    backgroundColor: '#FF2E63',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#FF2E63',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 4,
   },
   continueButtonText: {
     color: '#FFFFFF',

@@ -1,23 +1,20 @@
 import React from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   FlatList,
   StyleSheet,
   TouchableOpacity,
   StatusBar,
-  Platform,
-  StatusBar as RNStatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import QuickActionAvatar from '../components/common/QuickActionAvatar';
 import GroupCard from '../components/common/GroupCard';
 import BottomTabBar from '../components/common/BottomTabBar';
-
-const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
+import { useLanguage } from '../localization/LanguageContext';
 
 const groupsMockData = [
   {
@@ -128,6 +125,8 @@ const groupsMockData = [
 
 export default function GroupsScreen({ isNestedInPager }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -139,16 +138,22 @@ export default function GroupsScreen({ isNestedInPager }) {
 
   const renderListHeader = () => (
     <View style={styles.listHeaderContainer}>
-      {/* Quick Action Shortcuts Row */}
+      {/* Quick Action Avatars Row */}
       <View style={styles.quickActionsRow}>
         <QuickActionAvatar
-          label="Create Group"
-          imageUri="https://i.pravatar.cc/150?img=60"
+          label={t('addGroup', 'Add Group')}
+          imageUri="https://i.pravatar.cc/150?img=12"
           showPlus={true}
-          onPress={() => alert('Create Group tapped')}
+          onPress={() => alert('Add Group tapped')}
         />
         <QuickActionAvatar
-          label="All Groups"
+          label={t('gamingGroup', 'Gaming Group')}
+          imageUri="https://i.pravatar.cc/150?img=33"
+          showPlus={false}
+          onPress={() => alert('Gaming Group tapped')}
+        />
+        <QuickActionAvatar
+          label={t('allGroups', 'All Groups')}
           imageUri="https://i.pravatar.cc/150?img=33"
           showPlus={false}
           onPress={() => alert('All Groups tapped')}
@@ -158,14 +163,14 @@ export default function GroupsScreen({ isNestedInPager }) {
       {/* "All Groups 13" Section Title */}
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitleText}>
-          All Groups <Text style={styles.sectionCountText}>13</Text>
+          {t('allGroupsCount', 'All Groups')} <Text style={styles.sectionCountText}>13</Text>
         </Text>
       </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <View style={styles.safeContainer}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="dark-content" backgroundColor="#FFF0F3" />
 
@@ -188,7 +193,7 @@ export default function GroupsScreen({ isNestedInPager }) {
         </View>
 
         {/* Top Header Row */}
-        <View style={styles.headerContainer}>
+        <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top + 6, 16) }]}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={styles.circularHeaderButton}
@@ -197,7 +202,7 @@ export default function GroupsScreen({ isNestedInPager }) {
             <Ionicons name="chevron-back" size={24} color="#000000" />
           </TouchableOpacity>
 
-          <Text style={styles.headerTitleText}>Groups</Text>
+          <Text style={styles.headerTitleText}>{t('groups', 'Groups')}</Text>
 
           <TouchableOpacity activeOpacity={0.7} style={styles.circularHeaderButton}>
             <Ionicons name="options-outline" size={22} color="#000000" />
@@ -224,7 +229,7 @@ export default function GroupsScreen({ isNestedInPager }) {
           }}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -248,7 +253,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: STATUSBAR_HEIGHT + 6,
     paddingBottom: 10,
     zIndex: 10,
   },

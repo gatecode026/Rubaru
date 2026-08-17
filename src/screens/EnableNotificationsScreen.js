@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   skipText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: '#FF2E63',
   },
   graphicContainer: {
     alignSelf: 'center',
@@ -222,15 +222,15 @@ const styles = StyleSheet.create({
   notifyButton: {
     width: '100%',
     height: 56,
-    backgroundColor: '#111827',
+    backgroundColor: '#FF2E63',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#FF2E63',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 4,
   },
   notifyButtonText: {
     color: '#FFFFFF',

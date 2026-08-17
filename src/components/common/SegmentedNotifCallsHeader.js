@@ -4,13 +4,12 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Platform,
-  StatusBar as RNStatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-
-const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
+import { useLanguage } from '../../localization/LanguageContext';
+import { useTheme } from '../../theme';
 
 export default function SegmentedNotifCallsHeader({
   activeTab = 'calls', // 'notification' | 'calls'
@@ -18,6 +17,12 @@ export default function SegmentedNotifCallsHeader({
   onTabChange,
 }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
+  const { isDarkMode } = useTheme();
+
+  const avatarBg = isDarkMode ? '#111827' : '#FF2E63';
+  const avatarInitials = isDarkMode ? 'PS' : 'GB';
 
   const handleBack = () => {
     if (onBack) {
@@ -47,7 +52,7 @@ export default function SegmentedNotifCallsHeader({
 
   return (
     <View style={styles.headerWrapper}>
-      <View style={styles.headerContainer}>
+      <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top + 6, 16) }]}>
         <View style={styles.topHeaderRow}>
           <View style={styles.headerLeftGroup}>
             <TouchableOpacity
@@ -73,7 +78,7 @@ export default function SegmentedNotifCallsHeader({
                     activeTab === 'notification' ? styles.activeTabPillText : styles.inactiveTabPillText,
                   ]}
                 >
-                  Notification
+                  {t('notification', 'Notification')}
                 </Text>
               </TouchableOpacity>
 
@@ -91,7 +96,7 @@ export default function SegmentedNotifCallsHeader({
                     activeTab === 'calls' ? styles.activeTabPillText : styles.inactiveTabPillText,
                   ]}
                 >
-                  Calls
+                  {t('calls', 'Calls')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -99,10 +104,10 @@ export default function SegmentedNotifCallsHeader({
 
           <TouchableOpacity
             activeOpacity={0.8}
-            style={styles.profileBadge}
+            style={[styles.profileBadge, { backgroundColor: avatarBg }]}
             onPress={() => router.push('/user-profile')}
           >
-            <Text style={styles.profileBadgeText}>PS</Text>
+            <Text style={styles.profileBadgeText}>{avatarInitials}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -117,7 +122,6 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     paddingHorizontal: 20,
-    paddingTop: STATUSBAR_HEIGHT + 6,
     paddingBottom: 6,
     backgroundColor: '#FFFFFF',
   },
@@ -146,9 +150,14 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#000000',
+    backgroundColor: '#FF2E63',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   profileBadgeText: {
     color: '#FFFFFF',
@@ -162,7 +171,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   activeTabPill: {
-    backgroundColor: '#F04452', // Accent coral red
+    backgroundColor: '#FF2E63', // App Pink
   },
   inactiveTabPill: {
     backgroundColor: '#E5E5EA',

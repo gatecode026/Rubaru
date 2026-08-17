@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
@@ -36,7 +35,7 @@ export default function CallInfoScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <View style={styles.safeContainer}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
@@ -118,7 +117,7 @@ export default function CallInfoScreen() {
           router.push(tabKey === 'index' ? '/(tabs)' : `/(tabs)/${tabKey}`);
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

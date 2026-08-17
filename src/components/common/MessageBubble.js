@@ -1,13 +1,19 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../theme';
 
 export default function MessageBubble({ text, time, isSent, isRead, onLongPress, reaction, replyTo }) {
+  const { isDarkMode, colors } = useTheme();
+
   if (isSent) {
     return (
       <View style={styles.sentContainer}>
         <TouchableOpacity
-          style={styles.sentBubble}
+          style={[
+            styles.sentBubble,
+            { backgroundColor: colors.bubbleSent || '#FF6584' },
+          ]}
           activeOpacity={0.9}
           onLongPress={onLongPress}
         >
@@ -24,21 +30,21 @@ export default function MessageBubble({ text, time, isSent, isRead, onLongPress,
             </View>
           )}
 
-          <Text style={styles.sentText}>{text}</Text>
+          <Text style={[styles.sentText, { color: colors.bubbleSentText || '#FFFFFF' }]}>{text}</Text>
           <View style={styles.sentInfoRow}>
-            <Text style={styles.sentTimeText}>{time}</Text>
+            <Text style={[styles.sentTimeText, { color: colors.bubbleSentTime || '#FFF0F3' }]}>{time}</Text>
             {isRead && (
               <Ionicons
                 name="checkmark-done"
                 size={16}
-                color="#34C759" // Green read receipt checkmark
+                color="#10B981" // Green read receipt checkmark as in reference image
                 style={styles.checkIcon}
               />
             )}
           </View>
         </TouchableOpacity>
         {reaction && (
-          <View style={[styles.reactionBadge, styles.sentReaction]}>
+          <View style={[styles.reactionBadge, styles.sentReaction, { backgroundColor: isDarkMode ? '#27272A' : '#FFFFFF' }]}>
             <Text style={styles.reactionBadgeText}>{reaction}</Text>
           </View>
         )}
@@ -49,31 +55,37 @@ export default function MessageBubble({ text, time, isSent, isRead, onLongPress,
   return (
     <View style={styles.receivedContainer}>
       <TouchableOpacity
-        style={styles.receivedBubble}
+        style={[
+          styles.receivedBubble,
+          {
+            backgroundColor: colors.bubbleReceived || '#FFFFFF',
+            borderColor: isDarkMode ? '#3F3F46' : '#F3F4F6',
+          },
+        ]}
         activeOpacity={0.9}
         onLongPress={onLongPress}
       >
         {/* Quoted Reply Box */}
         {replyTo && (
-          <View style={[styles.quotedBox, styles.quotedBoxReceived]}>
-            <View style={[styles.quotedAccent, styles.quotedAccentReceived]} />
+          <View style={[styles.quotedBox, { backgroundColor: isDarkMode ? '#2D2D32' : '#F2F2F7' }]}>
+            <View style={[styles.quotedAccent, { backgroundColor: '#FF2E63' }]} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.quotedSender, styles.quotedSenderReceived]}>{replyTo.senderName}</Text>
-              <Text style={[styles.quotedText, styles.quotedTextReceived]} numberOfLines={1}>
+              <Text style={[styles.quotedSender, { color: '#FF2E63' }]}>{replyTo.senderName}</Text>
+              <Text style={[styles.quotedText, { color: colors.textSecondary }]} numberOfLines={1}>
                 {replyTo.text}
               </Text>
             </View>
           </View>
         )}
 
-        <Text style={styles.receivedText}>{text}</Text>
+        <Text style={[styles.receivedText, { color: colors.bubbleReceivedText || '#111827' }]}>{text}</Text>
+        <Text style={[styles.receivedTimeText, { color: colors.bubbleReceivedTime || '#9CA3AF' }]}>{time}</Text>
       </TouchableOpacity>
       {reaction && (
-        <View style={[styles.reactionBadge, styles.receivedReaction]}>
+        <View style={[styles.reactionBadge, styles.receivedReaction, { backgroundColor: isDarkMode ? '#27272A' : '#FFFFFF' }]}>
           <Text style={styles.reactionBadgeText}>{reaction}</Text>
         </View>
       )}
-      <Text style={styles.receivedTimeText}>{time}</Text>
     </View>
   );
 }
@@ -81,23 +93,29 @@ export default function MessageBubble({ text, time, isSent, isRead, onLongPress,
 const styles = StyleSheet.create({
   sentContainer: {
     alignSelf: 'flex-end',
-    maxWidth: '78%',
-    marginBottom: 10,
+    maxWidth: '80%',
+    marginBottom: 12,
     marginRight: 16,
   },
   sentBubble: {
-    backgroundColor: '#1C1C1E', // Dark slate black
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 4, // sharper corner tail
+    backgroundColor: '#FF6584',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 6, // sharper corner tail
+    shadowColor: '#FF6584',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sentText: {
     color: '#FFFFFF',
     fontSize: 15,
-    lineHeight: 20,
+    lineHeight: 21,
+    fontWeight: '500',
   },
   sentInfoRow: {
     flexDirection: 'row',
@@ -106,48 +124,52 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sentTimeText: {
-    color: '#AEAEB2',
-    fontSize: 10,
+    color: '#FFE4E8',
+    fontSize: 11,
     marginRight: 2,
+    fontWeight: '500',
   },
   checkIcon: {
     marginLeft: 2,
   },
   receivedContainer: {
     alignSelf: 'flex-start',
-    maxWidth: '78%',
-    marginBottom: 10,
+    maxWidth: '80%',
+    marginBottom: 12,
     marginLeft: 16,
   },
   receivedBubble: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderBottomLeftRadius: 4,
-    borderBottomRightRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 20,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
   },
   receivedText: {
-    color: '#000000',
+    color: '#111827',
     fontSize: 15,
-    lineHeight: 20,
+    lineHeight: 21,
+    fontWeight: '500',
   },
   receivedTimeText: {
-    color: '#8E8E93',
-    fontSize: 10,
+    color: '#9CA3AF',
+    fontSize: 11,
     marginTop: 4,
-    marginLeft: 4,
+    textAlign: 'right',
+    fontWeight: '500',
   },
   reactionBadge: {
     position: 'absolute',
-    bottom: -6,
-    backgroundColor: '#FFFFFF',
+    bottom: -8,
     borderRadius: 12,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -175,10 +197,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quotedBoxSent: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  quotedBoxReceived: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
   },
   quotedAccent: {
     width: 3,
@@ -186,10 +205,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   quotedAccentSent: {
-    backgroundColor: '#FF2D55',
-  },
-  quotedAccentReceived: {
-    backgroundColor: '#FF2D55',
+    backgroundColor: '#FFFFFF',
   },
   quotedSender: {
     fontSize: 12,
@@ -197,18 +213,12 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   quotedSenderSent: {
-    color: '#FF2D55',
-  },
-  quotedSenderReceived: {
-    color: '#FF2D55',
+    color: '#FFFFFF',
   },
   quotedText: {
     fontSize: 12,
   },
   quotedTextSent: {
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  quotedTextReceived: {
-    color: '#636366',
+    color: 'rgba(255, 255, 255, 0.9)',
   },
 });

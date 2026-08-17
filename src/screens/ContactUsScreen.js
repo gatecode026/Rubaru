@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   TextInput,
   ScrollView,
   Dimensions,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -24,6 +25,19 @@ export default function ContactUsScreen() {
   const [email, setEmail] = useState('');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+
+  const handleBack = () => {
+    router.push('/help-support');
+  };
+
+  useEffect(() => {
+    const onBackPress = () => {
+      router.push('/help-support');
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [router]);
 
   return (
     <View style={styles.rootContainer}>
@@ -44,7 +58,7 @@ export default function ContactUsScreen() {
           {/* Header Row */}
           <View style={styles.topHeaderRow}>
             <Pressable
-              onPress={() => router.back()}
+              onPress={handleBack}
               style={({ pressed }) => [styles.backButton, pressed && styles.buttonPressed]}
               hitSlop={12}
               accessibilityLabel="Go back"

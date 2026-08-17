@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,12 @@ import {
   Image,
   ScrollView,
   Dimensions,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTheme } from '../theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -35,6 +37,18 @@ const ALL_INTERESTS = [
 export default function EditProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isDarkMode } = useTheme();
+  // Pink in default/light mode, black in dark mode
+  const accentColor = isDarkMode ? '#111827' : '#FF2E63';
+
+  useEffect(() => {
+    const onBackPress = () => {
+      router.push('/user-profile?openSettings=true');
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [router]);
 
   const [name, setName] = useState('Geeta Bisht');
   const [dob, setDob] = useState('19 April 1995');
@@ -140,7 +154,7 @@ export default function EditProfileScreen() {
                   const item = ALL_INTERESTS.find((interest) => interest.id === id);
                   if (!item) return null;
                   return (
-                    <View key={id} style={styles.selectedChipPill}>
+                    <View key={id} style={[styles.selectedChipPill, { backgroundColor: accentColor }]}>
                       {renderIcon(item, true)}
                       <Text style={styles.selectedChipText}>{item.name}</Text>
                     </View>
@@ -163,7 +177,7 @@ export default function EditProfileScreen() {
                     onPress={() => toggleInterest(item.id)}
                     style={({ pressed }) => [
                       styles.interestCard,
-                      isSelected ? styles.interestCardSelected : styles.interestCardUnselected,
+                      isSelected ? [styles.interestCardSelected, { backgroundColor: accentColor }] : styles.interestCardUnselected,
                       pressed && styles.buttonPressed,
                     ]}
                   >
@@ -185,7 +199,7 @@ export default function EditProfileScreen() {
             {/* Bottom Continue Button */}
             <Pressable
               onPress={() => router.push('/user-profile?openSettings=true')}
-              style={({ pressed }) => [styles.continueButton, pressed && styles.buttonPressed]}
+              style={({ pressed }) => [styles.continueButton, { backgroundColor: accentColor }, pressed && styles.buttonPressed]}
             >
               <Text style={styles.continueButtonText}>Continue</Text>
             </Pressable>
@@ -312,7 +326,7 @@ const styles = StyleSheet.create({
   selectedChipPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111827',
+    // backgroundColor applied inline (dynamic)
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 14,
@@ -359,7 +373,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   interestCardSelected: {
-    backgroundColor: '#111827',
+    // backgroundColor applied inline (dynamic)
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.16,
@@ -382,7 +396,7 @@ const styles = StyleSheet.create({
   continueButton: {
     width: '100%',
     height: 52,
-    backgroundColor: '#111827',
+    // backgroundColor applied inline (dynamic)
     borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',

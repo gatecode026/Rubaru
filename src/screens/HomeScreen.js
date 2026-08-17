@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   FlatList,
@@ -8,11 +7,8 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
-  Platform,
-  StatusBar as RNStatusBar,
 } from 'react-native';
-
-const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -79,9 +75,10 @@ const feedCardsData = [
 export default function HomeScreen({ isNestedInPager }) {
   const router = useRouter();
   const flatListRef = React.useRef(null);
+  const insets = useSafeAreaInsets();
 
   const renderFixedHeader = () => (
-    <View style={styles.topHeaderContainer}>
+    <View style={[styles.topHeaderContainer, { paddingTop: Math.max(insets.top + 6, 16) }]}>
       {/* Left Profile Avatar with Gradient Border */}
       <TouchableOpacity
         activeOpacity={0.8}
@@ -126,7 +123,7 @@ export default function HomeScreen({ isNestedInPager }) {
   );
 
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <View style={styles.safeContainer}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF5F5" />
 
       {/* Soft Warm Pink Background Gradient */}
@@ -209,7 +206,7 @@ export default function HomeScreen({ isNestedInPager }) {
           }}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -233,7 +230,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: STATUSBAR_HEIGHT + 6,
     paddingBottom: 6,
     zIndex: 10,
   },

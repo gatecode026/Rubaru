@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useLanguage } from '../../localization/LanguageContext';
 
 export default function SegmentedTabs({ onTabChange }) {
   const [activeTab, setActiveTab] = useState('friends'); // 'friends' | 'partners'
+  const { t } = useLanguage();
 
   const handlePress = (tabKey) => {
     setActiveTab(tabKey);
@@ -17,7 +19,7 @@ export default function SegmentedTabs({ onTabChange }) {
         onPress={() => handlePress('friends')}
       >
         <Text style={[styles.tabText, activeTab === 'friends' && styles.activeTabText]}>
-          Make Friends
+          {t('makeFriends', 'Make Friends')}
         </Text>
       </TouchableOpacity>
 
@@ -27,7 +29,7 @@ export default function SegmentedTabs({ onTabChange }) {
         onPress={() => handlePress('partners')}
       >
         <Text style={[styles.tabText, activeTab === 'partners' && styles.activeTabText]}>
-          Search Partners
+          {t('searchPartners', 'Search Partners')}
         </Text>
       </TouchableOpacity>
     </View>

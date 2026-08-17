@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   FlatList,
@@ -120,7 +119,7 @@ export default function CallLogsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <View style={styles.safeContainer}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
@@ -165,7 +164,7 @@ export default function CallLogsScreen() {
           router.push(tabKey === 'index' ? '/(tabs)' : `/(tabs)/${tabKey}`);
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

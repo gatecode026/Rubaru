@@ -2,9 +2,11 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTheme } from '../../theme';
 
 export default function ChatListItem({ item }) {
   const router = useRouter();
+  const { colors, isDarkMode } = useTheme();
   const {
     name,
     avatarUrl,
@@ -39,8 +41,12 @@ export default function ChatListItem({ item }) {
     return (
       <View style={styles.avatarWrapper}>
         <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-        {onlineStatus === 'green' && <View style={[styles.statusDot, styles.greenDot]} />}
-        {onlineStatus === 'orange' && <View style={[styles.statusDot, styles.orangeDot]} />}
+        {onlineStatus === 'green' && (
+          <View style={[styles.statusDot, styles.greenDot, { borderColor: colors.background }]} />
+        )}
+        {onlineStatus === 'orange' && (
+          <View style={[styles.statusDot, styles.orangeDot, { borderColor: colors.background }]} />
+        )}
       </View>
     );
   };
@@ -50,7 +56,7 @@ export default function ChatListItem({ item }) {
 
     if (sender) {
       content.push(
-        <Text key="sender" style={styles.senderText}>
+        <Text key="sender" style={[styles.senderText, { color: colors.textSecondary }]}>
           {sender}:{' '}
         </Text>
       );
@@ -74,7 +80,7 @@ export default function ChatListItem({ item }) {
           key="video-icon"
           name="videocam"
           size={16}
-          color="#8E8E93"
+          color={colors.textSecondary}
           style={styles.inlineIcon}
         />
       );
@@ -84,7 +90,7 @@ export default function ChatListItem({ item }) {
           key="check-icon"
           name="checkmark-done"
           size={16}
-          color="#5856D6" // Indigo/blue read checkmark
+          color="#5856D6" // Indigo read checkmark
           style={styles.inlineIcon}
         />
       );
@@ -93,7 +99,7 @@ export default function ChatListItem({ item }) {
           key="photo-icon"
           name="image"
           size={16}
-          color="#8E8E93"
+          color={colors.textSecondary}
           style={styles.inlineIcon}
         />
       );
@@ -103,7 +109,7 @@ export default function ChatListItem({ item }) {
           key="mic-icon"
           name="mic"
           size={16}
-          color="#8E8E93"
+          color={colors.textSecondary}
           style={styles.inlineIcon}
         />
       );
@@ -128,7 +134,7 @@ export default function ChatListItem({ item }) {
           key="thread-icon"
           name="return-down-forward"
           size={16}
-          color="#8E8E93"
+          color={colors.textSecondary}
           style={styles.inlineIcon}
         />
       );
@@ -136,14 +142,14 @@ export default function ChatListItem({ item }) {
 
     if (mentionUser) {
       content.push(
-        <View key="mention" style={styles.mentionPill}>
+        <View key="mention" style={[styles.mentionPill, { backgroundColor: isDarkMode ? '#3B2A1E' : '#FFE8CC' }]}>
           <Text style={styles.mentionText}>@{mentionUser}</Text>
         </View>
       );
     }
 
     content.push(
-      <Text key="main-text" style={styles.messageText} numberOfLines={1}>
+      <Text key="main-text" style={[styles.messageText, { color: colors.textSecondary }]} numberOfLines={1}>
         {messageText}
       </Text>
     );
@@ -153,7 +159,7 @@ export default function ChatListItem({ item }) {
 
   return (
     <TouchableOpacity
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       activeOpacity={0.7}
       onPress={() => {
         router.push({
@@ -164,21 +170,21 @@ export default function ChatListItem({ item }) {
     >
       {renderAvatar()}
       <View style={styles.middleContainer}>
-        <Text style={styles.nameText} numberOfLines={1}>
+        <Text style={[styles.nameText, { color: colors.textPrimary }]} numberOfLines={1}>
           {name}
         </Text>
         {renderMessageContent()}
       </View>
       <View style={styles.rightContainer}>
-        <Text style={styles.timeText}>{time}</Text>
+        <Text style={[styles.timeText, { color: colors.textSecondary }]}>{time}</Text>
         <View style={styles.badgeRow}>
           {hasMention && (
-            <View style={styles.mentionBadge}>
-              <Ionicons name="at" size={14} color="#5856D6" />
+            <View style={[styles.mentionBadge, { backgroundColor: isDarkMode ? '#2B2745' : '#E8E6FF' }]}>
+              <Ionicons name="at" size={14} color="#7C3AED" />
             </View>
           )}
           {unreadCount > 0 && (
-            <View style={styles.unreadBadge}>
+            <View style={[styles.unreadBadge, { backgroundColor: colors.badgeBg || (isDarkMode ? '#FF3B30' : '#FF2E63') }]}>
               <Text style={styles.unreadText}>{unreadCount}</Text>
             </View>
           )}
@@ -192,8 +198,8 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     paddingVertical: 14,
-    paddingHorizontal: 20, // Added to fix edge congestion
-    alignItems: 'flex-start', // Align to top of cell for standard look
+    paddingHorizontal: 20,
+    alignItems: 'flex-start',
   },
   avatarWrapper: {
     position: 'relative',
@@ -222,11 +228,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   initialsAvatar: {
-    backgroundColor: '#B19FFB', // Soft violet purple
+    backgroundColor: '#B19FFB', // Soft violet purple matching Image 1
   },
   initialsText: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: '700',
     fontSize: 18,
   },
   statusDot: {
@@ -248,12 +254,12 @@ const styles = StyleSheet.create({
   middleContainer: {
     flex: 1,
     marginLeft: 16,
-    paddingTop: 2, // Aligns text height with avatar top
+    paddingTop: 2,
   },
   nameText: {
     fontSize: 17,
-    fontWeight: '600',
-    color: '#000000',
+    fontWeight: '700',
+    color: '#111827',
     marginBottom: 4,
   },
   messageRow: {
@@ -282,7 +288,7 @@ const styles = StyleSheet.create({
   mentionText: {
     color: '#FF9500',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   messageText: {
     flex: 1,
@@ -293,7 +299,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginLeft: 12,
     minWidth: 60,
-    paddingTop: 2, // Aligns time height with avatar top
+    paddingTop: 2,
   },
   timeText: {
     fontSize: 12,
@@ -307,20 +313,25 @@ const styles = StyleSheet.create({
   mentionBadge: {
     marginRight: 6,
     backgroundColor: '#E8E6FF',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
   },
   unreadBadge: {
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#FF2E63', // Vibrant pink badge matching Image 1
     paddingHorizontal: 6,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
   },
   unreadText: {
     color: '#FFFFFF',

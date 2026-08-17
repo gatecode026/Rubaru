@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Pressable,
   ImageBackground,
   ScrollView,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,13 +19,20 @@ const HELP_ITEMS = [
   { id: 'privacy-security', title: 'Privacy and Security Help', icon: 'shield-checkmark-outline' },
   { id: 'scam-protection', title: 'Scam Protection Center', icon: 'shield-outline' },
   { id: 'contact-us', title: 'Contact Us', icon: 'headset-outline' },
-  { id: 'feedback', title: 'Feedback', icon: 'star-outline' },
-  { id: 'faqs', title: 'Frequently Asked Questions (FAQs)', icon: 'help-circle-outline' },
 ];
 
 export default function HelpSupportScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    const onBackPress = () => {
+      router.push('/user-profile?openSettings=true');
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [router]);
 
   return (
     <View style={styles.rootContainer}>

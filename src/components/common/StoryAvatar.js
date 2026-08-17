@@ -1,21 +1,24 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../theme';
 
 export default function StoryAvatar({ name, imageUrl, isFirst }) {
+  const { colors, isDarkMode } = useTheme();
+
   return (
     <TouchableOpacity style={styles.container} activeOpacity={0.8}>
       <View style={styles.avatarWrapper}>
-        <View style={styles.ringBorder}>
+        <View style={[styles.ringBorder, { borderColor: colors.storyRing || (isDarkMode ? '#FF8A65' : '#FF2E63') }]}>
           <Image source={{ uri: imageUrl }} style={styles.avatarImage} />
         </View>
         {isFirst && (
-          <View style={styles.plusBadge}>
-            <Ionicons name="add" size={14} color="#FFF" />
+          <View style={[styles.plusBadge, { backgroundColor: colors.storyPlusBg || (isDarkMode ? '#FF3B30' : '#FF2E63') }]}>
+            <Ionicons name="add" size={14} color="#FFFFFF" />
           </View>
         )}
       </View>
-      <Text style={styles.nameText} numberOfLines={1} ellipsizeMode="tail">
+      <Text style={[styles.nameText, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">
         {name}
       </Text>
     </TouchableOpacity>
@@ -40,7 +43,7 @@ const styles = StyleSheet.create({
     height: 68,
     borderRadius: 34,
     borderWidth: 2,
-    borderColor: '#FF8A65', // Rose-gold / peach ring color matching the reference image
+    borderColor: '#FF8A65',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 2,
@@ -53,16 +56,21 @@ const styles = StyleSheet.create({
   },
   plusBadge: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
-    backgroundColor: '#FF3B30', // iOS Red
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#FF3B30',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
     borderColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   nameText: {
     marginTop: 6,
@@ -70,5 +78,6 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     textAlign: 'center',
     width: '100%',
+    fontWeight: '500',
   },
 });

@@ -72,7 +72,7 @@ export default function OnboardingScreen() {
         {/* Text Content & Pagination Footer Area */}
         <View style={[styles.bottomContent, { paddingBottom: Math.max(insets.bottom, 24) }]}>
           <Animated.View style={[styles.textWrapper, { opacity: fadeAnim }]}>
-            {/* Active Title */}
+            {/* Active Title in Pink */}
             <Text style={styles.titleText}>{currentItem.title}</Text>
 
             {/* Active Description */}
@@ -95,7 +95,7 @@ export default function OnboardingScreen() {
             })}
           </View>
 
-          {/* Create an Account Button */}
+          {/* Create an Account Button (Vibrant Pink matching Reference) */}
           <Pressable
             onPress={handleCreateAccount}
             style={({ pressed }) => [styles.createButton, pressed && styles.buttonPressed]}
@@ -145,8 +145,8 @@ const styles = StyleSheet.create({
   },
   titleText: {
     fontSize: 26,
-    fontWeight: '700',
-    color: '#111827',
+    fontWeight: '800',
+    color: '#FF2E63', // Vibrant pink title matching screenshot
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 10,
@@ -175,26 +175,26 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   activeDot: {
-    width: 8,
-    backgroundColor: '#111111',
+    width: 24, // Pill dot indicator
+    backgroundColor: '#FF2E63',
   },
   inactiveDot: {
     width: 8,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#FFD1DC',
   },
   createButton: {
     width: '100%',
     height: 58,
-    backgroundColor: '#111827',
+    backgroundColor: '#FF2E63', // Vibrant Pink Button matching screenshot
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 26,
-    shadowColor: '#000',
+    shadowColor: '#FF2E63',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 4,
   },
   createButtonText: {
     color: '#FFFFFF',
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   },
   signInText: {
     fontSize: 15,
-    color: '#111827',
+    color: '#FF2E63',
     fontWeight: '700',
   },
   buttonPressed: {

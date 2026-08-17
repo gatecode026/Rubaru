@@ -11,10 +11,12 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function PollResultsModal({ visible, onClose, poll }) {
+  const { isDarkMode, colors } = useTheme();
   const [selectedTab, setSelectedTab] = useState('all');
 
   if (!poll) return null;
@@ -39,25 +41,38 @@ export default function PollResultsModal({ visible, onClose, poll }) {
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.overlay}>
           <TouchableWithoutFeedback>
-            <View style={styles.sheetContainer}>
-              <View style={styles.dragHandle} />
+            <View
+              style={[
+                styles.sheetContainer,
+                {
+                  backgroundColor: colors.surface || (isDarkMode ? '#1E1E22' : '#FFFFFF'),
+                },
+              ]}
+            >
+              <View style={[styles.dragHandle, { backgroundColor: isDarkMode ? '#3F3F46' : '#E5E5EA' }]} />
 
               <View style={styles.headerRow}>
-                <Text style={styles.questionText} numberOfLines={2}>
+                <Text style={[styles.questionText, { color: colors.textPrimary }]} numberOfLines={2}>
                   {question}
                 </Text>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                  <Ionicons name="close" size={22} color="#8E8E93" />
+                  <Ionicons name="close" size={22} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
               {/* Tabs */}
-              <View style={styles.tabsContainer}>
+              <View style={[styles.tabsContainer, { borderBottomColor: colors.border }]}>
                 <TouchableOpacity
                   style={[styles.tab, selectedTab === 'all' && styles.activeTab]}
                   onPress={() => setSelectedTab('all')}
                 >
-                  <Text style={[styles.tabText, selectedTab === 'all' && styles.activeTabText]}>
+                  <Text
+                    style={[
+                      styles.tabText,
+                      { color: selectedTab === 'all' ? '#FF2E63' : colors.textSecondary },
+                      selectedTab === 'all' && styles.activeTabText,
+                    ]}
+                  >
                     All ({allVoters.length})
                   </Text>
                 </TouchableOpacity>
@@ -70,6 +85,7 @@ export default function PollResultsModal({ visible, onClose, poll }) {
                     <Text
                       style={[
                         styles.tabText,
+                        { color: selectedTab === opt.label ? '#FF2E63' : colors.textSecondary },
                         selectedTab === opt.label && styles.activeTabText,
                       ]}
                     >
@@ -84,11 +100,11 @@ export default function PollResultsModal({ visible, onClose, poll }) {
                 data={activeVoters}
                 keyExtractor={(item, index) => `${item.id}-${index}`}
                 renderItem={({ item }) => (
-                  <View style={styles.voterRow}>
+                  <View style={[styles.voterRow, { borderBottomColor: isDarkMode ? '#27272A' : '#F2F2F7' }]}>
                     <Image source={{ uri: item.avatarUri }} style={styles.voterAvatar} />
                     <View style={styles.voterMeta}>
-                      <Text style={styles.voterName}>{item.name}</Text>
-                      <Text style={styles.voterOption}>{item.optionLabel}</Text>
+                      <Text style={[styles.voterName, { color: colors.textPrimary }]}>{item.name}</Text>
+                      <Text style={[styles.voterOption, { color: colors.textSecondary }]}>{item.optionLabel}</Text>
                     </View>
                   </View>
                 )}
@@ -96,7 +112,7 @@ export default function PollResultsModal({ visible, onClose, poll }) {
                 showsVerticalScrollIndicator={false}
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No votes yet for this option</Text>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No votes yet for this option</Text>
                   </View>
                 }
               />
@@ -165,7 +181,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomColor: '#000000',
+    borderBottomColor: '#FF2E63',
   },
   tabText: {
     fontSize: 14,
@@ -173,7 +189,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   activeTabText: {
-    color: '#000000',
+    color: '#FF2E63',
     fontWeight: '700',
   },
   listContent: {
@@ -198,7 +214,7 @@ const styles = StyleSheet.create({
   },
   voterName: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#000000',
   },
   voterOption: {

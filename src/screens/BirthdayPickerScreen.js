@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dayCellSelected: {
-    backgroundColor: '#111827',
+    backgroundColor: '#FF2E63',
   },
   dayText: {
     fontSize: 15,
@@ -322,15 +322,15 @@ const styles = StyleSheet.create({
   saveButton: {
     width: '100%',
     height: 56,
-    backgroundColor: '#111827',
+    backgroundColor: '#FF2E63',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#FF2E63',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 4,
   },
   saveButtonText: {
     color: '#FFFFFF',
@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   yearOptionSelected: {
-    backgroundColor: '#111827',
+    backgroundColor: '#FF2E63',
   },
   yearOptionText: {
     fontSize: 16,
