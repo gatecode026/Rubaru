@@ -320,6 +320,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     textAlign: 'center',
+    lineHeight: 22,
     paddingHorizontal: 32,
   },
   buttonPressed: {

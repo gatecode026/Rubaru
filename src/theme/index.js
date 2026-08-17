@@ -1,4 +1,5 @@
-import { colors } from './colors';
+import { colors, lightColors, darkColors } from './colors';
+import { ThemeProvider, useTheme } from './ThemeContext';
 
 export const theme = {
   colors,
@@ -19,4 +20,4 @@ export const theme = {
   },
 };
 
-export { colors };
+export { colors, lightColors, darkColors, ThemeProvider, useTheme };

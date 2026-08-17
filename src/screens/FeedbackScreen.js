@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,17 +7,44 @@ import {
   ImageBackground,
   TextInput,
   ScrollView,
+  TouchableOpacity,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../theme';
 
 export default function FeedbackScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
 
   const [rating, setRating] = useState(4);
   const [feedbackText, setFeedbackText] = useState('');
+
+  const handleStarPress = (starIndex) => {
+    if (rating === starIndex) {
+      // 1-click deselect: if tapping the highest active star, deselect it (down to 0 if star 1)
+      setRating(starIndex - 1);
+    } else {
+      // Select up to this star
+      setRating(starIndex);
+    }
+  };
+
+  const handleBack = () => {
+    router.push('/user-profile?openSettings=true');
+  };
+
+  useEffect(() => {
+    const onBackPress = () => {
+      router.push('/user-profile?openSettings=true');
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [router]);
 
   return (
     <View style={styles.rootContainer}>
@@ -30,42 +57,44 @@ export default function FeedbackScreen() {
           style={[
             styles.mainWrapper,
             {
-              paddingTop: Math.max(insets.top + 12, 40),
+              paddingTop: Math.max(insets.top + 10, 36),
               paddingBottom: Math.max(insets.bottom + 16, 24),
             },
           ]}
         >
-          {/* Header Row */}
+          {/* Top Header Row */}
           <View style={styles.topHeaderRow}>
             <Pressable
-              onPress={() => router.push('/user-profile?openSettings=true')}
+              onPress={handleBack}
               style={({ pressed }) => [styles.backButton, pressed && styles.buttonPressed]}
               hitSlop={12}
-              accessibilityLabel="Go back to sidebar"
+              accessibilityLabel="Go back"
             >
               <Ionicons name="chevron-back" size={22} color="#111827" />
             </Pressable>
 
             <Text style={styles.headerTitle}>Feedback</Text>
 
-            <View style={{ width: 40 }} />
+            <View style={{ width: 44 }} />
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
             {/* Hero Section */}
             <View style={styles.heroContainer}>
               <View style={styles.heroTitleRow}>
                 <Text style={styles.starEmoji}>⭐</Text>
                 <Text style={styles.heroTitle}>Feedback</Text>
               </View>
-              
+
               <Text style={styles.heroDescription}>
                 Your feedback helps us improve Rubaru and create a better experience for everyone. We’d love to hear your thoughts!
               </Text>
             </View>
 
-            {/* Rate Your Experience */}
+            {/* Rate Your Experience Section */}
             <View style={styles.ratingSection}>
               <Text style={styles.ratingTitle}>Rate Your Experience</Text>
 
@@ -73,17 +102,18 @@ export default function FeedbackScreen() {
                 {[1, 2, 3, 4, 5].map((starIndex) => {
                   const isSelected = starIndex <= rating;
                   return (
-                    <Pressable
+                    <TouchableOpacity
                       key={starIndex}
-                      onPress={() => setRating(starIndex)}
+                      activeOpacity={0.65}
+                      onPress={() => handleStarPress(starIndex)}
                       style={styles.starButton}
                     >
                       <Ionicons
-                        name={isSelected ? "star" : "star-outline"}
-                        size={34}
-                        color={isSelected ? "#10B981" : "#D1D5DB"}
+                        name={isSelected ? 'star' : 'star-outline'}
+                        size={36}
+                        color={isSelected ? '#FFB800' : '#D1D5DB'}
                       />
-                    </Pressable>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
@@ -105,12 +135,11 @@ export default function FeedbackScreen() {
 
             {/* Submit Button */}
             <Pressable
-              onPress={() => router.back()}
+              onPress={handleBack}
               style={({ pressed }) => [styles.submitButton, pressed && styles.buttonPressed]}
             >
               <Text style={styles.submitButtonText}>Submit Feedback</Text>
             </Pressable>
-
           </ScrollView>
         </View>
       </ImageBackground>
@@ -130,40 +159,42 @@ const styles = StyleSheet.create({
   },
   mainWrapper: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
   },
   topHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 44,
+    height: 48,
     marginBottom: 16,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
     borderWidth: 1,
     borderColor: 'rgba(229, 231, 235, 0.8)',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     color: '#111827',
+    textAlign: 'center',
+    letterSpacing: -0.3,
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 36,
   },
   heroContainer: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   heroTitleRow: {
     flexDirection: 'row',
@@ -171,39 +202,42 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   starEmoji: {
-    fontSize: 18,
+    fontSize: 20,
     marginRight: 6,
   },
   heroTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     color: '#111827',
+    letterSpacing: -0.3,
   },
   heroDescription: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 22,
     color: '#4B5563',
   },
   ratingSection: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   ratingTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 12,
+    marginBottom: 14,
+    letterSpacing: -0.2,
   },
   starsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
   },
   starButton: {
-    padding: 2,
+    padding: 4,
+    borderRadius: 12,
   },
   inputContainer: {
     position: 'relative',
-    marginBottom: 24,
+    marginBottom: 28,
     marginTop: 8,
   },
   floatingLabel: {
@@ -219,30 +253,35 @@ const styles = StyleSheet.create({
   },
   textInput: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 14,
+    paddingVertical: 14,
+    fontSize: 14.5,
     color: '#111827',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
   textAreaInput: {
-    height: 110,
+    height: 120,
     textAlignVertical: 'top',
   },
   submitButton: {
     width: '100%',
-    height: 50,
-    backgroundColor: '#111827',
-    borderRadius: 25,
+    height: 54,
+    backgroundColor: '#FF6584',
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#FF6584',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   submitButtonText: {
     fontSize: 16,
@@ -250,7 +289,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   buttonPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.985 }],
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ImageBackground,
   TextInput,
   ScrollView,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -48,9 +49,22 @@ export default function ReportProblemScreen() {
     if (step === 2) {
       setStep(1);
     } else {
-      router.back();
+      router.push('/help-support');
     }
   };
+
+  useEffect(() => {
+    const onBackPress = () => {
+      if (step === 2) {
+        setStep(1);
+        return true;
+      }
+      router.push('/help-support');
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [step, router]);
 
   return (
     <View style={styles.rootContainer}>
@@ -81,13 +95,7 @@ export default function ReportProblemScreen() {
 
             <Text style={styles.headerTitle}>Report a Problem</Text>
 
-            {step === 2 ? (
-              <Pressable onPress={() => setStep(1)} style={styles.headerRightBtn}>
-                <Ionicons name="chevron-forward" size={22} color="#111827" />
-              </Pressable>
-            ) : (
-              <View style={{ width: 40 }} />
-            )}
+            <View style={{ width: 40 }} />
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -126,7 +134,7 @@ export default function ReportProblemScreen() {
                   style={({ pressed }) => [styles.nextButtonRow, pressed && styles.buttonPressed]}
                 >
                   <Text style={styles.nextText}>Next</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#2563EB" style={{ marginLeft: 4 }} />
+                  <Ionicons name="arrow-forward" size={18} color="#FF2E63" style={{ marginLeft: 4 }} />
                 </Pressable>
               </View>
             ) : (
@@ -317,13 +325,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   radioOuterSelected: {
-    borderColor: '#10B981',
+    borderColor: '#FF2E63',
   },
   radioInner: {
     width: 11,
     height: 11,
     borderRadius: 5.5,
-    backgroundColor: '#10B981',
+    backgroundColor: '#FF2E63',
   },
   nextButtonRow: {
     flexDirection: 'row',
@@ -336,7 +344,7 @@ const styles = StyleSheet.create({
   nextText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#2563EB',
+    color: '#FF2E63',
   },
   stepTwoContainer: {
     paddingTop: 8,
@@ -393,13 +401,13 @@ const styles = StyleSheet.create({
   submitButton: {
     width: '100%',
     height: 50,
-    backgroundColor: '#FF2A2A',
+    backgroundColor: '#FF2E63',
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
     marginBottom: 12,
-    shadowColor: '#FF2A2A',
+    shadowColor: '#FF2E63',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 6,

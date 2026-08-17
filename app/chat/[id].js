@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   TextInput,
@@ -11,10 +10,8 @@ import {
   Platform,
   Image,
   StatusBar,
-  StatusBar as RNStatusBar,
 } from 'react-native';
-
-const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 24) : 0;
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +45,7 @@ import PollBubble from '../../src/components/common/PollBubble';
 import PollResultsModal from '../../src/components/common/PollResultsModal';
 import CreatePollModal from '../../src/components/common/CreatePollModal';
 import ReplyPreviewBar from '../../src/components/common/ReplyPreviewBar';
+import { useTheme } from '../../src/theme';
 
 const initialMessages = [
   { id: '1', text: 'Hi ! Rahul', time: '4:56 pm', isSent: true, isRead: true, type: 'text' },
@@ -196,9 +194,11 @@ const initialMessages = [
   },
 ];
 
-export default function ChatConversationScreen() {
-  const { name, avatarUrl } = useLocalSearchParams();
+export default function ChatDetailScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
+  const { isDarkMode, colors } = useTheme();
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState(initialMessages);
   const [selectedMessage, setSelectedMessage] = useState(null);
@@ -219,8 +219,8 @@ export default function ChatConversationScreen() {
   const timerRef = useRef(null);
   const flatListRef = useRef(null);
 
-  const displayName = name || 'Rahul Kumawat';
-  const displayAvatar = avatarUrl || 'https://i.pravatar.cc/150?img=11';
+  const displayName = params.name || 'Rahul Kumawat';
+  const displayAvatar = params.avatarUrl || 'https://i.pravatar.cc/150?img=11';
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -541,11 +541,11 @@ export default function ChatConversationScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <View style={[styles.safeContainer, { backgroundColor: '#FFF5F5' }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="dark-content" />
       <LinearGradient
-        colors={['#FFF5F5', '#FFD9E0']}
+        colors={['#FFF5F5', '#FFEBF0', '#FFD9E0']}
         style={styles.gradientBackground}
       >
         {/* Scattered faint watermark hearts */}
@@ -576,11 +576,11 @@ export default function ChatConversationScreen() {
           />
         </View>
 
-        {/* Custom Header */}
-        <View style={styles.header}>
+        {/* Top Header */}
+        <View style={[styles.header, { backgroundColor: colors.headerBg, borderBottomColor: colors.border, paddingTop: Math.max(insets.top + 6, 16) }]}>
           <View style={styles.headerLeft}>
             <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-              <Ionicons name="chevron-back" size={28} color="#000000" />
+              <Ionicons name="chevron-back" size={28} color={colors.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.8}
@@ -589,8 +589,8 @@ export default function ChatConversationScreen() {
             >
               <Image source={{ uri: displayAvatar }} style={styles.avatar} />
               <View style={styles.headerMeta}>
-                <Text style={styles.nameText} numberOfLines={1}>{displayName}</Text>
-                <Text style={styles.statusText}>Online</Text>
+                <Text style={[styles.nameText, { color: colors.textPrimary }]} numberOfLines={1}>{displayName}</Text>
+                <Text style={[styles.statusText, { color: colors.statusOnline || '#10B981' }]}>Online</Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -610,7 +610,7 @@ export default function ChatConversationScreen() {
                 })
               }
             >
-              <Ionicons name="videocam-outline" size={24} color="#000000" />
+              <Ionicons name="videocam-outline" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.headerIcon}
@@ -627,7 +627,7 @@ export default function ChatConversationScreen() {
                 })
               }
             >
-              <Ionicons name="call-outline" size={22} color="#000000" />
+              <Ionicons name="call-outline" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.headerIcon}
@@ -643,7 +643,7 @@ export default function ChatConversationScreen() {
                 })
               }
             >
-              <Ionicons name="information-circle-outline" size={24} color="#000000" />
+              <Ionicons name="information-circle-outline" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -661,8 +661,8 @@ export default function ChatConversationScreen() {
             renderItem={({ item }) => renderMessageItem(item)}
             ListHeaderComponent={
               <View style={styles.dateSeparatorContainer}>
-                <View style={styles.dateSeparator}>
-                  <Text style={styles.dateSeparatorText}>Today</Text>
+                <View style={[styles.dateSeparator, { backgroundColor: isDarkMode ? '#27272A' : '#FFFFFF' }]}>
+                  <Text style={[styles.dateSeparatorText, { color: colors.textSecondary }]}>Today</Text>
                 </View>
               </View>
             }
@@ -694,45 +694,45 @@ export default function ChatConversationScreen() {
             />
           )}
 
-          {/* Bottom Chat Input Bar */}
+          {/* Bottom Chat Input Bar matching Image 2 */}
           <View style={styles.inputArea}>
-            <View style={styles.inputContainer}>
+            <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.inputLeftColumn}>
                 <TextInput
                   placeholder="Type your message..."
-                  placeholderTextColor="#AEAEB2"
-                  style={styles.textInput}
+                  placeholderTextColor={colors.inputPlaceholder || '#AEAEB2'}
+                  style={[styles.textInput, { color: colors.inputText || colors.textPrimary }]}
                   value={inputText}
                   onChangeText={setInputText}
                   multiline
                   maxHeight={100}
                 />
-                <View style={styles.iconRow}>
+                <View style={[styles.iconRow, { borderTopColor: isDarkMode ? '#3F3F46' : '#F3F4F6' }]}>
                   <TouchableOpacity style={styles.inputIcon} onPress={() => setAttachmentVisible(true)}>
-                    <Ionicons name="add-circle-outline" size={22} color="#8E8E93" />
+                    <Ionicons name="add-circle-outline" size={22} color={colors.inputIcon || '#8E8E93'} />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.inputIcon}
                     onPressIn={startRecording}
                     onPressOut={stopRecording}
                   >
-                    <Ionicons name="mic-outline" size={22} color="#8E8E93" />
+                    <Ionicons name="mic-outline" size={22} color={colors.inputIcon || '#8E8E93'} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.inputIcon} onPress={handlePressSmileyInInput}>
-                    <Ionicons name="happy-outline" size={22} color="#8E8E93" />
+                    <Ionicons name="happy-outline" size={22} color={colors.inputIcon || '#8E8E93'} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.inputIcon} onPress={() => setStickerVisible(true)}>
-                    <Ionicons name="copy-outline" size={20} color="#8E8E93" />
+                    <Ionicons name="copy-outline" size={20} color={colors.inputIcon || '#8E8E93'} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.inputIcon} onPress={() => setAiMenuVisible(true)}>
-                    <Ionicons name="sparkles" size={18} color="#8E8E93" />
+                    <Ionicons name="sparkles" size={18} color={colors.inputIcon || '#8E8E93'} />
                   </TouchableOpacity>
                 </View>
               </View>
               <TouchableOpacity
                 style={[
                   styles.sendButton,
-                  { backgroundColor: inputText.trim() === '' ? '#F2F2F7' : '#1C1C1E' }
+                  { backgroundColor: inputText.trim() === '' ? (colors.sendButtonEmptyBg || '#F2F2F7') : (colors.sendButtonBg || '#1C1C1E') }
                 ]}
                 activeOpacity={0.8}
                 onPress={handleSend}
@@ -740,7 +740,7 @@ export default function ChatConversationScreen() {
                 <Ionicons
                   name="send"
                   size={20}
-                  color={inputText.trim() === '' ? '#8E8E93' : '#FFFFFF'}
+                  color={inputText.trim() === '' ? (colors.inputIcon || '#8E8E93') : '#FFFFFF'}
                 />
               </TouchableOpacity>
             </View>
@@ -799,7 +799,7 @@ export default function ChatConversationScreen() {
         }}
         poll={selectedPollForResults}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -823,7 +823,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: STATUSBAR_HEIGHT + 6,
     paddingBottom: 6,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,

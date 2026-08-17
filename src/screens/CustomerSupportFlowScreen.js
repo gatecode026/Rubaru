@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ImageBackground,
   TextInput,
   ScrollView,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -44,9 +45,22 @@ export default function CustomerSupportFlowScreen() {
     if (step === 2) {
       setStep(1);
     } else {
-      router.back();
+      router.push('/help-support');
     }
   };
+
+  useEffect(() => {
+    const onBackPress = () => {
+      if (step === 2) {
+        setStep(1);
+        return true;
+      }
+      router.push('/help-support');
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [step, router]);
 
   return (
     <View style={styles.rootContainer}>
@@ -77,13 +91,7 @@ export default function CustomerSupportFlowScreen() {
 
             <Text style={styles.headerTitle}>Customer Support</Text>
 
-            {step === 2 ? (
-              <Pressable onPress={() => setStep(1)} style={styles.headerRightBtn}>
-                <Ionicons name="chevron-forward" size={22} color="#111827" />
-              </Pressable>
-            ) : (
-              <View style={{ width: 40 }} />
-            )}
+            <View style={{ width: 40 }} />
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -412,11 +420,11 @@ const styles = StyleSheet.create({
   contactUsButton: {
     width: '100%',
     height: 50,
-    backgroundColor: '#00C853',
+    backgroundColor: '#FF2E63',
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#00C853',
+    shadowColor: '#FF2E63',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 6,

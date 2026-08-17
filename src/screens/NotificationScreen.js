@@ -1,22 +1,15 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   FlatList,
   StyleSheet,
-  TouchableOpacity,
   StatusBar,
-  Platform,
-  StatusBar as RNStatusBar,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import NotificationRow from '../components/common/NotificationRow';
 import SegmentedNotifCallsHeader from '../components/common/SegmentedNotifCallsHeader';
 import BottomTabBar from '../components/common/BottomTabBar';
-
-const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
 
 const notificationsData = [
   {
@@ -113,7 +106,7 @@ export default function NotificationScreen({ isNestedInPager }) {
   const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <View style={styles.safeContainer}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
@@ -138,7 +131,7 @@ export default function NotificationScreen({ isNestedInPager }) {
           }}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

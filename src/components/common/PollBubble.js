@@ -8,9 +8,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AvatarStack from './AvatarStack';
+import { useTheme } from '../../theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const MAX_POLL_WIDTH = SCREEN_WIDTH * 0.72; // Reduced width for compact display
+const MAX_POLL_WIDTH = SCREEN_WIDTH * 0.76;
 
 export default function PollBubble({
   poll,
@@ -18,6 +19,8 @@ export default function PollBubble({
   onViewAll,
   onLongPress,
 }) {
+  const { isDarkMode, colors } = useTheme();
+
   if (!poll) return null;
 
   const { question, options = [], time, isSent, isRead } = poll;
@@ -28,15 +31,34 @@ export default function PollBubble({
     0
   );
 
+  // In dark mode: sent is pure black #000000, received is white #FFFFFF (as previously)
+  // In light mode: sent is soft light pink #FF6584, received is white #FFFFFF
+  const cardBg = isSent
+    ? (isDarkMode ? '#000000' : (colors.pollSentBg || '#FF6584'))
+    : '#FFFFFF';
+
+  const textColor = isSent ? '#FFFFFF' : '#000000';
+  const secondaryTextColor = isSent ? (isDarkMode ? 'rgba(255, 255, 255, 0.7)' : '#FFF0F3') : '#8E8E93';
+  const dividerColor = isSent
+    ? (isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.3)')
+    : '#E5E5EA';
+
+  const pinkAccent = colors.primary || '#FF6584';
+
   return (
     <View style={isSent ? styles.sentContainer : styles.receivedContainer}>
       <TouchableOpacity
         activeOpacity={0.95}
         onLongPress={onLongPress}
-        style={[isSent ? styles.sentCard : styles.receivedCard]}
+        style={[
+          isSent ? styles.sentCard : styles.receivedCard,
+          {
+            backgroundColor: cardBg,
+          },
+        ]}
       >
         {/* Question Title */}
-        <Text style={[styles.questionText, isSent ? styles.sentText : styles.receivedText]}>
+        <Text style={[styles.questionText, { color: textColor }]}>
           {question}
         </Text>
 
@@ -63,20 +85,28 @@ export default function PollBubble({
                       <View
                         style={[
                           styles.radioFilled,
-                          isSent ? styles.radioFilledSent : styles.radioFilledReceived,
+                          {
+                            backgroundColor: isSent
+                              ? '#FFFFFF'
+                              : (isDarkMode ? '#48484A' : pinkAccent),
+                          },
                         ]}
                       >
                         <Ionicons
                           name="checkmark"
-                          size={11}
-                          color={isSent ? '#000000' : '#FFFFFF'}
+                          size={12}
+                          color={isSent ? (isDarkMode ? '#000000' : pinkAccent) : '#FFFFFF'}
                         />
                       </View>
                     ) : (
                       <View
                         style={[
                           styles.radioEmpty,
-                          isSent ? styles.radioEmptySent : styles.radioEmptyReceived,
+                          {
+                            borderColor: isSent
+                              ? '#FFFFFF'
+                              : '#8E8E93',
+                          },
                         ]}
                       />
                     )}
@@ -86,7 +116,7 @@ export default function PollBubble({
                   <Text
                     style={[
                       styles.optionLabel,
-                      isSent ? styles.sentText : styles.receivedText,
+                      { color: textColor },
                       isSelected && styles.selectedOptionLabel,
                     ]}
                   >
@@ -105,20 +135,22 @@ export default function PollBubble({
                 <View
                   style={[
                     styles.progressTrack,
-                    isSent ? styles.progressTrackSent : styles.progressTrackReceived,
+                    {
+                      backgroundColor: isSent
+                        ? (isDarkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.28)')
+                        : '#E5E5EA',
+                    },
                   ]}
                 >
                   <View
                     style={[
                       styles.progressFill,
-                      isSent
-                        ? isSelected
-                          ? styles.progressFillSentSelected
-                          : styles.progressFillSent
-                        : isSelected
-                        ? styles.progressFillReceivedSelected
-                        : styles.progressFillReceived,
-                      { width: `${percentage}%` },
+                      {
+                        backgroundColor: isSent
+                          ? (isSelected ? '#FFFFFF' : (isDarkMode ? 'rgba(255, 255, 255, 0.7)' : '#FFFFFF'))
+                          : (isSelected ? (isDarkMode ? '#48484A' : pinkAccent) : (isDarkMode ? '#8E8E93' : '#D1D5DB')),
+                        width: `${percentage}%`,
+                      },
                     ]}
                   />
                 </View>
@@ -128,35 +160,30 @@ export default function PollBubble({
         </View>
 
         {/* Divider Line */}
-        <View
-          style={[
-            styles.divider,
-            isSent ? styles.dividerSent : styles.dividerReceived,
-          ]}
-        />
+        <View style={[styles.divider, { backgroundColor: dividerColor }]} />
 
         {/* View All Button */}
         <TouchableOpacity style={styles.viewAllButton} onPress={onViewAll}>
-          <Text style={[styles.viewAllText, isSent ? styles.sentText : styles.receivedText]}>
+          <Text
+            style={[
+              styles.viewAllText,
+              { color: isSent ? '#FFFFFF' : (isDarkMode ? '#000000' : pinkAccent) },
+            ]}
+          >
             View All
           </Text>
         </TouchableOpacity>
 
         {/* Timestamp */}
         <View style={styles.timestampContainer}>
-          <Text
-            style={[
-              styles.timestampText,
-              isSent ? styles.sentTimeText : styles.receivedTimeText,
-            ]}
-          >
+          <Text style={[styles.timestampText, { color: secondaryTextColor }]}>
             {time}
           </Text>
           {isSent && (
             <Ionicons
               name="checkmark-done"
               size={15}
-              color={isRead ? '#34C759' : '#AEAEB2'}
+              color={isRead ? '#10B981' : (isDarkMode ? '#AEAEB2' : '#FFF0F3')}
               style={styles.checkIcon}
             />
           )}
@@ -180,16 +207,20 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   sentCard: {
-    backgroundColor: '#000000', // Pure black card
     borderRadius: 18,
-    padding: 12,
-    borderBottomRightRadius: 4, // Sharp corner tail
+    padding: 14,
+    borderBottomRightRadius: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   receivedCard: {
-    backgroundColor: '#FFFFFF', // Pure white card
+    backgroundColor: '#FFFFFF',
     borderRadius: 18,
     padding: 12,
-    borderBottomLeftRadius: 4, // Sharp corner tail
+    borderBottomLeftRadius: 4,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
@@ -199,22 +230,16 @@ const styles = StyleSheet.create({
     borderColor: '#F2F2F7',
   },
   questionText: {
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  sentText: {
-    color: '#FFFFFF',
-  },
-  receivedText: {
-    color: '#000000',
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 22,
+    marginBottom: 14,
   },
   optionsList: {
     marginBottom: 6,
   },
   optionRowContainer: {
-    marginBottom: 10,
+    marginBottom: 12,
   },
   optionHeaderRow: {
     flexDirection: 'row',
@@ -225,76 +250,40 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   radioEmpty: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.8,
-  },
-  radioEmptySent: {
-    borderColor: '#FFFFFF',
-  },
-  radioEmptyReceived: {
-    borderColor: '#8E8E93',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
   },
   radioFilled: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  radioFilledSent: {
-    backgroundColor: '#FFFFFF',
-  },
-  radioFilledReceived: {
-    backgroundColor: '#48484A',
-  },
   optionLabel: {
     fontSize: 13,
-    fontWeight: '400',
+    fontWeight: '500',
     flex: 1,
     marginRight: 6,
   },
   selectedOptionLabel: {
-    fontWeight: '600',
+    fontWeight: '700',
   },
   progressTrack: {
     height: 5,
     borderRadius: 2.5,
     overflow: 'hidden',
-    marginLeft: 26, // align with text label start
-  },
-  progressTrackSent: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  progressTrackReceived: {
-    backgroundColor: '#E5E5EA',
+    marginLeft: 28,
   },
   progressFill: {
     height: '100%',
     borderRadius: 3,
   },
-  progressFillSent: {
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-  },
-  progressFillSentSelected: {
-    backgroundColor: '#FFFFFF',
-  },
-  progressFillReceived: {
-    backgroundColor: '#8E8E93',
-  },
-  progressFillReceivedSelected: {
-    backgroundColor: '#48484A',
-  },
   divider: {
-    height: 0.5,
-    marginVertical: 12,
-  },
-  dividerSent: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  dividerReceived: {
-    backgroundColor: '#E5E5EA',
+    height: 1,
+    marginVertical: 10,
   },
   viewAllButton: {
     alignItems: 'center',
@@ -302,7 +291,7 @@ const styles = StyleSheet.create({
   },
   viewAllText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   timestampContainer: {
     flexDirection: 'row',
@@ -311,13 +300,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   timestampText: {
-    fontSize: 10,
-  },
-  sentTimeText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-  },
-  receivedTimeText: {
-    color: '#8E8E93',
+    fontSize: 11,
+    fontWeight: '500',
   },
   checkIcon: {
     marginLeft: 4,

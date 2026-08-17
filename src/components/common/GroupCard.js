@@ -8,12 +8,14 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useLanguage } from '../../localization/LanguageContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 52) / 2;  // 2 columns, 16px side padding + 20px gap
 const CARD_HEIGHT = 250;
 
 export default function GroupCard({ item }) {
+  const { t } = useLanguage();
   const { badgeLabel, imageUri, name, statusColor = '#34C759', adminName } = item;
 
   return (
@@ -36,18 +38,16 @@ export default function GroupCard({ item }) {
           <Text style={styles.topBadgeText}>{badgeLabel}</Text>
         </View>
 
-        {/* Middle "+Add in Group" frosted pill */}
-        <View style={styles.addBtnWrap}>
-          <TouchableOpacity style={styles.addInGroupBtn} activeOpacity={0.8}>
-            <Text style={styles.addInGroupText}>+Add in Group</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Bottom dark gradient scrim */}
+        {/* Bottom dark gradient scrim containing button, name, and admin */}
         <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.30)', 'rgba(0,0,0,0.88)']}
+          colors={['transparent', 'rgba(0,0,0,0.38)', 'rgba(0,0,0,0.90)']}
           style={styles.scrim}
         >
+          {/* "+Join Group" frosted pill */}
+          <TouchableOpacity style={styles.addInGroupBtn} activeOpacity={0.8}>
+            <Text style={styles.addInGroupText}>{t('joinGroup', '+Join Group')}</Text>
+          </TouchableOpacity>
+
           {/* Name + status dot row */}
           <View style={styles.nameRow}>
             <Text style={styles.nameText} numberOfLines={1}>
@@ -107,28 +107,26 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
-  /* ── +Add in Group button (middle) ── */
-  addBtnWrap: {
-    position: 'absolute',
-    bottom: 80,          // sits roughly in the middle of the image area above the scrim
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-  },
+  /* ── +Join Group button ── */
   addInGroupBtn: {
-    backgroundColor: 'rgba(255,255,255,0.30)',
-    borderWidth: 1.2,
-    borderColor: 'rgba(255,255,255,0.50)',
+    backgroundColor: 'rgba(75, 85, 99, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.40)',
     borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
+    paddingHorizontal: 15,
+    paddingVertical: 5.5,
+    marginBottom: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
   },
   addInGroupText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '700',
-    letterSpacing: 0.1,
+    letterSpacing: 0.2,
   },
 
   /* ── Bottom scrim + text ── */
@@ -137,7 +135,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingTop: 50,
+    paddingTop: 36,
     paddingBottom: 14,
     paddingHorizontal: 10,
     alignItems: 'center',

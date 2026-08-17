@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../theme';
 let Audio;
 try {
   Audio = require('expo-av').Audio;
@@ -16,6 +17,7 @@ try {
 }
 
 export default function VoiceMessageBubble({ uri, duration = '00:32', time, isSent, isRead, onLongPress }) {
+  const { isDarkMode, colors } = useTheme();
   const [isPlaying, setIsPlaying] = useState(false);
   const [sound, setSound] = useState(null);
   const [playProgress, setPlayProgress] = useState(0);
@@ -92,23 +94,55 @@ export default function VoiceMessageBubble({ uri, duration = '00:32', time, isSe
   const currentSecs = Math.floor(playProgress * 32);
   const formattedPosition = `00:${currentSecs < 10 ? '0' : ''}${currentSecs}/${duration.includes(':') ? duration : '00:' + duration}`;
 
+  // Theme-aware colors:
+  // Dark mode (previous): Sent is #000000, play button is white with black icon #000000, received is white with #000000 icon.
+  // Light mode (new): Sent is #FF6584, play button is white with pink icon #FF6584, received is white with pink accents.
+  const bubbleBg = isSent
+    ? (isDarkMode ? '#000000' : (colors.voiceSentBg || '#FF6584'))
+    : '#FFFFFF';
+
+  const playBtnBg = isSent
+    ? '#FFFFFF'
+    : (isDarkMode ? '#F2F2F7' : '#FFF0F3');
+
+  const playIconColor = isSent
+    ? (isDarkMode ? '#000000' : (colors.voicePlayIcon || '#FF6584'))
+    : (isDarkMode ? '#000000' : (colors.voicePlayIcon || '#FF6584'));
+
+  const activeWaveformColor = isSent
+    ? '#FFFFFF'
+    : (isDarkMode ? '#000000' : (colors.primary || '#FF6584'));
+
+  const idleWaveformColor = isSent
+    ? (isDarkMode ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.45)')
+    : (isDarkMode ? '#D1D1D6' : '#E5E7EB');
+
+  const footerTextColor = isSent
+    ? (isDarkMode ? 'rgba(255, 255, 255, 0.7)' : '#FFF0F3')
+    : '#8E8E93';
+
   return (
     <View style={isSent ? styles.sentContainer : styles.receivedContainer}>
       <TouchableOpacity
-        style={[isSent ? styles.sentBubble : styles.receivedBubble]}
+        style={[
+          isSent ? styles.sentBubble : styles.receivedBubble,
+          {
+            backgroundColor: bubbleBg,
+          },
+        ]}
         activeOpacity={0.9}
         onLongPress={onLongPress}
       >
         <View style={styles.contentRow}>
           {/* Play/Pause Button */}
           <TouchableOpacity
-            style={[styles.playButton, isSent ? styles.sentPlay : styles.receivedPlay]}
+            style={[styles.playButton, { backgroundColor: playBtnBg }]}
             onPress={handlePlayPause}
           >
             <Ionicons
               name={isPlaying ? 'pause' : 'play'}
               size={18}
-              color={isSent ? '#000000' : '#000000'}
+              color={playIconColor}
               style={!isPlaying && { marginLeft: 2 }}
             />
           </TouchableOpacity>
@@ -118,8 +152,6 @@ export default function VoiceMessageBubble({ uri, duration = '00:32', time, isSe
             {bars.map((height, i) => {
               const barProgress = i / bars.length;
               const isActive = playProgress > barProgress || isPlaying;
-              const activeColor = isSent ? '#FFFFFF' : '#000000';
-              const idleColor = isSent ? 'rgba(255, 255, 255, 0.35)' : '#D1D1D6';
 
               return (
                 <View
@@ -128,7 +160,7 @@ export default function VoiceMessageBubble({ uri, duration = '00:32', time, isSe
                     styles.waveformBar,
                     {
                       height: height,
-                      backgroundColor: isActive ? activeColor : idleColor,
+                      backgroundColor: isActive ? activeWaveformColor : idleWaveformColor,
                     },
                   ]}
                 />
@@ -146,18 +178,18 @@ export default function VoiceMessageBubble({ uri, duration = '00:32', time, isSe
 
         {/* Footer info (duration & timestamp) */}
         <View style={styles.footerRow}>
-          <Text style={[styles.durationText, isSent ? styles.sentText : styles.receivedText]}>
+          <Text style={[styles.durationText, { color: footerTextColor }]}>
             {formattedPosition}
           </Text>
           <View style={styles.timeAndStatus}>
-            <Text style={[styles.timeText, isSent ? styles.sentText : styles.receivedText]}>
+            <Text style={[styles.timeText, { color: footerTextColor }]}>
               {time}
             </Text>
             {isSent && (
               <Ionicons
                 name="checkmark-done"
                 size={14}
-                color={isRead ? '#34C759' : '#AEAEB2'}
+                color={isRead ? '#34C759' : (isDarkMode ? '#AEAEB2' : '#FFE4E8')}
                 style={styles.checkIcon}
               />
             )}
@@ -182,7 +214,6 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   sentBubble: {
-    backgroundColor: '#000000', // Pure black background matching screenshot
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderTopLeftRadius: 18,
@@ -192,7 +223,6 @@ const styles = StyleSheet.create({
     width: 240,
   },
   receivedBubble: {
-    backgroundColor: '#FFFFFF', // Pure white background matching screenshot
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderTopLeftRadius: 18,
@@ -219,12 +249,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  sentPlay: {
-    backgroundColor: '#FFFFFF', // White circular button with black play icon
-  },
-  receivedPlay: {
-    backgroundColor: '#F2F2F7', // Translucent light button with black play icon
   },
   waveformContainer: {
     flexDirection: 'row',
@@ -258,12 +282,6 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 10,
-  },
-  sentText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-  },
-  receivedText: {
-    color: '#8E8E93',
   },
   checkIcon: {
     marginLeft: 4,

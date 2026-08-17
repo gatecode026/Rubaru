@@ -12,8 +12,10 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../theme';
 
 export default function CreatePollModal({ visible, onClose, onCreatePoll }) {
+  const { isDarkMode, colors } = useTheme();
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
 
@@ -75,38 +77,55 @@ export default function CreatePollModal({ visible, onClose, onCreatePoll }) {
           <TouchableWithoutFeedback>
             <KeyboardAvoidingView
               behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-              style={styles.sheetContainer}
+              style={[
+                styles.sheetContainer,
+                {
+                  backgroundColor: colors.surface || (isDarkMode ? '#1E1E22' : '#FFFFFF'),
+                },
+              ]}
             >
-              <View style={styles.dragHandle} />
+              <View style={[styles.dragHandle, { backgroundColor: isDarkMode ? '#3F3F46' : '#E5E5EA' }]} />
 
               <View style={styles.headerRow}>
-                <Text style={styles.modalTitle}>Create Poll</Text>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Create Poll</Text>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                  <Ionicons name="close" size={22} color="#8E8E93" />
+                  <Ionicons name="close" size={22} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
                 {/* Question Input */}
-                <Text style={styles.fieldLabel}>Question</Text>
+                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Question</Text>
                 <TextInput
                   placeholder="Ask a question..."
-                  placeholderTextColor="#AEAEB2"
-                  style={styles.questionInput}
+                  placeholderTextColor={colors.inputPlaceholder}
+                  style={[
+                    styles.questionInput,
+                    {
+                      backgroundColor: isDarkMode ? '#27272A' : '#F2F2F7',
+                      color: colors.textPrimary,
+                    },
+                  ]}
                   value={question}
                   onChangeText={setQuestion}
                   multiline
                 />
 
                 {/* Options List */}
-                <Text style={styles.fieldLabel}>Options</Text>
+                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Options</Text>
                 {options.map((option, index) => (
-                  <View key={index} style={styles.optionRow}>
-                    <Ionicons name="menu" size={20} color="#AEAEB2" style={styles.dragIcon} />
+                  <View
+                    key={index}
+                    style={[
+                      styles.optionRow,
+                      { backgroundColor: isDarkMode ? '#27272A' : '#F2F2F7' },
+                    ]}
+                  >
+                    <Ionicons name="menu" size={20} color={colors.textMuted} style={styles.dragIcon} />
                     <TextInput
                       placeholder={`Option ${index + 1}`}
-                      placeholderTextColor="#AEAEB2"
-                      style={styles.optionInput}
+                      placeholderTextColor={colors.inputPlaceholder}
+                      style={[styles.optionInput, { color: colors.textPrimary }]}
                       value={option}
                       onChangeText={(text) => handleOptionChange(text, index)}
                     />
@@ -120,12 +139,23 @@ export default function CreatePollModal({ visible, onClose, onCreatePoll }) {
 
                 {/* Add Option Button */}
                 <TouchableOpacity style={styles.addOptionBtn} onPress={handleAddOption}>
-                  <Ionicons name="add" size={20} color="#007AFF" />
-                  <Text style={styles.addOptionText}>Add Option</Text>
+                  <Ionicons name="add" size={20} color="#FF2E63" />
+                  <Text style={[styles.addOptionText, { color: '#FF2E63' }]}>Add Option</Text>
                 </TouchableOpacity>
 
                 {/* Submit Button */}
-                <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={[
+                    styles.submitBtn,
+                    {
+                      backgroundColor: isDarkMode ? '#121212' : '#FF2E63',
+                      borderWidth: isDarkMode ? 1 : 0,
+                      borderColor: isDarkMode ? '#FF2E63' : 'transparent',
+                    },
+                  ]}
+                  onPress={handleSubmit}
+                  activeOpacity={0.8}
+                >
                   <Text style={styles.submitBtnText}>Create Poll</Text>
                 </TouchableOpacity>
               </ScrollView>
@@ -228,15 +258,20 @@ const styles = StyleSheet.create({
   },
   addOptionText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#007AFF',
+    fontWeight: '700',
+    color: '#FF2E63',
     marginLeft: 4,
   },
   submitBtn: {
-    backgroundColor: '#000000',
+    backgroundColor: '#FF2E63',
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: 'center',
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   submitBtnText: {
     fontSize: 16,

@@ -265,11 +265,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   otpBoxFilled: {
-    backgroundColor: '#163C38',
-    borderColor: '#163C38',
+    backgroundColor: '#FF2E63',
+    borderColor: '#FF2E63',
   },
   otpBoxFocused: {
-    borderColor: '#163C38',
+    borderColor: '#FF2E63',
     borderWidth: 1.5,
   },
   otpDigitText: {
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
   resendText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#163C38',
+    color: '#FF2E63',
   },
   buttonPressed: {
     opacity: 0.85,

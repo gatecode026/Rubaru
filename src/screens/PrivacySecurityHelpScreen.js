@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Pressable,
   ImageBackground,
   ScrollView,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -14,6 +15,19 @@ import { Ionicons } from '@expo/vector-icons';
 export default function PrivacySecurityHelpScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  const handleBack = () => {
+    router.push('/help-support');
+  };
+
+  useEffect(() => {
+    const onBackPress = () => {
+      router.push('/help-support');
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [router]);
 
   return (
     <View style={styles.rootContainer}>
@@ -34,7 +48,7 @@ export default function PrivacySecurityHelpScreen() {
           {/* Header Row */}
           <View style={styles.topHeaderRow}>
             <Pressable
-              onPress={() => router.back()}
+              onPress={handleBack}
               style={({ pressed }) => [styles.backButton, pressed && styles.buttonPressed]}
               hitSlop={12}
               accessibilityLabel="Go back"

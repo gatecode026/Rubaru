@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   ScrollView,
@@ -9,18 +8,16 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
-  Platform,
-  StatusBar as RNStatusBar,
   TextInput,
 } from 'react-native';
-
-const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import NewUserCard from '../components/common/NewUserCard';
 import InterestChip from '../components/common/InterestChip';
 import BottomTabBar from '../components/common/BottomTabBar';
+import { useLanguage } from '../localization/LanguageContext';
 
 const newUsersData = [
   {
@@ -76,6 +73,8 @@ const interestsList = [
 
 export default function ConnectionScreen({ isNestedInPager }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [selectedInterest, setSelectedInterest] = useState('Music');
 
   const handleBack = () => {
@@ -86,8 +85,13 @@ export default function ConnectionScreen({ isNestedInPager }) {
     }
   };
 
+  const getInterestLabel = (label) => {
+    const key = label.toLowerCase();
+    return t(key, label);
+  };
+
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <View style={styles.safeContainer}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="dark-content" backgroundColor="#FFF0F3" />
 
@@ -123,12 +127,12 @@ export default function ConnectionScreen({ isNestedInPager }) {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
           {/* "Discover" Header Row */}
-          <View style={[styles.discoverHeaderRow, { paddingTop: STATUSBAR_HEIGHT + 6 }]}>
+          <View style={[styles.discoverHeaderRow, { paddingTop: Math.max(insets.top + 6, 16) }]}>
             <View style={styles.discoverTitleContainer}>
               <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                 <Ionicons name="chevron-back" size={28} color="#000000" />
               </TouchableOpacity>
-              <Text style={styles.discoverTitle}>Discover</Text>
+              <Text style={styles.discoverTitle}>{t('discover', 'Discover')}</Text>
             </View>
             <View style={styles.headerButtonsRow}>
               <TouchableOpacity style={styles.circleIconButton} activeOpacity={0.8} onPress={() => router.push('/search-friends')}>
@@ -153,9 +157,9 @@ export default function ConnectionScreen({ isNestedInPager }) {
 
           {/* "Interest" Section */}
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Interest</Text>
+            <Text style={styles.sectionTitle}>{t('interest', 'Interest')}</Text>
             <TouchableOpacity activeOpacity={0.7}>
-              <Text style={styles.viewAllText}>View all</Text>
+              <Text style={styles.viewAllText}>{t('viewAll', 'View all')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -163,7 +167,7 @@ export default function ConnectionScreen({ isNestedInPager }) {
             {interestsList.map((item) => (
               <InterestChip
                 key={item.id}
-                label={item.label}
+                label={getInterestLabel(item.label)}
                 emoji={item.emoji}
                 isSelected={selectedInterest === item.label}
                 onPress={() => setSelectedInterest(item.label)}
@@ -175,9 +179,9 @@ export default function ConnectionScreen({ isNestedInPager }) {
           <View style={styles.aroundMeSection}>
             <View style={styles.aroundMeHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.sectionTitle}>Around me</Text>
+                <Text style={styles.sectionTitle}>{t('aroundMe', 'Around me')}</Text>
                 <Text style={styles.aroundMeSubtext}>
-                  People with <Text style={styles.interestHighlight}>"{selectedInterest}"</Text> interest around you
+                  {t('peopleWithInterest', 'People with')} <Text style={styles.interestHighlight}>"{getInterestLabel(selectedInterest)}"</Text> {t('interestAroundYou', 'interest around you')}
                 </Text>
               </View>
               <TouchableOpacity style={styles.mapLocationRow} activeOpacity={0.7}>
@@ -235,7 +239,7 @@ export default function ConnectionScreen({ isNestedInPager }) {
                   <View style={styles.tooltipBubble}>
                     <Ionicons name="pulse" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
                     <Text style={styles.tooltipText}>
-                      Connect with <Text style={styles.tooltipBold}>Rakhi 👋</Text>
+                      {t('connectWith', 'Connect with')} <Text style={styles.tooltipBold}>Rakhi 👋</Text>
                     </Text>
                   </View>
                   <View style={styles.tooltipDot} />
@@ -258,7 +262,7 @@ export default function ConnectionScreen({ isNestedInPager }) {
           }}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

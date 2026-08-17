@@ -211,21 +211,21 @@ const styles = StyleSheet.create({
   forgotText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#F44649',
+    color: '#FF2E63',
   },
   signInButton: {
     width: '100%',
     height: 56,
-    backgroundColor: '#111827',
+    backgroundColor: '#FF2E63',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 28,
-    shadowColor: '#000',
+    shadowColor: '#FF2E63',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 4,
   },
   signInButtonText: {
     color: '#FFFFFF',
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   },
   signUpText: {
     fontSize: 15,
-    color: '#111827',
+    color: '#FF2E63',
     fontWeight: '700',
   },
   buttonPressed: {
