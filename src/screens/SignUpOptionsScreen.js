@@ -118,11 +118,11 @@ export default function SignUpOptionsScreen() {
 
           {/* Terms & Privacy Policy Footer - Positioned naturally below social cards without empty gap */}
           <View style={styles.footerRow}>
-            <Pressable hitSlop={8}>
+            <Pressable hitSlop={8} onPress={() => router.push('/terms-of-use')}>
               <Text style={styles.footerLinkText}>Terms of use</Text>
             </Pressable>
             <View style={styles.footerSpacer} />
-            <Pressable hitSlop={8}>
+            <Pressable hitSlop={8} onPress={() => router.push('/privacy-policy')}>
               <Text style={styles.footerLinkText}>Privacy Policy</Text>
             </Pressable>
           </View>

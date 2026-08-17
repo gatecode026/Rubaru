@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   actionRail: {
     position: 'absolute',
     right: 10,
-    bottom: 40,
+    bottom: 90,
     zIndex: 10,
     alignItems: 'center',
   },
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 68,
-    bottom: 40,
+    bottom: 90,
     zIndex: 10,
   },
   userRow: {

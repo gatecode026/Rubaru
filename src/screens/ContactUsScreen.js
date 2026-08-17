@@ -98,7 +98,7 @@ export default function ContactUsScreen() {
               </View>
 
               <Image
-                source={require('@assets/images/contact_support_illustration.png')}
+                source={require('@assets/images/contact_support_illustration.jpg')}
                 style={styles.cardIllustration}
                 resizeMode="contain"
               />
@@ -121,7 +121,7 @@ export default function ContactUsScreen() {
               </View>
 
               <Image
-                source={require('@assets/images/contact_support_illustration.png')}
+                source={require('@assets/images/contact_support_illustration.jpg')}
                 style={styles.cardIllustration}
                 resizeMode="contain"
               />
