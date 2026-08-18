@@ -204,6 +204,7 @@ export default function ChatsScreen() {
                   name={item.name}
                   imageUrl={item.imageUrl}
                   isFirst={item.isFirst}
+                  onPress={item.isFirst ? () => router.push('/add-story') : () => router.push({ pathname: '/view-story', params: { name: item.name, imageUrl: item.imageUrl } })}
                 />
               )}
               contentContainerStyle={styles.storiesContentContainer}

@@ -462,8 +462,8 @@ export default function UserProfileScreen() {
               </View>
               {[
                 { key: 'blockedChats', label: 'Blocked Chats', route: '/blocked-chats' },
-                { key: 'privacyPolicy', label: 'Privacy Policy' },
-                { key: 'termsOfUse', label: 'Terms of Use' },
+                { key: 'privacyPolicy', label: 'Privacy Policy', route: '/privacy-policy' },
+                { key: 'termsOfUse', label: 'Terms of Use', route: '/terms-of-use' },
                 { key: 'communityGuidelines', label: 'Community Guidelines', route: '/community-standards' },
                 { key: 'permissionGrantKey', label: 'Permission Grant Key', route: '/permission-grant' },
                 { key: 'aboutUs', label: 'About Us', route: '/about-us' },
