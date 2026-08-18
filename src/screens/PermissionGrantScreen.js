@@ -150,11 +150,6 @@ export default function PermissionGrantScreen() {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            {/* Short Intro text */}
-            <Text style={styles.introText}>
-              Manage and customize your app permissions below.
-            </Text>
-
             {/* Toggle Card Container matching the APK design */}
             <View style={styles.toggleCard}>
               {PERMISSION_ITEMS.map((item, index) => {
@@ -174,13 +169,19 @@ export default function PermissionGrantScreen() {
                       <View
                         style={[
                           styles.iconBadge,
-                          { backgroundColor: isEnabled ? 'rgba(255, 46, 99, 0.1)' : 'rgba(156, 163, 175, 0.12)' },
+                          {
+                            backgroundColor: isEnabled
+                              ? isDarkMode
+                                ? 'rgba(0, 0, 0, 0.08)'
+                                : 'rgba(255, 46, 99, 0.1)'
+                              : 'rgba(156, 163, 175, 0.12)',
+                          },
                         ]}
                       >
                         <Ionicons
                           name={item.icon}
                           size={20}
-                          color={isEnabled ? '#FF2E63' : '#6B7280'}
+                          color={isEnabled ? (isDarkMode ? '#000000' : '#FF2E63') : '#6B7280'}
                         />
                       </View>
 
@@ -196,7 +197,7 @@ export default function PermissionGrantScreen() {
                       <Switch
                         value={isEnabled}
                         onValueChange={() => togglePermission(item.id)}
-                        trackColor={{ false: '#D1D5DB', true: '#FF2E63' }}
+                        trackColor={{ false: '#D1D5DB', true: isDarkMode ? '#000000' : '#FF2E63' }}
                         thumbColor="#FFFFFF"
                         style={styles.switchControl}
                       />
@@ -212,7 +213,7 @@ export default function PermissionGrantScreen() {
             {/* Permission Control Info Box */}
             <View style={styles.infoCard}>
               <View style={styles.infoHeaderRow}>
-                <Ionicons name="shield-checkmark-outline" size={18} color="#FF2E63" style={{ marginRight: 6 }} />
+                <Ionicons name="shield-checkmark-outline" size={18} color={isDarkMode ? '#000000' : '#FF2E63'} style={{ marginRight: 6 }} />
                 <Text style={styles.infoTitle}>Permission Control</Text>
               </View>
               <Text style={styles.infoBodyText}>
@@ -239,7 +240,11 @@ export default function PermissionGrantScreen() {
 
             <Pressable
               onPress={handleBack}
-              style={({ pressed }) => [styles.continueBtn, pressed && styles.buttonPressed]}
+              style={({ pressed }) => [
+                styles.continueBtn,
+                isDarkMode && styles.continueBtnDark,
+                pressed && styles.buttonPressed,
+              ]}
             >
               <Text style={styles.continueBtnText}>Save & Continue</Text>
             </Pressable>
@@ -410,6 +415,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
     elevation: 4,
+  },
+  continueBtnDark: {
+    backgroundColor: '#000000',
+    shadowColor: '#000000',
   },
   continueBtnText: {
     fontSize: 15,

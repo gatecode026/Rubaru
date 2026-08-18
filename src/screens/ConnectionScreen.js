@@ -17,7 +17,9 @@ import { useRouter, Stack } from 'expo-router';
 import NewUserCard from '../components/common/NewUserCard';
 import InterestChip from '../components/common/InterestChip';
 import BottomTabBar from '../components/common/BottomTabBar';
+import DiscoverFiltersModal, { DEFAULT_FILTERS } from '../components/common/DiscoverFiltersModal';
 import { useLanguage } from '../localization/LanguageContext';
+import { useTheme } from '../theme';
 
 const newUsersData = [
   {
@@ -75,7 +77,28 @@ export default function ConnectionScreen({ isNestedInPager }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
+  const { isDarkMode } = useTheme();
   const [selectedInterest, setSelectedInterest] = useState('Music');
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [appliedFilters, setAppliedFilters] = useState(DEFAULT_FILTERS);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 2800);
+  };
+
+  const isFilterActive =
+    appliedFilters.lookingFor !== 'Everyone' ||
+    appliedFilters.distance !== '25 km' ||
+    appliedFilters.minAge !== 18 ||
+    appliedFilters.maxAge !== 35 ||
+    appliedFilters.profileType !== 'all' ||
+    appliedFilters.onlineStatus !== 'any_status' ||
+    appliedFilters.sortBy !== 'recommended' ||
+    Boolean(appliedFilters.selectedCity);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -125,21 +148,42 @@ export default function ConnectionScreen({ isNestedInPager }) {
           />
         </View>
 
+        {/* Floating Filter Applied Toast */}
+        {toastMessage && (
+          <View style={styles.floatingToast}>
+            <Text style={styles.floatingToastText}>{toastMessage}</Text>
+          </View>
+        )}
+
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
           {/* "Discover" Header Row */}
           <View style={[styles.discoverHeaderRow, { paddingTop: Math.max(insets.top + 6, 16) }]}>
-            <View style={styles.discoverTitleContainer}>
-              <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                <Ionicons name="chevron-back" size={28} color="#000000" />
-              </TouchableOpacity>
-              <Text style={styles.discoverTitle}>{t('discover', 'Discover')}</Text>
-            </View>
+            <Text style={styles.discoverTitle}>{t('discover', 'Discover')}</Text>
             <View style={styles.headerButtonsRow}>
-              <TouchableOpacity style={styles.circleIconButton} activeOpacity={0.8} onPress={() => router.push('/search-friends')}>
+              <TouchableOpacity style={styles.circleIconButton} activeOpacity={0.8} onPress={() => router.push('/search-users')}>
                 <Ionicons name="search" size={20} color="#000000" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.circleIconButton} activeOpacity={0.8}>
-                <Ionicons name="options-outline" size={20} color="#000000" />
+              <TouchableOpacity
+                style={[
+                  styles.circleIconButton,
+                  isFilterActive && (isDarkMode ? styles.circleIconButtonActiveDark : styles.circleIconButtonActive),
+                ]}
+                activeOpacity={0.8}
+                onPress={() => setIsFilterModalVisible(true)}
+              >
+                <Ionicons
+                  name="options-outline"
+                  size={20}
+                  color={isFilterActive ? (isDarkMode ? '#000000' : '#FF2E63') : '#000000'}
+                />
+                {isFilterActive && (
+                  <View
+                    style={[
+                      styles.filterActiveDot,
+                      isDarkMode && { backgroundColor: '#000000' },
+                    ]}
+                  />
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -159,7 +203,7 @@ export default function ConnectionScreen({ isNestedInPager }) {
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>{t('interest', 'Interest')}</Text>
             <TouchableOpacity activeOpacity={0.7}>
-              <Text style={styles.viewAllText}>{t('viewAll', 'View all')}</Text>
+              <Text style={[styles.viewAllText, isDarkMode && { color: '#000000' }]}>{t('viewAll', 'View all')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -181,13 +225,19 @@ export default function ConnectionScreen({ isNestedInPager }) {
               <View style={{ flex: 1 }}>
                 <Text style={styles.sectionTitle}>{t('aroundMe', 'Around me')}</Text>
                 <Text style={styles.aroundMeSubtext}>
-                  {t('peopleWithInterest', 'People with')} <Text style={styles.interestHighlight}>"{getInterestLabel(selectedInterest)}"</Text> {t('interestAroundYou', 'interest around you')}
+                  {t('peopleWithInterest', 'People with')} <Text style={[styles.interestHighlight, isDarkMode && { color: '#000000' }]}>"{getInterestLabel(selectedInterest)}"</Text> {t('interestAroundYou', 'interest around you')}
                 </Text>
               </View>
-              <TouchableOpacity style={styles.mapLocationRow} activeOpacity={0.7}>
-                <Ionicons name="location" size={14} color="#E63956" style={styles.mapPinIcon} />
-                <Text style={styles.mapLocationText}>India</Text>
-                <Ionicons name="chevron-down" size={12} color="#E63956" style={styles.mapChevronIcon} />
+              <TouchableOpacity
+                style={[
+                  styles.mapLocationRow,
+                  isDarkMode && styles.mapLocationRowDark,
+                ]}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="location" size={14} color={isDarkMode ? '#000000' : '#E63956'} style={styles.mapPinIcon} />
+                <Text style={[styles.mapLocationText, isDarkMode && { color: '#000000' }]}>India</Text>
+                <Ionicons name="chevron-down" size={12} color={isDarkMode ? '#000000' : '#E63956'} style={styles.mapChevronIcon} />
               </TouchableOpacity>
             </View>
 
@@ -217,9 +267,9 @@ export default function ConnectionScreen({ isNestedInPager }) {
                 </View>
 
                 <View style={[styles.poiBadge, { bottom: 15, left: 20 }]}>
-                  <Ionicons name="restaurant" size={12} color="#D83A56" style={styles.poiIcon} />
+                  <Ionicons name="restaurant" size={12} color={isDarkMode ? '#000000' : '#D83A56'} style={styles.poiIcon} />
                   <View>
-                    <Text style={[styles.poiTitle, { color: '#D83A56' }]}>CurryCultTreffs</Text>
+                    <Text style={[styles.poiTitle, { color: isDarkMode ? '#000000' : '#D83A56' }]}>CurryCultTreffs</Text>
                     <Text style={styles.poiSub}>BB-Express-B</Text>
                   </View>
                 </View>
@@ -245,7 +295,7 @@ export default function ConnectionScreen({ isNestedInPager }) {
                   <View style={styles.tooltipDot} />
 
                   {/* Main Avatar Circle */}
-                  <View style={styles.mainRakhiAvatarRing}>
+                  <View style={[styles.mainRakhiAvatarRing, isDarkMode && { borderColor: '#000000' }]}>
                     <Image source={{ uri: 'https://i.pravatar.cc/150?img=32' }} style={styles.mainRakhiAvatarImg} />
                   </View>
                 </View>
@@ -254,6 +304,18 @@ export default function ConnectionScreen({ isNestedInPager }) {
           </View>
         </ScrollView>
       </LinearGradient>
+
+      {/* Discover Filters Modal */}
+      <DiscoverFiltersModal
+        visible={isFilterModalVisible}
+        onClose={() => setIsFilterModalVisible(false)}
+        initialFilters={appliedFilters}
+        onApplyFilters={(newFilters) => {
+          setAppliedFilters(newFilters);
+          showToast('✨ Discover filters updated!');
+        }}
+      />
+
       {!isNestedInPager && (
         <BottomTabBar
           activeTab="Connection"
@@ -313,6 +375,11 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
+  mapLocationRowDark: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#000000',
+    shadowColor: '#000000',
+  },
   mapPinIcon: {
     marginRight: 4,
   },
@@ -358,6 +425,44 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
+    position: 'relative',
+  },
+  circleIconButtonActive: {
+    backgroundColor: '#FFF0F3',
+    borderColor: '#FF2E63',
+  },
+  circleIconButtonActiveDark: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#000000',
+  },
+  filterActiveDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF2E63',
+  },
+  floatingToast: {
+    position: 'absolute',
+    top: 50,
+    alignSelf: 'center',
+    zIndex: 99,
+    backgroundColor: 'rgba(17, 24, 39, 0.9)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  floatingToastText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   searchBarContainer: {
     flex: 1,

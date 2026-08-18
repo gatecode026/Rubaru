@@ -69,7 +69,7 @@ export default function MyPointsScreen() {
 
           <Text style={styles.headerTitle}>My Points</Text>
 
-          <TouchableOpacity activeOpacity={0.8} style={styles.historyPill} onPress={() => console.log('Open history')}>
+          <TouchableOpacity activeOpacity={0.8} style={styles.historyPill} onPress={() => router.push('/transactions?from=my-points')}>
             <Ionicons name="time-outline" size={16} color="#000" />
             <Text style={styles.historyText}>History</Text>
           </TouchableOpacity>

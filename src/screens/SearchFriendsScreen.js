@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,6 @@ import {
   Pressable,
   ImageBackground,
   Dimensions,
-  TextInput,
-  FlatList,
-  Image,
-  TouchableOpacity,
-  Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,85 +13,17 @@ import { Ionicons } from '@expo/vector-icons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const ALL_USERS = [
-  { id: '1', name: 'Rani', username: 'rani_jaipur', avatar: 'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?auto=compress&cs=tinysrgb&w=800', relation: 'New user' },
-  { id: '2', name: 'Vandana', username: 'vandana_mumbai', avatar: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=800', relation: '4.8 km away' },
-  { id: '3', name: 'Keshav', username: 'keshav_delhi', avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=800', relation: '2.2 km away' },
-  { id: '4', name: 'Meera', username: 'meera_pune', avatar: 'https://images.pexels.com/photos/1462637/pexels-photo-1462637.jpeg?auto=compress&cs=tinysrgb&w=800', relation: '1.2 km away' },
-  { id: '5', name: 'Sapna Singh', username: 'Sapna_Singh', avatar: 'https://i.pravatar.cc/150?img=32', relation: 'Mutual friend' },
-  { id: '6', name: 'Deepika Sharma', username: 'Deepika_Sharma', avatar: 'https://i.pravatar.cc/150?img=47', relation: 'Suggested for you' },
-  { id: '7', name: 'Mahi Rajput', username: 'Mahi_Rajput', avatar: 'https://i.pravatar.cc/150?img=38', relation: 'Suggested for you' },
-  { id: '8', name: 'Sonali Thakur', username: 'Sonali_Thakur', avatar: 'https://i.pravatar.cc/150?img=49', relation: 'Mutual friend' },
-  { id: '9', name: 'Pooja Singh', username: 'Pooja_Singh', avatar: 'https://i.pravatar.cc/150?img=32', relation: 'Active 2h ago' },
-  { id: '10', name: 'Samridhi Vijayvargi', username: 'samridhi_v', avatar: 'https://i.pravatar.cc/150?img=32', relation: 'Active 10m ago' },
-  { id: '11', name: 'Ananya Roy', username: 'Ananya_Roy', avatar: 'https://i.pravatar.cc/150?img=49', relation: 'Suggested for you' },
-  { id: '12', name: 'Kavya Sharma', username: 'Kavya_Sharma', avatar: 'https://i.pravatar.cc/150?img=44', relation: 'Suggested for you' },
-];
-
 export default function SearchFriendsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [connectedUsers, setConnectedUsers] = useState({});
-  const searchInputRef = useRef(null);
 
-  const handleClearSearch = () => {
-    setSearchQuery('');
-    searchInputRef.current?.focus();
+  const handleAccessContacts = () => {
+    router.push('/enable-notifications');
   };
 
-  const toggleConnect = (userId) => {
-    setConnectedUsers((prev) => ({
-      ...prev,
-      [userId]: !prev[userId],
-    }));
+  const handleSkip = () => {
+    router.push('/enable-notifications');
   };
-
-  const filteredUsers = ALL_USERS.filter(
-    (user) =>
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const isQueryEmpty = searchQuery.trim().length === 0;
-  const listData = isQueryEmpty
-    ? ALL_USERS.slice(4) // Show Sapna, Deepika, Mahi, Sonali, etc. when search query is empty
-    : filteredUsers;
-
-  const renderSearchItem = ({ item }) => {
-    const isConnected = connectedUsers[item.id];
-    return (
-      <View style={styles.userRow}>
-        <View style={styles.userLeft}>
-          <Image source={{ uri: item.avatar }} style={styles.userAvatar} />
-          <View>
-            <Text style={styles.userNameText}>{item.name}</Text>
-            <Text style={styles.userUsernameText}>@{item.username}</Text>
-            <Text style={styles.userRelationText}>{item.relation}</Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          style={isConnected ? styles.connectedButton : styles.connectButton}
-          onPress={() => toggleConnect(item.id)}
-        >
-          <Text style={isConnected ? styles.connectedText : styles.connectText}>
-            {isConnected ? 'Connected' : 'Connect'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  const renderEmptyResults = () => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="search-outline" size={48} color="#9CA3AF" style={{ marginBottom: 12 }} />
-      <Text style={styles.emptyTitleText}>No users found</Text>
-      <Text style={styles.emptySubtitleText}>
-        We couldn't find any user matching "{searchQuery}"
-      </Text>
-    </View>
-  );
 
   return (
     <View style={styles.rootContainer}>
@@ -106,58 +33,83 @@ export default function SearchFriendsScreen() {
         style={styles.backgroundImage}
         resizeMode="cover"
       >
-        <View style={[styles.mainWrapper, { paddingTop: Math.max(insets.top + 16, 44), paddingBottom: Math.max(insets.bottom + 16, 32) }]}>
-          
-          {/* Instagram-like Header Search Row */}
+        <View
+          style={[
+            styles.mainWrapper,
+            {
+              paddingTop: Math.max(insets.top + 16, 44),
+              paddingBottom: Math.max(insets.bottom + 16, 32),
+            },
+          ]}
+        >
+          {/* Header Row with Back Button and Skip Link */}
           <View style={styles.topHeaderRow}>
             <Pressable
-              onPress={() => {
-                Keyboard.dismiss();
-                router.back();
-              }}
-              style={({ pressed }) => [styles.backButton, pressed && styles.buttonPressed]}
+              onPress={() => router.back()}
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed && styles.buttonPressed,
+              ]}
               hitSlop={12}
               accessibilityLabel="Go back"
             >
               <Ionicons name="chevron-back" size={24} color="#111827" />
             </Pressable>
 
-            <View style={styles.searchBarContainer}>
-              <Ionicons name="search" size={18} color="#8E8E93" />
-              <TextInput
-                ref={searchInputRef}
-                placeholder="Search"
-                placeholderTextColor="#8E8E93"
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoFocus={true}
-                returnKeyType="search"
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={handleClearSearch} hitSlop={8}>
-                  <Ionicons name="close-circle" size={18} color="#8E8E93" />
-                </TouchableOpacity>
-              )}
+            <Pressable onPress={handleSkip} hitSlop={12}>
+              <Text style={styles.skipText}>Skip</Text>
+            </Pressable>
+          </View>
+
+          {/* Upper Spacer */}
+          <View style={{ flex: 0.5 }} />
+
+          {/* Hero Glassmorphic Contacts Illustration */}
+          <View style={styles.graphicContainer}>
+            <View style={styles.graphicWrapper}>
+              {/* Back Red / Coral Sphere */}
+              <View style={styles.backCircle} />
+
+              {/* Front Frosted Glassmorphic Sphere */}
+              <View style={styles.frontGlassCircle}>
+                <View style={styles.innerGlassHighlight} />
+              </View>
+
+              {/* Lower Floating Disk/Oval for 3D Depth */}
+              <View style={styles.bottomDisk} />
             </View>
           </View>
 
-          {/* Search results or Suggested profiles list */}
-          <FlatList
-            data={listData}
-            keyExtractor={(item) => item.id}
-            renderItem={renderSearchItem}
-            ListHeaderComponent={() => (
-              <Text style={styles.sectionHeaderTitle}>
-                {isQueryEmpty ? 'Suggested for you' : 'Search results'}
-              </Text>
-            )}
-            ListEmptyComponent={renderEmptyResults}
-            contentContainerStyle={styles.listContentContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          />
+          {/* Upper Spacer */}
+          <View style={{ flex: 0.5 }} />
 
+          {/* Center Text Section */}
+          <View style={styles.textContainer}>
+            <Text style={styles.titleText}>Search friend's</Text>
+            <Text style={styles.subtitleText}>
+              You can find friends from your contact lists{'\n'}to connected
+            </Text>
+          </View>
+
+          {/* Flexible Spacer */}
+          <View style={{ flex: 1 }} />
+
+          {/* Bottom Primary Action Button */}
+          <View style={styles.bottomButtonWrapper}>
+            <Pressable
+              onPress={handleAccessContacts}
+              style={({ pressed }) => [
+                styles.actionButton,
+                pressed && styles.buttonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Access to a contact list"
+            >
+              <Text style={styles.actionButtonText}>
+                Access to a contact list
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </ImageBackground>
     </View>
@@ -183,6 +135,7 @@ const styles = StyleSheet.create({
     height: 44,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
   backButton: {
@@ -199,129 +152,122 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 1,
     borderColor: 'rgba(229, 231, 235, 0.8)',
-    marginRight: 12,
   },
-  searchBarContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    height: 44,
-    paddingHorizontal: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(229, 231, 235, 0.8)',
-  },
-  searchInput: {
-    flex: 1,
+  skipText: {
     fontSize: 16,
-    color: '#111827',
-    paddingHorizontal: 8,
-    paddingVertical: 0,
-    fontWeight: '500',
+    fontWeight: '700',
+    color: '#FF2E63',
   },
-  listContentContainer: {
-    paddingVertical: 8,
-  },
-  sectionHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#111827',
-    marginTop: 8,
-    marginBottom: 16,
-    letterSpacing: -0.2,
-  },
-  userRow: {
-    flexDirection: 'row',
+  graphicContainer: {
+    alignSelf: 'center',
+    marginVertical: 10,
+    width: 220,
+    height: 220,
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(229, 231, 235, 0.8)',
+  },
+  graphicWrapper: {
+    width: 200,
+    height: 200,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backCircle: {
+    position: 'absolute',
+    top: 15,
+    right: 25,
+    width: 105,
+    height: 105,
+    borderRadius: 52.5,
+    backgroundColor: '#F44649',
+    shadowColor: '#F44649',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  frontGlassCircle: {
+    position: 'absolute',
+    top: 30,
+    left: 20,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(255, 230, 235, 0.82)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.95)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  userLeft: {
-    flexDirection: 'row',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    elevation: 4,
+    justifyContent: 'center',
     alignItems: 'center',
-    flex: 1,
-    marginRight: 12,
   },
-  userAvatar: {
-    width: 48,
+  innerGlassHighlight: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  bottomDisk: {
+    position: 'absolute',
+    bottom: 25,
+    width: 135,
     height: 48,
     borderRadius: 24,
-    marginRight: 12,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: 'rgba(244, 70, 73, 0.65)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    transform: [{ scaleX: 1.1 }],
+    shadowColor: '#F44649',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  userNameText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  userUsernameText: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 1,
-  },
-  userRelationText: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  connectButton: {
-    backgroundColor: '#111827',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  connectedButton: {
-    backgroundColor: 'rgba(244, 70, 73, 0.1)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(244, 70, 73, 0.25)',
-  },
-  connectText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  connectedText: {
-    color: '#F44649',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  emptyContainer: {
+  textContainer: {
+    width: Math.min(SCREEN_WIDTH - 48, 340),
+    alignSelf: 'center',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
   },
-  emptyTitleText: {
-    fontSize: 18,
-    fontWeight: '700',
+  titleText: {
+    fontSize: 32,
+    fontWeight: '800',
     color: '#111827',
-    marginBottom: 4,
+    marginBottom: 12,
+    textAlign: 'center',
+    letterSpacing: -0.5,
   },
-  emptySubtitleText: {
-    fontSize: 14,
+  subtitleText: {
+    fontSize: 15,
+    fontWeight: '400',
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 22,
-    paddingHorizontal: 32,
+  },
+  bottomButtonWrapper: {
+    width: Math.min(SCREEN_WIDTH - 48, 340),
+    alignSelf: 'center',
+  },
+  actionButton: {
+    width: '100%',
+    height: 56,
+    backgroundColor: '#FF2E63',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
   buttonPressed: {
     opacity: 0.88,

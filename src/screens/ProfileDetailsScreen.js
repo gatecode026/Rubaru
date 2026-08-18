@@ -38,7 +38,7 @@ export default function ProfileDetailsScreen() {
         resizeMode="cover"
       >
         <View style={[styles.mainWrapper, { paddingTop: Math.max(insets.top + 76, 108), paddingBottom: Math.max(insets.bottom + 16, 32) }]}>
-          
+
           {/* Centered Main Form Container */}
           <View style={styles.formContainer}>
             {/* Page Header Title */}

@@ -88,7 +88,9 @@ export default function BottomTabBar({ activeTab = 'index', onTabPress }) {
       <View style={styles.content}>
         {TAB_ITEMS.map((item) => {
           const isSelected = getIsActive(item.key, activeTab);
-          const iconColor = isSelected ? '#FF2E63' : (isDarkMode ? '#9CA3AF' : '#000000');
+          const activeColor = isDarkMode ? '#000000' : '#FF2E63';
+          const inactiveColor = isDarkMode ? '#8E8E93' : '#000000';
+          const iconColor = isSelected ? activeColor : inactiveColor;
           const iconName = isSelected ? item.activeIcon : item.inactiveIcon;
           const displayLabel = getTabLabel(item.key, item.label);
 
@@ -108,20 +110,9 @@ export default function BottomTabBar({ activeTab = 'index', onTabPress }) {
                 {item.key === 'reels' ? (
                   <ReelIcon color={iconColor} />
                 ) : (
-                  <Ionicons name={iconName} size={24} color={iconColor} />
+                  <Ionicons name={iconName} size={26} color={iconColor} />
                 )}
               </View>
-              <Text
-                style={[
-                  styles.tabLabel,
-                  isSelected
-                    ? [styles.tabLabelActive, { color: '#FF2E63' }]
-                    : [styles.tabLabelInactive, { color: isDarkMode ? '#9CA3AF' : '#000000' }],
-                ]}
-                numberOfLines={1}
-              >
-                {displayLabel}
-              </Text>
             </Pressable>
           );
         })}
@@ -135,7 +126,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#EFEFF4',
-    paddingTop: 8,
+    paddingTop: 10,
     width: '100%',
     position: 'absolute',
     bottom: 0,
@@ -156,10 +147,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 2,
+    paddingVertical: 6,
   },
   iconContainer: {
-    height: 26,
+    height: 30,
     justifyContent: 'center',
     alignItems: 'center',
   },

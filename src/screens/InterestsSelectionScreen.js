@@ -47,7 +47,7 @@ export default function InterestsSelectionScreen() {
   };
 
   const handleSkip = () => {
-    router.replace('/(tabs)');
+    router.push('/search-friends');
   };
 
   return (
