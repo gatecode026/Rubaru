@@ -3,11 +3,11 @@ import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
 
-export default function StoryAvatar({ name, imageUrl, isFirst }) {
+export default function StoryAvatar({ name, imageUrl, isFirst, onPress }) {
   const { colors, isDarkMode } = useTheme();
 
   return (
-    <TouchableOpacity style={styles.container} activeOpacity={0.8}>
+    <TouchableOpacity style={styles.container} activeOpacity={0.8} onPress={onPress}>
       <View style={styles.avatarWrapper}>
         <View style={[styles.ringBorder, { borderColor: colors.storyRing || (isDarkMode ? '#FF8A65' : '#FF2E63') }]}>
           <Image source={{ uri: imageUrl }} style={styles.avatarImage} />

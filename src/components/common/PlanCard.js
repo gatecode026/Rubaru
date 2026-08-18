@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../theme';
 
 export default function PlanCard({
   points,
@@ -13,11 +14,13 @@ export default function PlanCard({
   onPress,
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { colors, isDarkMode } = useTheme();
+  const accentColor = isDarkMode ? '#000000' : '#F04452';
 
   const getFeatureIcon = (iconName) => {
     switch (iconName) {
       case 'heart':
-        return { name: 'heart', color: '#F04452', bgColor: '#FFE1E8' };
+        return { name: 'heart', color: isDarkMode ? '#000000' : '#F04452', bgColor: isDarkMode ? 'rgba(0,0,0,0.06)' : '#FFE1E8' };
       case 'chatbubble-ellipses':
         return { name: 'chatbubble-ellipses', color: '#8B5CF6', bgColor: '#E5D5F5' };
       case 'eye':
@@ -32,13 +35,13 @@ export default function PlanCard({
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      style={styles.cardContainer}
+      style={[styles.cardContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}
       onPress={() => setExpanded(!expanded)}
     >
       {/* Top Row: Icon + Points + Pricing */}
       <View style={styles.topRow}>
         <View style={styles.leftSection}>
-          <View style={styles.heartBadge}>
+          <View style={[styles.heartBadge, { backgroundColor: isDarkMode ? 'rgba(0, 0, 0, 0.06)' : '#FFE1E8' }]}>
             <Image
               source={require('@assets/images/glyphs-poly_heart.png')}
               style={styles.heartIcon}
@@ -46,8 +49,8 @@ export default function PlanCard({
             />
           </View>
           <View style={styles.pointsInfo}>
-            <Text style={styles.pointsNumber}>{points}</Text>
-            <Text style={styles.pointsSubtext}>Rubaru Points</Text>
+            <Text style={[styles.pointsNumber, { color: colors.textPrimary }]}>{points}</Text>
+            <Text style={[styles.pointsSubtext, { color: colors.textMuted }]}>Rubaru Points</Text>
           </View>
         </View>
 
@@ -58,20 +61,20 @@ export default function PlanCard({
             </View>
           )}
           <View style={styles.pricingRow}>
-            <Text style={styles.priceText}>{price}</Text>
-            <Text style={styles.originalPriceText}>{originalPrice}</Text>
-            <View style={styles.discountBadge}>
-              <Text style={styles.discountText}>{discount}</Text>
+            <Text style={[styles.priceText, { color: accentColor }]}>{price}</Text>
+            <Text style={[styles.originalPriceText, { color: colors.textMuted }]}>{originalPrice}</Text>
+            <View style={[styles.discountBadge, { backgroundColor: isDarkMode ? 'rgba(0, 0, 0, 0.06)' : '#FFE1E8' }]}>
+              <Text style={[styles.discountText, { color: accentColor }]}>{discount}</Text>
             </View>
           </View>
         </View>
       </View>
 
       {/* Description Text */}
-      <Text style={styles.descriptionText}>{description}</Text>
+      <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>{description}</Text>
 
       {/* Divider */}
-      <View style={styles.divider} />
+      <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
       {/* Collapsible Features Section */}
       {expanded && (
@@ -81,18 +84,18 @@ export default function PlanCard({
               const iconConfig = getFeatureIcon(feat.icon);
               return (
                 <View key={index} style={styles.featureItem}>
-                  <View style={[styles.featureCircle, { backgroundColor: iconConfig.bgColor }]}>
-                    <Ionicons name={iconConfig.name} size={15} color={iconConfig.color} />
+                  <View style={[styles.featureCircle, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : iconConfig.bgColor }]}>
+                    <Ionicons name={iconConfig.name} size={15} color={isDarkMode ? '#FFFFFF' : iconConfig.color} />
                   </View>
                   <View>
-                    <Text style={styles.featureLabel}>{feat.label}</Text>
-                    <Text style={styles.featureValue}>{feat.value}</Text>
+                    <Text style={[styles.featureLabel, { color: colors.textPrimary }]}>{feat.label}</Text>
+                    <Text style={[styles.featureValue, { color: colors.textMuted }]}>{feat.value}</Text>
                   </View>
                 </View>
               );
             })}
           </View>
-          <View style={styles.innerDivider} />
+          <View style={[styles.innerDivider, { backgroundColor: colors.divider }]} />
         </View>
       )}
 
@@ -103,17 +106,17 @@ export default function PlanCard({
           style={styles.detailsLink}
           onPress={() => setExpanded(!expanded)}
         >
-          <Text style={styles.detailsText}>{expanded ? 'Hide Details' : 'View Details'}</Text>
+          <Text style={[styles.detailsText, { color: accentColor }]}>{expanded ? 'Hide Details' : 'View Details'}</Text>
           <Ionicons
             name={expanded ? 'chevron-up' : 'chevron-forward'}
             size={14}
-            color="#F04452"
+            color={accentColor}
           />
         </TouchableOpacity>
 
         <TouchableOpacity
           activeOpacity={0.8}
-          style={styles.buyNowButton}
+          style={[styles.buyNowButton, { backgroundColor: accentColor }]}
           onPress={(e) => {
             // Prevent triggering the card's expanded state toggle
             e.stopPropagation();

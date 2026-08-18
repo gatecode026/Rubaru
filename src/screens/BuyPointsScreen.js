@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTheme } from '../theme';
 
 import { usePointsStore } from '../store/pointsStore';
 import PlanCard from '../components/common/PlanCard';
@@ -85,6 +86,7 @@ const PLANS_DATA = [
 
 export default function BuyPointsScreen() {
   const router = useRouter();
+  const { isDarkMode } = useTheme();
   const balance = usePointsStore((state) => state.balance);
   const addPoints = usePointsStore((state) => state.addPoints);
 
@@ -286,7 +288,7 @@ export default function BuyPointsScreen() {
 
                   <TouchableOpacity
                     activeOpacity={0.8}
-                    style={styles.modalBuyButton}
+                    style={[styles.modalBuyButton, { backgroundColor: isDarkMode ? '#000000' : '#F04452' }]}
                     onPress={() => {
                       if (selectedPlan) {
                         const pointsToAdd = parseInt(selectedPlan.points, 10);
@@ -433,7 +435,6 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   scrollBody: {
-
     paddingHorizontal: 16,
     paddingTop:5,
     paddingBottom: 80, // safe offset above bottom tab bar
