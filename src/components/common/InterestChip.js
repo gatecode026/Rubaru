@@ -1,12 +1,17 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { useTheme } from '../../theme';
 
 export default function InterestChip({ label, emoji, isSelected, onPress }) {
+  const { isDarkMode } = useTheme();
+
   return (
     <TouchableOpacity
       style={[
         styles.chipContainer,
-        isSelected ? styles.selectedChip : styles.unselectedChip,
+        isSelected
+          ? (isDarkMode ? styles.selectedChipDark : styles.selectedChip)
+          : styles.unselectedChip,
       ]}
       activeOpacity={0.8}
       onPress={onPress}
@@ -37,7 +42,7 @@ const styles = StyleSheet.create({
   unselectedChip: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E6C6D6', // Lavender-pink thin border matching screenshot
+    borderColor: '#E6C6D6', // Lavender-pink thin border
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
@@ -45,10 +50,20 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   selectedChip: {
-    backgroundColor: '#FF2A55', // Vibrant hot pink fill matching screenshot
+    backgroundColor: '#FF2A55', // Vibrant hot pink fill
     borderWidth: 1,
     borderColor: '#FF2A55',
     shadowColor: '#FF2A55',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  selectedChipDark: {
+    backgroundColor: '#000000', // Solid black button in dark mode
+    borderWidth: 1,
+    borderColor: '#000000',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.35,
     shadowRadius: 4,

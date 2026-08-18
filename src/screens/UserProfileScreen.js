@@ -33,13 +33,18 @@ export default function UserProfileScreen() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  // Swipe-to-dismiss PanResponder for Settings Bottom Sheet Handle
+  const scrollOffsetRef = useRef(0);
+
+  // Swipe-to-dismiss & Tap-to-dismiss for Settings Bottom Sheet Handle
   const handlePanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 5,
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 40 || gestureState.vy > 0.4) {
+        if (gestureState.dy > 15 || gestureState.vy > 0.15) {
+          setShowSettingsModal(false);
+        } else if (Math.abs(gestureState.dy) < 15 && Math.abs(gestureState.dx) < 15) {
+          // Tap on handle also closes
           setShowSettingsModal(false);
         }
       },
@@ -347,12 +352,20 @@ export default function UserProfileScreen() {
             intensity={25}
             tint="dark"
             style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
           />
 
-          {/* Touch Backdrop to Close */}
+          {/* Full Touch Backdrop to Close */}
           <Pressable
             style={StyleSheet.absoluteFillObject}
             onPress={() => setShowSettingsModal(false)}
+          />
+
+          {/* Dedicated Top Area Above Sheet - Clicking anywhere on the top profile closes sidebar */}
+          <Pressable
+            style={{ flex: 1, width: '100%' }}
+            onPress={() => setShowSettingsModal(false)}
+            accessibilityLabel="Close sidebar"
           />
 
           {/* Sidebar Sheet Container */}
@@ -375,6 +388,14 @@ export default function UserProfileScreen() {
               bounces={true}
               overScrollMode="never"
               keyboardShouldPersistTaps="handled"
+              onScroll={(e) => {
+                scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+              }}
+              onScrollEndDrag={(e) => {
+                if (e.nativeEvent.contentOffset.y < -25 || (scrollOffsetRef.current <= 0 && e.nativeEvent.velocity && e.nativeEvent.velocity.y < -0.3)) {
+                  setShowSettingsModal(false);
+                }
+              }}
               style={{ maxHeight: Dimensions.get('window').height * 0.74 }}
               contentContainerStyle={{ paddingBottom: 24 }}
             >
@@ -400,11 +421,23 @@ export default function UserProfileScreen() {
                 <Ionicons name="globe-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                 <Text style={styles.sectionHeaderTitle}>{t('quickLinks', 'Quick Links')}</Text>
               </View>
-              <Pressable style={styles.settingItemRow}>
+              <Pressable
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  router.push('/my-points');
+                }}
+                style={styles.settingItemRow}
+              >
                 <View style={styles.bulletDot} />
                 <Text style={styles.settingItemText}>{t('wallet', 'Wallet')}</Text>
               </Pressable>
-              <Pressable style={styles.settingItemRow}>
+              <Pressable
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  router.push('/transactions?from=sidebar');
+                }}
+                style={styles.settingItemRow}
+              >
                 <View style={styles.bulletDot} />
                 <Text style={styles.settingItemText}>{t('transactions', 'Transactions')}</Text>
               </Pressable>
@@ -914,8 +947,8 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    marginBottom: 10,
+    paddingVertical: 12,
+    marginBottom: 6,
   },
   sidebarGrabHandle: {
     width: 44,

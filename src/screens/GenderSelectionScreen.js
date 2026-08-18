@@ -102,7 +102,7 @@ export default function GenderSelectionScreen() {
                 />
               </Pressable>
 
-              {/* Option 3: Choose another */}
+              {/* Option 3: Others */}
               <Pressable
                 onPress={() => setSelectedGender('other')}
                 style={({ pressed }) => [
@@ -111,15 +111,15 @@ export default function GenderSelectionScreen() {
                   pressed && styles.buttonPressed,
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel="Choose another"
+                accessibilityLabel="Others"
               >
                 <Text style={[styles.optionText, selectedGender === 'other' && styles.optionTextSelected]}>
-                  Choose another
+                  Others
                 </Text>
                 <Ionicons
-                  name="chevron-forward"
+                  name="checkmark"
                   size={20}
-                  color={selectedGender === 'other' ? '#FFFFFF' : '#9CA3AF'}
+                  color={selectedGender === 'other' ? '#FFFFFF' : 'rgba(209, 213, 219, 0.8)'}
                 />
               </Pressable>
 

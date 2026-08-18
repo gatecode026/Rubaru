@@ -40,7 +40,7 @@ export default function CallInfoScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* Header */}
-      <SegmentedNotifCallsHeader activeTab="calls" />
+      <SegmentedNotifCallsHeader activeTab="calls" showBack={true} />
 
       <FlatList
         data={MOCK_CALL_HISTORY_DETAILS.history}

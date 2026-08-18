@@ -194,14 +194,6 @@ export default function GroupsScreen({ isNestedInPager }) {
 
         {/* Top Header Row */}
         <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top + 6, 16) }]}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={styles.circularHeaderButton}
-            onPress={handleBack}
-          >
-            <Ionicons name="chevron-back" size={24} color="#000000" />
-          </TouchableOpacity>
-
           <Text style={styles.headerTitleText}>{t('groups', 'Groups')}</Text>
 
           <TouchableOpacity activeOpacity={0.7} style={styles.circularHeaderButton}>

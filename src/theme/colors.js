@@ -131,8 +131,8 @@ export const darkColors = {
   // Bottom Navigation (Original)
   tabBarBg: '#FFFFFF',
   tabBarBorder: '#EFEFF4',
-  tabActive: '#F04452',
-  tabInactive: '#000000',
+  tabActive: '#000000',
+  tabInactive: '#8E8E93',
 
   statusOnline: '#34C759',
   statusAway: '#FF9500',

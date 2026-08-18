@@ -185,9 +185,9 @@ This section details all 39 screen implementations found inside the **[src/scree
     * **Description**: Form to select interest tags.
     * **Key Components**: Grid of 14 interests with custom category icons, Skip link header.
     * **Special Behavior**: Toggles items state values inside local list arrays.
-    * **Navigation Logic**:
-       * Pushed from gender selection.
-       * Navigates to `/search-friends` or replaces stack with `/(tabs)`.
+     * **Navigation Logic**:
+        * Pushed from gender selection.
+        * Navigates to `/search-friends` or `/enable-notifications`.
 
 11. **SearchFriendsScreen**
     * **File Path**: [SearchFriendsScreen.js](file:///c:/Users/Shubh/Desktop/Rubaru/src/screens/SearchFriendsScreen.js)
@@ -497,6 +497,7 @@ The application contains **34 custom component definitions** located inside the 
 | **CreatePollModal** | `src/components/common/CreatePollModal.js` | `{ visible, onClose, onCreatePoll }` | [chat/[id].js](file:///c:/Users/Shubh/Desktop/Rubaru/app/chat/[id].js) |
 | **EmojiPickerSheet** | `src/components/common/EmojiPickerSheet.js` | `{ visible, onClose, onSelectEmoji }` | [chat/[id].js](file:///c:/Users/Shubh/Desktop/Rubaru/app/chat/[id].js) |
 | **EmptyCallLogsView** | `src/components/common/EmptyCallLogsView.js` | *None* | [CallLogsScreen.js](file:///c:/Users/Shubh/Desktop/Rubaru/src/screens/CallLogsScreen.js) |
+| **DiscoverFiltersModal** | `src/components/common/DiscoverFiltersModal.js` | `{ visible, onClose, initialFilters, onApplyFilters }` | [ConnectionScreen.js](file:///c:/Users/Shubh/Desktop/Rubaru/src/screens/ConnectionScreen.js) |
 | **EmptyStateIllustration** | `src/components/common/EmptyStateIllustration.js` | *None* | [ChatsScreen.js](file:///c:/Users/Shubh/Desktop/Rubaru/src/screens/ChatsScreen.js) |
 | **FeedCard** | `src/components/common/FeedCard.js` | `{ item }` | [HomeScreen.js](file:///c:/Users/Shubh/Desktop/Rubaru/src/screens/HomeScreen.js) |
 | **GroupCard** | `src/components/common/GroupCard.js` | `{ item }` | [GroupsScreen.js](file:///c:/Users/Shubh/Desktop/Rubaru/src/screens/GroupsScreen.js) |

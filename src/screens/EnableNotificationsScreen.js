@@ -10,12 +10,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function EnableNotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isDarkMode } = useTheme();
 
   const handleEnableNotifications = () => {
     router.replace('/(tabs)');
@@ -57,8 +59,8 @@ export default function EnableNotificationsScreen() {
           {/* Hero Glassmorphic Chat Bubble Graphic */}
           <View style={styles.graphicContainer}>
             <View style={styles.chatBubblesWrapper}>
-              {/* Back Red Chat Bubble */}
-              <View style={styles.backChatBubble} />
+              {/* Back Chat Bubble */}
+              <View style={[styles.backChatBubble, isDarkMode && { backgroundColor: '#000000' }]} />
               
               {/* Front Glassmorphic Chat Bubble */}
               <View style={styles.frontChatBubble}>
@@ -86,7 +88,11 @@ export default function EnableNotificationsScreen() {
           <View style={styles.bottomButtonWrapper}>
             <Pressable
               onPress={handleEnableNotifications}
-              style={({ pressed }) => [styles.notifyButton, pressed && styles.buttonPressed]}
+              style={({ pressed }) => [
+                styles.notifyButton,
+                isDarkMode && { backgroundColor: '#000000', shadowColor: '#000000' },
+                pressed && styles.buttonPressed,
+              ]}
               accessibilityRole="button"
               accessibilityLabel="I want to be notified"
             >

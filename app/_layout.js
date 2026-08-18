@@ -49,6 +49,7 @@ export default function RootLayout() {
             <Stack.Screen name="gender-selection" />
             <Stack.Screen name="interests-selection" />
             <Stack.Screen name="search-friends" />
+            <Stack.Screen name="search-users" />
             <Stack.Screen name="enable-notifications" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="user-profile" />

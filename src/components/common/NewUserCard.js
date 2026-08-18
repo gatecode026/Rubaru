@@ -1,8 +1,10 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme } from '../../theme';
 
 export default function NewUserCard({ item }) {
+  const { isDarkMode } = useTheme();
   const { name, age, city, distance, imageUri, isNew = true, isOnline = false } = item;
 
   return (
@@ -12,7 +14,7 @@ export default function NewUserCard({ item }) {
 
       {/* "NEW" Badge */}
       {isNew && (
-        <View style={styles.newBadge}>
+        <View style={[styles.newBadge, isDarkMode && styles.newBadgeDark]}>
           <Text style={styles.newBadgeText}>NEW</Text>
         </View>
       )}
@@ -70,6 +72,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 3,
+  },
+  newBadgeDark: {
+    backgroundColor: '#000000', // Black badge in dark mode
   },
   newBadgeText: {
     color: '#FFFFFF',

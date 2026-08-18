@@ -12,12 +12,15 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function NotificationSettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isDarkMode } = useTheme();
+  const switchTrackColor = { false: '#E5E7EB', true: isDarkMode ? '#000000' : '#F44649' };
 
   // Section Expansion States (Default closed when opening page)
   const [isPushExpanded, setIsPushExpanded] = useState(false);
@@ -35,109 +38,51 @@ export default function NotificationSettingsScreen() {
   const [sleepMode, setSleepMode] = useState(false);
   const [messagesOnly, setMessagesOnly] = useState(false);
 
-  // 2. Posts, Stories Sub-Option Switch States
-  const [likesOff, setLikesOff] = useState(false);
-  const [likesProfiles, setLikesProfiles] = useState(false);
-  const [likesEveryone, setLikesEveryone] = useState(true);
+  // 2. Posts, Stories States
+  const [likesOption, setLikesOption] = useState('everyone'); // 'off' | 'profiles' | 'everyone'
+  const [milestones, setMilestones] = useState(true);
+  const [photosOption, setPhotosOption] = useState('everyone'); // 'off' | 'profiles' | 'everyone'
+  const [suggestedForYou, setSuggestedForYou] = useState(true);
 
-  const [milestonesOff, setMilestonesOff] = useState(false);
-  const [milestonesOn, setMilestonesOn] = useState(true);
+  // 3. Following and Followers States
+  const [followersReq, setFollowersReq] = useState(true);
+  const [acceptedReq, setAcceptedReq] = useState(true);
+  const [accountSugg, setAccountSugg] = useState(true);
+  const [mentionsOption, setMentionsOption] = useState('everyone'); // 'off' | 'profiles' | 'everyone'
 
-  const [photosOff, setPhotosOff] = useState(false);
-  const [photosProfiles, setPhotosProfiles] = useState(false);
-  const [photosEveryone, setPhotosEveryone] = useState(true);
+  // 4. Messages States
+  const [msgReq, setMsgReq] = useState(true);
+  const [indGroupChats, setIndGroupChats] = useState(true);
+  const [remindersOption, setRemindersOption] = useState('everyone'); // 'off' | 'profiles' | 'everyone'
+  const [groupReq, setGroupReq] = useState(true);
 
-  const [suggestedOff, setSuggestedOff] = useState(false);
-  const [suggestedOn, setSuggestedOn] = useState(true);
+  // 5. Calls States
+  const [callsOption, setCallsOption] = useState('everyone'); // 'off' | 'profiles' | 'everyone'
+  const [videoOption, setVideoOption] = useState('everyone'); // 'off' | 'profiles' | 'everyone'
 
-  // 3. Following and Followers Sub-Option Switch States
-  const [followersReqOff, setFollowersReqOff] = useState(false);
-  const [followersReqOn, setFollowersReqOn] = useState(true);
+  // 6. Reels States (Single clean toggles)
+  const [origAudio, setOrigAudio] = useState(true);
+  const [remixes, setRemixes] = useState(true);
+  const [liveVideos, setLiveVideos] = useState(true);
+  const [recentReels, setRecentReels] = useState(true);
+  const [mostWatchedReels, setMostWatchedReels] = useState(true);
+  const [addYours, setAddYours] = useState(true);
+  const [reelsForYou, setReelsForYou] = useState(true);
 
-  const [acceptedReqOff, setAcceptedReqOff] = useState(false);
-  const [acceptedReqOn, setAcceptedReqOn] = useState(true);
+  // 7. Birthdays State
+  const [birthdays, setBirthdays] = useState(true);
 
-  const [accountSuggOff, setAccountSuggOff] = useState(false);
-  const [accountSuggOn, setAccountSuggOn] = useState(true);
+  // 8. Map States
+  const [locSharing, setLocSharing] = useState(true);
+  const [locReminder, setLocReminder] = useState(true);
+  const [locLikes, setLocLikes] = useState(true);
 
-  const [mentionsOff, setMentionsOff] = useState(false);
-  const [mentionsProfiles, setMentionsProfiles] = useState(false);
-  const [mentionsEveryone, setMentionsEveryone] = useState(true);
-
-  // 4. Messages Sub-Option Switch States
-  const [msgReqOff, setMsgReqOff] = useState(false);
-  const [msgReqOn, setMsgReqOn] = useState(true);
-
-  const [indGroupOff, setIndGroupOff] = useState(false);
-  const [indGroupOn, setIndGroupOn] = useState(true);
-
-  const [remindersOff, setRemindersOff] = useState(false);
-  const [remindersProfiles, setRemindersProfiles] = useState(false);
-  const [remindersEveryone, setRemindersEveryone] = useState(true);
-
-  const [groupReqOff, setGroupReqOff] = useState(false);
-  const [groupReqOn, setGroupReqOn] = useState(true);
-
-  // 5. Calls Sub-Option Switch States
-  const [callOff, setCallOff] = useState(false);
-  const [callProfiles, setCallProfiles] = useState(false);
-  const [callEveryone, setCallEveryone] = useState(true);
-
-  const [videoOff, setVideoOff] = useState(false);
-  const [videoProfiles, setVideoProfiles] = useState(false);
-  const [videoEveryone, setVideoEveryone] = useState(true);
-
-  // 6. Reels Sub-Option Switch States
-  const [origAudioOff, setOrigAudioOff] = useState(false);
-  const [origAudioOn, setOrigAudioOn] = useState(true);
-
-  const [remixesOff, setRemixesOff] = useState(false);
-  const [remixesOn, setRemixesOn] = useState(true);
-
-  const [liveOff, setLiveOff] = useState(false);
-  const [liveOn, setLiveOn] = useState(true);
-
-  const [recentReelsOff, setRecentReelsOff] = useState(false);
-  const [recentReelsOn, setRecentReelsOn] = useState(true);
-
-  const [mostWatchedOff, setMostWatchedOff] = useState(false);
-  const [mostWatchedOn, setMostWatchedOn] = useState(true);
-
-  const [addYoursOff, setAddYoursOff] = useState(false);
-  const [addYoursOn, setAddYoursOn] = useState(true);
-
-  const [reelsForYouOff, setReelsForYouOff] = useState(false);
-  const [reelsForYouOn, setReelsForYouOn] = useState(true);
-
-  // 7. Birthdays Sub-Option Switch States
-  const [birthdaysOff, setBirthdaysOff] = useState(false);
-  const [birthdaysOn, setBirthdaysOn] = useState(true);
-
-  // 8. Map Sub-Option Switch States
-  const [locSharingOff, setLocSharingOff] = useState(false);
-  const [locSharingOn, setLocSharingOn] = useState(true);
-
-  const [locReminderOff, setLocReminderOff] = useState(false);
-  const [locReminderOn, setLocReminderOn] = useState(true);
-
-  const [locLikesOff, setLocLikesOff] = useState(false);
-  const [locLikesOn, setLocLikesOn] = useState(true);
-
-  // 9. Email Notifications Sub-Option Switch States
-  const [feedbackEmailOff, setFeedbackEmailOff] = useState(false);
-  const [feedbackEmailOn, setFeedbackEmailOn] = useState(true);
-
-  const [reminderEmailOff, setReminderEmailOff] = useState(false);
-  const [reminderEmailOn, setReminderEmailOn] = useState(true);
-
-  const [productEmailOff, setProductEmailOff] = useState(false);
-  const [productEmailOn, setProductEmailOn] = useState(true);
-
-  const [newsEmailOff, setNewsEmailOff] = useState(false);
-  const [newsEmailOn, setNewsEmailOn] = useState(true);
-
-  const [supportEmailOff, setSupportEmailOff] = useState(false);
-  const [supportEmailOn, setSupportEmailOn] = useState(true);
+  // 9. Email Notifications States
+  const [feedbackEmail, setFeedbackEmail] = useState(true);
+  const [reminderEmail, setReminderEmail] = useState(true);
+  const [productEmail, setProductEmail] = useState(true);
+  const [newsEmail, setNewsEmail] = useState(true);
+  const [supportEmail, setSupportEmail] = useState(true);
 
   return (
     <View style={styles.rootContainer}>
@@ -161,12 +106,9 @@ export default function NotificationSettingsScreen() {
             </Pressable>
           </View>
 
-          {/* Top Grab Handle Bar */}
-          <View style={styles.grabHandle} />
-
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             
-            {/* Section 1: Push Notifications (Expandable Dropdown Header) */}
+            {/* Section 1: Push Notifications */}
             <Pressable
               onPress={() => setIsPushExpanded(!isPushExpanded)}
               style={({ pressed }) => [
@@ -177,62 +119,56 @@ export default function NotificationSettingsScreen() {
               hitSlop={8}
             >
               <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="settings-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Ionicons name="notifications-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                 <Text style={styles.sectionHeaderTitle}>Push Notifications</Text>
               </View>
-
-              <Ionicons
-                name={isPushExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color="#6B7280"
-              />
             </Pressable>
 
             {/* Push Notifications Expanded Content */}
             {isPushExpanded && (
               <View style={styles.dropdownBodyWrapper}>
                 <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Pause All</Text>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="pause-circle-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Pause All</Text>
                   </View>
                   <Switch
                     value={pauseAll}
                     onValueChange={setPauseAll}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Sleep Mode</Text>
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="moon-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Sleep Mode</Text>
                   </View>
                   <Switch
                     value={sleepMode}
                     onValueChange={setSleepMode}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Messages Only</Text>
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Messages Only</Text>
                   </View>
                   <Switch
                     value={messagesOnly}
                     onValueChange={setMessagesOnly}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
               </View>
             )}
 
-            {/* Section 2: Posts, Stories (Expandable Dropdown Header) */}
+            {/* Section 2: Posts, Stories */}
             <Pressable
               onPress={() => setIsPostsStoriesExpanded(!isPostsStoriesExpanded)}
               style={({ pressed }) => [
@@ -243,24 +179,18 @@ export default function NotificationSettingsScreen() {
               hitSlop={8}
             >
               <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="settings-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Ionicons name="images-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                 <Text style={styles.sectionHeaderTitle}>Posts, Stories</Text>
               </View>
-
-              <Ionicons
-                name={isPostsStoriesExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color="#6B7280"
-              />
             </Pressable>
 
             {/* Posts, Stories Expanded Content */}
             {isPostsStoriesExpanded && (
               <View style={styles.dropdownBodyWrapper}>
                 
-                {/* Likes Sub-Group */}
+                {/* Likes Multi-Option */}
                 <View style={styles.groupHeaderRow}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                  <Ionicons name="heart-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
                   <Text style={styles.groupHeaderTitle}>Likes</Text>
                 </View>
 
@@ -270,104 +200,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>Off</Text>
                   </View>
                   <Switch
-                    value={likesOff}
-                    onValueChange={(val) => {
-                      setLikesOff(val);
-                      if (val) { setLikesProfiles(false); setLikesEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>From Profiles I follow</Text>
-                  </View>
-                  <Switch
-                    value={likesProfiles}
-                    onValueChange={(val) => {
-                      setLikesProfiles(val);
-                      if (val) { setLikesOff(false); setLikesEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>From Everyone</Text>
-                  </View>
-                  <Switch
-                    value={likesEveryone}
-                    onValueChange={(val) => {
-                      setLikesEveryone(val);
-                      if (val) { setLikesOff(false); setLikesProfiles(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                {/* Like Milestones Sub-Group */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Like Milestones</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
-                  </View>
-                  <Switch
-                    value={milestonesOff}
-                    onValueChange={(val) => {
-                      setMilestonesOff(val);
-                      if (val) setMilestonesOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={milestonesOn}
-                    onValueChange={(val) => {
-                      setMilestonesOn(val);
-                      if (val) setMilestonesOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                {/* Photos of you Sub-Group */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Photos of you</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
-                  </View>
-                  <Switch
-                    value={photosOff}
-                    onValueChange={(val) => {
-                      setPhotosOff(val);
-                      if (val) { setPhotosProfiles(false); setPhotosEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={likesOption === 'off'}
+                    onValueChange={(val) => setLikesOption(val ? 'off' : 'everyone')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -378,12 +213,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>From Profiles I Follow</Text>
                   </View>
                   <Switch
-                    value={photosProfiles}
-                    onValueChange={(val) => {
-                      setPhotosProfiles(val);
-                      if (val) { setPhotosOff(false); setPhotosEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={likesOption === 'profiles'}
+                    onValueChange={(val) => setLikesOption(val ? 'profiles' : 'off')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -394,20 +226,31 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>From Everyone</Text>
                   </View>
                   <Switch
-                    value={photosEveryone}
-                    onValueChange={(val) => {
-                      setPhotosEveryone(val);
-                      if (val) { setPhotosOff(false); setPhotosProfiles(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={likesOption === 'everyone'}
+                    onValueChange={(val) => setLikesOption(val ? 'everyone' : 'off')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
-                {/* Posts Suggested for you Sub-Group */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Posts Suggested for you</Text>
+                {/* Milestones Single Toggle */}
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="trophy-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Milestones</Text>
+                  </View>
+                  <Switch
+                    value={milestones}
+                    onValueChange={setMilestones}
+                    trackColor={switchTrackColor}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+
+                {/* Photos of You Multi-Option */}
+                <View style={[styles.groupHeaderRow, { marginTop: 10 }]}>
+                  <Ionicons name="person-circle-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                  <Text style={styles.groupHeaderTitle}>Photos of You</Text>
                 </View>
 
                 <View style={styles.subItemRow}>
@@ -416,12 +259,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>Off</Text>
                   </View>
                   <Switch
-                    value={suggestedOff}
-                    onValueChange={(val) => {
-                      setSuggestedOff(val);
-                      if (val) setSuggestedOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={photosOption === 'off'}
+                    onValueChange={(val) => setPhotosOption(val ? 'off' : 'everyone')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -429,15 +269,39 @@ export default function NotificationSettingsScreen() {
                 <View style={styles.subItemRow}>
                   <View style={styles.bulletRow}>
                     <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
+                    <Text style={styles.subItemText}>From Profiles I Follow</Text>
                   </View>
                   <Switch
-                    value={suggestedOn}
-                    onValueChange={(val) => {
-                      setSuggestedOn(val);
-                      if (val) setSuggestedOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={photosOption === 'profiles'}
+                    onValueChange={(val) => setPhotosOption(val ? 'profiles' : 'off')}
+                    trackColor={switchTrackColor}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+
+                <View style={styles.subItemRow}>
+                  <View style={styles.bulletRow}>
+                    <View style={styles.bulletDot} />
+                    <Text style={styles.subItemText}>From Everyone</Text>
+                  </View>
+                  <Switch
+                    value={photosOption === 'everyone'}
+                    onValueChange={(val) => setPhotosOption(val ? 'everyone' : 'off')}
+                    trackColor={switchTrackColor}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+
+                {/* Suggested for You Single Toggle */}
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="sparkles-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Suggested for You</Text>
+                  </View>
+                  <Switch
+                    value={suggestedForYou}
+                    onValueChange={setSuggestedForYou}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -445,7 +309,7 @@ export default function NotificationSettingsScreen() {
               </View>
             )}
 
-            {/* Section 3: Following and Followers (Expandable Dropdown Header) */}
+            {/* Section 3: Following and Followers */}
             <Pressable
               onPress={() => setIsFollowingExpanded(!isFollowingExpanded)}
               style={({ pressed }) => [
@@ -456,25 +320,61 @@ export default function NotificationSettingsScreen() {
               hitSlop={8}
             >
               <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="settings-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Ionicons name="people-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                 <Text style={styles.sectionHeaderTitle}>Following and Followers</Text>
               </View>
-
-              <Ionicons
-                name={isFollowingExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color="#6B7280"
-              />
             </Pressable>
 
             {/* Following and Followers Expanded Content */}
             {isFollowingExpanded && (
               <View style={styles.dropdownBodyWrapper}>
                 
-                {/* Followers Requests Sub-Group */}
-                <View style={styles.groupHeaderRow}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Followers Requests</Text>
+                {/* 1. Follow Requests Single Toggle */}
+                <View style={styles.subItemRow}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="person-add-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Follow Requests</Text>
+                  </View>
+                  <Switch
+                    value={followersReq}
+                    onValueChange={setFollowersReq}
+                    trackColor={switchTrackColor}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+
+                {/* 2. Accepted Follow Requests Single Toggle */}
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="checkmark-circle-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Accepted Follow Requests</Text>
+                  </View>
+                  <Switch
+                    value={acceptedReq}
+                    onValueChange={setAcceptedReq}
+                    trackColor={switchTrackColor}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+
+                {/* 3. Account Suggestions Single Toggle */}
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="people-circle-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Account Suggestions</Text>
+                  </View>
+                  <Switch
+                    value={accountSugg}
+                    onValueChange={setAccountSugg}
+                    trackColor={switchTrackColor}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+
+                {/* 4. Mentions Multi-Option */}
+                <View style={[styles.groupHeaderRow, { marginTop: 10 }]}>
+                  <Ionicons name="at-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                  <Text style={styles.groupHeaderTitle}>Mentions</Text>
                 </View>
 
                 <View style={styles.subItemRow}>
@@ -483,126 +383,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>Off</Text>
                   </View>
                   <Switch
-                    value={followersReqOff}
-                    onValueChange={(val) => {
-                      setFollowersReqOff(val);
-                      if (val) setFollowersReqOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={followersReqOn}
-                    onValueChange={(val) => {
-                      setFollowersReqOn(val);
-                      if (val) setFollowersReqOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                {/* Accepted Follow Requests Sub-Group */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Accepted Follow Requests</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
-                  </View>
-                  <Switch
-                    value={acceptedReqOff}
-                    onValueChange={(val) => {
-                      setAcceptedReqOff(val);
-                      if (val) setAcceptedReqOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={acceptedReqOn}
-                    onValueChange={(val) => {
-                      setAcceptedReqOn(val);
-                      if (val) setAcceptedReqOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                {/* Account Suggestions Sub-Group */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Account Suggestions</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
-                  </View>
-                  <Switch
-                    value={accountSuggOff}
-                    onValueChange={(val) => {
-                      setAccountSuggOff(val);
-                      if (val) setAccountSuggOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={accountSuggOn}
-                    onValueChange={(val) => {
-                      setAccountSuggOn(val);
-                      if (val) setAccountSuggOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                {/* Mentions in Bio Sub-Group */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Mentions in Bio</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
-                  </View>
-                  <Switch
-                    value={mentionsOff}
-                    onValueChange={(val) => {
-                      setMentionsOff(val);
-                      if (val) { setMentionsProfiles(false); setMentionsEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={mentionsOption === 'off'}
+                    onValueChange={(val) => setMentionsOption(val ? 'off' : 'everyone')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -613,12 +396,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>From Profiles I Follow</Text>
                   </View>
                   <Switch
-                    value={mentionsProfiles}
-                    onValueChange={(val) => {
-                      setMentionsProfiles(val);
-                      if (val) { setMentionsOff(false); setMentionsEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={mentionsOption === 'profiles'}
+                    onValueChange={(val) => setMentionsOption(val ? 'profiles' : 'off')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -629,12 +409,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>From Everyone</Text>
                   </View>
                   <Switch
-                    value={mentionsEveryone}
-                    onValueChange={(val) => {
-                      setMentionsEveryone(val);
-                      if (val) { setMentionsOff(false); setMentionsProfiles(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={mentionsOption === 'everyone'}
+                    onValueChange={(val) => setMentionsOption(val ? 'everyone' : 'off')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -642,7 +419,7 @@ export default function NotificationSettingsScreen() {
               </View>
             )}
 
-            {/* Section 4: Messages (Expandable Dropdown Header) */}
+            {/* Section 4: Messages */}
             <Pressable
               onPress={() => setIsMessagesExpanded(!isMessagesExpanded)}
               style={({ pressed }) => [
@@ -653,25 +430,47 @@ export default function NotificationSettingsScreen() {
               hitSlop={8}
             >
               <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="settings-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Ionicons name="chatbubbles-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                 <Text style={styles.sectionHeaderTitle}>Messages</Text>
               </View>
-
-              <Ionicons
-                name={isMessagesExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color="#6B7280"
-              />
             </Pressable>
 
             {/* Messages Expanded Content */}
             {isMessagesExpanded && (
               <View style={styles.dropdownBodyWrapper}>
                 
-                {/* Message Requests Sub-Group */}
-                <View style={styles.groupHeaderRow}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Message Requests</Text>
+                {/* 1. Message Requests Single Toggle */}
+                <View style={styles.subItemRow}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="mail-unread-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Message Requests</Text>
+                  </View>
+                  <Switch
+                    value={msgReq}
+                    onValueChange={setMsgReq}
+                    trackColor={switchTrackColor}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+
+                {/* 2. Individual and Group Chats Single Toggle */}
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="chatbox-ellipses-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Individual and Group Chats</Text>
+                  </View>
+                  <Switch
+                    value={indGroupChats}
+                    onValueChange={setIndGroupChats}
+                    trackColor={switchTrackColor}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+
+                {/* 3. Reminders Multi-Option */}
+                <View style={[styles.groupHeaderRow, { marginTop: 10 }]}>
+                  <Ionicons name="alarm-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                  <Text style={styles.groupHeaderTitle}>Reminders</Text>
                 </View>
 
                 <View style={styles.subItemRow}>
@@ -680,88 +479,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>Off</Text>
                   </View>
                   <Switch
-                    value={msgReqOff}
-                    onValueChange={(val) => {
-                      setMsgReqOff(val);
-                      if (val) setMsgReqOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={msgReqOn}
-                    onValueChange={(val) => {
-                      setMsgReqOn(val);
-                      if (val) setMsgReqOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                {/* Messages from Individual and Group Chats Sub-Group */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Messages from Individual and Group Chats</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
-                  </View>
-                  <Switch
-                    value={indGroupOff}
-                    onValueChange={(val) => {
-                      setIndGroupOff(val);
-                      if (val) setIndGroupOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={indGroupOn}
-                    onValueChange={(val) => {
-                      setIndGroupOn(val);
-                      if (val) setIndGroupOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                {/* Message Reminders Sub-Group */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Message Reminders</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
-                  </View>
-                  <Switch
-                    value={remindersOff}
-                    onValueChange={(val) => {
-                      setRemindersOff(val);
-                      if (val) { setRemindersProfiles(false); setRemindersEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={remindersOption === 'off'}
+                    onValueChange={(val) => setRemindersOption(val ? 'off' : 'everyone')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -772,12 +492,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>From Profiles I Follow</Text>
                   </View>
                   <Switch
-                    value={remindersProfiles}
-                    onValueChange={(val) => {
-                      setRemindersProfiles(val);
-                      if (val) { setRemindersOff(false); setRemindersEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={remindersOption === 'profiles'}
+                    onValueChange={(val) => setRemindersOption(val ? 'profiles' : 'off')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -788,50 +505,23 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>From Everyone</Text>
                   </View>
                   <Switch
-                    value={remindersEveryone}
-                    onValueChange={(val) => {
-                      setRemindersEveryone(val);
-                      if (val) { setRemindersOff(false); setRemindersProfiles(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={remindersOption === 'everyone'}
+                    onValueChange={(val) => setRemindersOption(val ? 'everyone' : 'off')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
-                {/* Group Requests Sub-Group */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Group Requests</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                {/* 4. Group Requests Single Toggle */}
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="duplicate-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Group Requests</Text>
                   </View>
                   <Switch
-                    value={groupReqOff}
-                    onValueChange={(val) => {
-                      setGroupReqOff(val);
-                      if (val) setGroupReqOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={groupReqOn}
-                    onValueChange={(val) => {
-                      setGroupReqOn(val);
-                      if (val) setGroupReqOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={groupReq}
+                    onValueChange={setGroupReq}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -839,7 +529,7 @@ export default function NotificationSettingsScreen() {
               </View>
             )}
 
-            {/* Section 5: Calls (Expandable Dropdown Header) */}
+            {/* Section 5: Calls */}
             <Pressable
               onPress={() => setIsCallsExpanded(!isCallsExpanded)}
               style={({ pressed }) => [
@@ -850,25 +540,19 @@ export default function NotificationSettingsScreen() {
               hitSlop={8}
             >
               <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="settings-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Ionicons name="call-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                 <Text style={styles.sectionHeaderTitle}>Calls</Text>
               </View>
-
-              <Ionicons
-                name={isCallsExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color="#6B7280"
-              />
             </Pressable>
 
             {/* Calls Expanded Content */}
             {isCallsExpanded && (
               <View style={styles.dropdownBodyWrapper}>
                 
-                {/* Call Sub-Group */}
+                {/* 1. Voice Calls Multi-Option */}
                 <View style={styles.groupHeaderRow}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Call</Text>
+                  <Ionicons name="call-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                  <Text style={styles.groupHeaderTitle}>Voice Calls</Text>
                 </View>
 
                 <View style={styles.subItemRow}>
@@ -877,12 +561,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>Off</Text>
                   </View>
                   <Switch
-                    value={callOff}
-                    onValueChange={(val) => {
-                      setCallOff(val);
-                      if (val) { setCallProfiles(false); setCallEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={callsOption === 'off'}
+                    onValueChange={(val) => setCallsOption(val ? 'off' : 'everyone')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -893,12 +574,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>From Profiles I Follow</Text>
                   </View>
                   <Switch
-                    value={callProfiles}
-                    onValueChange={(val) => {
-                      setCallProfiles(val);
-                      if (val) { setCallOff(false); setCallEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={callsOption === 'profiles'}
+                    onValueChange={(val) => setCallsOption(val ? 'profiles' : 'off')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -909,19 +587,16 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>From Everyone</Text>
                   </View>
                   <Switch
-                    value={callEveryone}
-                    onValueChange={(val) => {
-                      setCallEveryone(val);
-                      if (val) { setCallOff(false); setCallProfiles(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={callsOption === 'everyone'}
+                    onValueChange={(val) => setCallsOption(val ? 'everyone' : 'off')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
-                {/* Video Chats Sub-Group */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                {/* 2. Video Chats Multi-Option */}
+                <View style={[styles.groupHeaderRow, { marginTop: 10 }]}>
+                  <Ionicons name="videocam-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
                   <Text style={styles.groupHeaderTitle}>Video Chats</Text>
                 </View>
 
@@ -931,12 +606,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>Off</Text>
                   </View>
                   <Switch
-                    value={videoOff}
-                    onValueChange={(val) => {
-                      setVideoOff(val);
-                      if (val) { setVideoProfiles(false); setVideoEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={videoOption === 'off'}
+                    onValueChange={(val) => setVideoOption(val ? 'off' : 'everyone')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -947,12 +619,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>From Profiles I Follow</Text>
                   </View>
                   <Switch
-                    value={videoProfiles}
-                    onValueChange={(val) => {
-                      setVideoProfiles(val);
-                      if (val) { setVideoOff(false); setVideoEveryone(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={videoOption === 'profiles'}
+                    onValueChange={(val) => setVideoOption(val ? 'profiles' : 'off')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -963,12 +632,9 @@ export default function NotificationSettingsScreen() {
                     <Text style={styles.subItemText}>From Everyone</Text>
                   </View>
                   <Switch
-                    value={videoEveryone}
-                    onValueChange={(val) => {
-                      setVideoEveryone(val);
-                      if (val) { setVideoOff(false); setVideoProfiles(false); }
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={videoOption === 'everyone'}
+                    onValueChange={(val) => setVideoOption(val ? 'everyone' : 'off')}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -976,7 +642,7 @@ export default function NotificationSettingsScreen() {
               </View>
             )}
 
-            {/* Section 6: Reels (Expandable Dropdown Header) */}
+            {/* Section 6: Reels */}
             <Pressable
               onPress={() => setIsReelsExpanded(!isReelsExpanded)}
               style={({ pressed }) => [
@@ -987,283 +653,109 @@ export default function NotificationSettingsScreen() {
               hitSlop={8}
             >
               <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="settings-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Ionicons name="film-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                 <Text style={styles.sectionHeaderTitle}>Reels</Text>
               </View>
-
-              <Ionicons
-                name={isReelsExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color="#6B7280"
-              />
             </Pressable>
 
-            {/* Reels Expanded Content */}
+            {/* Reels Expanded Content - Clean Single Toggle Per Item */}
             {isReelsExpanded && (
               <View style={styles.dropdownBodyWrapper}>
                 
                 {/* 1. Original Audio */}
-                <View style={styles.groupHeaderRow}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Original Audio</Text>
-                </View>
-
                 <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="musical-notes-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Original Audio</Text>
                   </View>
                   <Switch
-                    value={origAudioOff}
-                    onValueChange={(val) => {
-                      setOrigAudioOff(val);
-                      if (val) setOrigAudioOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={origAudioOn}
-                    onValueChange={(val) => {
-                      setOrigAudioOn(val);
-                      if (val) setOrigAudioOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={origAudio}
+                    onValueChange={setOrigAudio}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
                 {/* 2. Remixes */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Remixes</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="color-wand-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Remixes</Text>
                   </View>
                   <Switch
-                    value={remixesOff}
-                    onValueChange={(val) => {
-                      setRemixesOff(val);
-                      if (val) setRemixesOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={remixesOn}
-                    onValueChange={(val) => {
-                      setRemixesOn(val);
-                      if (val) setRemixesOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={remixes}
+                    onValueChange={setRemixes}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
                 {/* 3. Live Videos */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Live Videos</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="radio-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Live Videos</Text>
                   </View>
                   <Switch
-                    value={liveOff}
-                    onValueChange={(val) => {
-                      setLiveOff(val);
-                      if (val) setLiveOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={liveOn}
-                    onValueChange={(val) => {
-                      setLiveOn(val);
-                      if (val) setLiveOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={liveVideos}
+                    onValueChange={setLiveVideos}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
                 {/* 4. Recently Uploaded Reels */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Recently Uploaded Reels</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="time-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Recently Uploaded Reels</Text>
                   </View>
                   <Switch
-                    value={recentReelsOff}
-                    onValueChange={(val) => {
-                      setRecentReelsOff(val);
-                      if (val) setRecentReelsOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={recentReelsOn}
-                    onValueChange={(val) => {
-                      setRecentReelsOn(val);
-                      if (val) setRecentReelsOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={recentReels}
+                    onValueChange={setRecentReels}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
                 {/* 5. Most Watched Reels */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Most Watched Reels</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="trending-up-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Most Watched Reels</Text>
                   </View>
                   <Switch
-                    value={mostWatchedOff}
-                    onValueChange={(val) => {
-                      setMostWatchedOff(val);
-                      if (val) setMostWatchedOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={mostWatchedOn}
-                    onValueChange={(val) => {
-                      setMostWatchedOn(val);
-                      if (val) setMostWatchedOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={mostWatchedReels}
+                    onValueChange={setMostWatchedReels}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
                 {/* 6. Add Yours */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Add Yours</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="add-circle-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Add Yours</Text>
                   </View>
                   <Switch
-                    value={addYoursOff}
-                    onValueChange={(val) => {
-                      setAddYoursOff(val);
-                      if (val) setAddYoursOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={addYours}
+                    onValueChange={setAddYours}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
+                {/* 7. Reels For You */}
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="heart-circle-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Reels For You</Text>
                   </View>
                   <Switch
-                    value={addYoursOn}
-                    onValueChange={(val) => {
-                      setAddYoursOn(val);
-                      if (val) setAddYoursOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                {/* 7. Reels Made for You */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Reels Made for You</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
-                  </View>
-                  <Switch
-                    value={reelsForYouOff}
-                    onValueChange={(val) => {
-                      setReelsForYouOff(val);
-                      if (val) setReelsForYouOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={reelsForYouOn}
-                    onValueChange={(val) => {
-                      setReelsForYouOn(val);
-                      if (val) setReelsForYouOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={reelsForYou}
+                    onValueChange={setReelsForYou}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -1271,7 +763,7 @@ export default function NotificationSettingsScreen() {
               </View>
             )}
 
-            {/* Section 7: Birthdays (Expandable Dropdown Header) */}
+            {/* Section 7: Birthdays */}
             <Pressable
               onPress={() => setIsBirthdaysExpanded(!isBirthdaysExpanded)}
               style={({ pressed }) => [
@@ -1282,63 +774,30 @@ export default function NotificationSettingsScreen() {
               hitSlop={8}
             >
               <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="settings-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Ionicons name="gift-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                 <Text style={styles.sectionHeaderTitle}>Birthdays</Text>
               </View>
-
-              <Ionicons
-                name={isBirthdaysExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color="#6B7280"
-              />
             </Pressable>
 
-            {/* Birthdays Expanded Content */}
+            {/* Birthdays Expanded Content - Single Clean Toggle */}
             {isBirthdaysExpanded && (
               <View style={styles.dropdownBodyWrapper}>
-                
-                {/* Birthdays Sub-Group */}
-                <View style={styles.groupHeaderRow}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Birthdays</Text>
-                </View>
-
                 <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="gift-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Birthdays Notifications</Text>
                   </View>
                   <Switch
-                    value={birthdaysOff}
-                    onValueChange={(val) => {
-                      setBirthdaysOff(val);
-                      if (val) setBirthdaysOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={birthdays}
+                    onValueChange={setBirthdays}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={birthdaysOn}
-                    onValueChange={(val) => {
-                      setBirthdaysOn(val);
-                      if (val) setBirthdaysOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
               </View>
             )}
 
-            {/* Section 8: Map (Expandable Dropdown Header) */}
+            {/* Section 8: Map */}
             <Pressable
               onPress={() => setIsMapExpanded(!isMapExpanded)}
               style={({ pressed }) => [
@@ -1349,131 +808,53 @@ export default function NotificationSettingsScreen() {
               hitSlop={8}
             >
               <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="settings-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Ionicons name="map-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                 <Text style={styles.sectionHeaderTitle}>Map</Text>
               </View>
-
-              <Ionicons
-                name={isMapExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color="#6B7280"
-              />
             </Pressable>
 
-            {/* Map Expanded Content */}
+            {/* Map Expanded Content - Single Clean Toggles */}
             {isMapExpanded && (
               <View style={styles.dropdownBodyWrapper}>
                 
-                {/* 1. Location Sharing Request */}
-                <View style={styles.groupHeaderRow}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Location Sharing Request</Text>
-                </View>
-
+                {/* 1. Location Sharing */}
                 <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="location-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Location Sharing</Text>
                   </View>
                   <Switch
-                    value={locSharingOff}
-                    onValueChange={(val) => {
-                      setLocSharingOff(val);
-                      if (val) setLocSharingOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={locSharing}
+                    onValueChange={setLocSharing}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
+                {/* 2. Location-Based Reminders */}
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="navigate-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Location-Based Reminders</Text>
                   </View>
                   <Switch
-                    value={locSharingOn}
-                    onValueChange={(val) => {
-                      setLocSharingOn(val);
-                      if (val) setLocSharingOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={locReminder}
+                    onValueChange={setLocReminder}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
-                {/* 2. Location sharing Reminder */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Location sharing Reminder</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                {/* 3. Location Likes & Activity */}
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="trail-sign-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Location Likes & Activity</Text>
                   </View>
                   <Switch
-                    value={locReminderOff}
-                    onValueChange={(val) => {
-                      setLocReminderOff(val);
-                      if (val) setLocReminderOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={locReminderOn}
-                    onValueChange={(val) => {
-                      setLocReminderOn(val);
-                      if (val) setLocReminderOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                {/* 3. Location Likes */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Location Likes</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
-                  </View>
-                  <Switch
-                    value={locLikesOff}
-                    onValueChange={(val) => {
-                      setLocLikesOff(val);
-                      if (val) setLocLikesOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={locLikesOn}
-                    onValueChange={(val) => {
-                      setLocLikesOn(val);
-                      if (val) setLocLikesOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={locLikes}
+                    onValueChange={setLocLikes}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -1481,7 +862,7 @@ export default function NotificationSettingsScreen() {
               </View>
             )}
 
-            {/* Section 9: Email Notifications (Expandable Dropdown Header) */}
+            {/* Section 9: Email Notifications */}
             <Pressable
               onPress={() => setIsEmailExpanded(!isEmailExpanded)}
               style={({ pressed }) => [
@@ -1492,207 +873,81 @@ export default function NotificationSettingsScreen() {
               hitSlop={8}
             >
               <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="settings-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
+                <Ionicons name="mail-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                 <Text style={styles.sectionHeaderTitle}>Email Notifications</Text>
               </View>
-
-              <Ionicons
-                name={isEmailExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color="#6B7280"
-              />
             </Pressable>
 
-            {/* Email Notifications Expanded Content */}
+            {/* Email Notifications Expanded Content - Single Clean Toggles */}
             {isEmailExpanded && (
               <View style={styles.dropdownBodyWrapper}>
                 
                 {/* 1. Feedback Emails */}
-                <View style={styles.groupHeaderRow}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Feedback Emails</Text>
-                </View>
-
                 <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="chatbubble-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Feedback Emails</Text>
                   </View>
                   <Switch
-                    value={feedbackEmailOff}
-                    onValueChange={(val) => {
-                      setFeedbackEmailOff(val);
-                      if (val) setFeedbackEmailOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={feedbackEmailOn}
-                    onValueChange={(val) => {
-                      setFeedbackEmailOn(val);
-                      if (val) setFeedbackEmailOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={feedbackEmail}
+                    onValueChange={setFeedbackEmail}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
                 {/* 2. Reminder Emails */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Reminder Emails</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="timer-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Reminder Emails</Text>
                   </View>
                   <Switch
-                    value={reminderEmailOff}
-                    onValueChange={(val) => {
-                      setReminderEmailOff(val);
-                      if (val) setReminderEmailOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={reminderEmailOn}
-                    onValueChange={(val) => {
-                      setReminderEmailOn(val);
-                      if (val) setReminderEmailOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={reminderEmail}
+                    onValueChange={setReminderEmail}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
                 {/* 3. Product Emails */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Product Emails</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="cube-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Product Emails</Text>
                   </View>
                   <Switch
-                    value={productEmailOff}
-                    onValueChange={(val) => {
-                      setProductEmailOff(val);
-                      if (val) setProductEmailOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={productEmail}
+                    onValueChange={setProductEmail}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
+                {/* 4. News Emails */}
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="newspaper-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>News Emails</Text>
                   </View>
                   <Switch
-                    value={productEmailOn}
-                    onValueChange={(val) => {
-                      setProductEmailOn(val);
-                      if (val) setProductEmailOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                {/* 4. News Email */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>News Email</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
-                  </View>
-                  <Switch
-                    value={newsEmailOff}
-                    onValueChange={(val) => {
-                      setNewsEmailOff(val);
-                      if (val) setNewsEmailOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={newsEmailOn}
-                    onValueChange={(val) => {
-                      setNewsEmailOn(val);
-                      if (val) setNewsEmailOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={newsEmail}
+                    onValueChange={setNewsEmail}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
 
                 {/* 5. Support Emails */}
-                <View style={[styles.groupHeaderRow, { marginTop: 6 }]}>
-                  <Ionicons name="settings-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
-                  <Text style={styles.groupHeaderTitle}>Support Emails</Text>
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>Off</Text>
+                <View style={[styles.subItemRow, { marginTop: 6 }]}>
+                  <View style={styles.groupHeaderRow}>
+                    <Ionicons name="help-buoy-outline" size={18} color="#111827" style={{ marginRight: 8 }} />
+                    <Text style={styles.groupHeaderTitle}>Support Emails</Text>
                   </View>
                   <Switch
-                    value={supportEmailOff}
-                    onValueChange={(val) => {
-                      setSupportEmailOff(val);
-                      if (val) setSupportEmailOn(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.subItemRow}>
-                  <View style={styles.bulletRow}>
-                    <View style={styles.bulletDot} />
-                    <Text style={styles.subItemText}>On</Text>
-                  </View>
-                  <Switch
-                    value={supportEmailOn}
-                    onValueChange={(val) => {
-                      setSupportEmailOn(val);
-                      if (val) setSupportEmailOff(false);
-                    }}
-                    trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                    value={supportEmail}
+                    onValueChange={setSupportEmail}
+                    trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -1780,14 +1035,14 @@ const styles = StyleSheet.create({
   },
   groupHeaderTitle: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#111827',
   },
   subItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 2,
+    paddingVertical: 4,
     paddingLeft: 12,
   },
   bulletRow: {

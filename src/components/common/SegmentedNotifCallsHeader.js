@@ -13,6 +13,7 @@ import { useTheme } from '../../theme';
 
 export default function SegmentedNotifCallsHeader({
   activeTab = 'calls', // 'notification' | 'calls'
+  showBack = false,
   onBack,
   onTabChange,
 }) {
@@ -55,19 +56,23 @@ export default function SegmentedNotifCallsHeader({
       <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top + 6, 16) }]}>
         <View style={styles.topHeaderRow}>
           <View style={styles.headerLeftGroup}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={styles.backButton}
-              onPress={handleBack}
-            >
-              <Ionicons name="chevron-back" size={26} color="#000000" />
-            </TouchableOpacity>
+            {showBack && (
+              <TouchableOpacity
+                activeOpacity={0.7}
+                style={styles.backButton}
+                onPress={handleBack}
+              >
+                <Ionicons name="chevron-back" size={26} color={isDarkMode ? '#FFFFFF' : '#000000'} />
+              </TouchableOpacity>
+            )}
 
-            <View style={styles.tabRowInline}>
+            <View style={[styles.tabRowInline, !showBack && { marginLeft: 0 }]}>
               <TouchableOpacity
                 style={[
                   styles.tabPill,
-                  activeTab === 'notification' ? styles.activeTabPill : styles.inactiveTabPill,
+                  activeTab === 'notification'
+                    ? (isDarkMode ? styles.activeTabPillDark : styles.activeTabPill)
+                    : (isDarkMode ? styles.inactiveTabPillDark : styles.inactiveTabPill),
                 ]}
                 activeOpacity={0.8}
                 onPress={handlePressNotification}
@@ -85,7 +90,9 @@ export default function SegmentedNotifCallsHeader({
               <TouchableOpacity
                 style={[
                   styles.tabPill,
-                  activeTab === 'calls' ? styles.activeTabPill : styles.inactiveTabPill,
+                  activeTab === 'calls'
+                    ? (isDarkMode ? styles.activeTabPillDark : styles.activeTabPill)
+                    : (isDarkMode ? styles.inactiveTabPillDark : styles.inactiveTabPill),
                 ]}
                 activeOpacity={0.8}
                 onPress={handlePressCalls}
@@ -104,7 +111,11 @@ export default function SegmentedNotifCallsHeader({
 
           <TouchableOpacity
             activeOpacity={0.8}
-            style={[styles.profileBadge, { backgroundColor: avatarBg }]}
+            style={[
+              styles.profileBadge,
+              { backgroundColor: avatarBg },
+              isDarkMode && { shadowColor: '#000000' },
+            ]}
             onPress={() => router.push('/user-profile')}
           >
             <Text style={styles.profileBadgeText}>{avatarInitials}</Text>
@@ -173,7 +184,13 @@ const styles = StyleSheet.create({
   activeTabPill: {
     backgroundColor: '#FF2E63', // App Pink
   },
+  activeTabPillDark: {
+    backgroundColor: '#000000', // Black in Dark Mode
+  },
   inactiveTabPill: {
+    backgroundColor: '#E5E5EA',
+  },
+  inactiveTabPillDark: {
     backgroundColor: '#E5E5EA',
   },
   tabPillText: {
