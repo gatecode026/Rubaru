@@ -2,10 +2,10 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function InterestChip({ icon, label }) {
+export default function InterestPill({ icon, label }) {
   return (
     <View style={styles.chipContainer}>
-      <Ionicons name={icon} size={15} color="#F04452" style={styles.icon} />
+      <Ionicons name={icon} size={16} color="#F04452" style={styles.icon} />
       <Text style={styles.labelText}>{label}</Text>
     </View>
   );

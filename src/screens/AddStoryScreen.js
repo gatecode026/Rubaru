@@ -619,7 +619,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   leftToolIconWrapper: {
-    shadowColor: '#000',
+    shadowColor: '#000000ff',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.5,
     shadowRadius: 3,
@@ -988,7 +988,7 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   textOverlayText: {
-    color: '#FFFFFF',
+    color: '#ffffffff',
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
@@ -1025,3 +1025,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
+

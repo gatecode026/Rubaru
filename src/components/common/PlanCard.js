@@ -50,7 +50,7 @@ export default function PlanCard({
           </View>
           <View style={styles.pointsInfo}>
             <Text style={[styles.pointsNumber, { color: colors.textPrimary }]}>{points}</Text>
-            <Text style={[styles.pointsSubtext, { color: colors.textMuted }]}>Rubaru Points</Text>
+            <Text style={[styles.pointsSubtext, { color: colors.textMuted }]}> My Points</Text>
           </View>
         </View>
 

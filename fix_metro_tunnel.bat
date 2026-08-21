@@ -1,6 +1,6 @@
 @echo off
 echo ==============================================
-echo   RUBARU METRO AND DEPENDENCY AUTO-FIXER
+echo   RUBARU METRO AND TUNNEL AUTO-FIXER
 echo ==============================================
 echo.
 
@@ -20,9 +20,9 @@ if exist package-lock.json (
 echo [3/4] Running fresh package installation...
 call npm install --legacy-peer-deps
 
-echo [4/4] Starting Expo Go with clear cache...
-call npx expo start --go --clear
+echo [4/4] Starting Expo Go with Tunnel and clear cache...
+call npx expo start --tunnel --clear
 
 echo.
-echo Process complete. If the terminal closes, please restart npx expo start.
+echo Process complete. If the terminal closes, please restart npx expo start --tunnel.
 pause
