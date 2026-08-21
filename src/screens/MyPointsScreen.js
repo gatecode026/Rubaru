@@ -31,10 +31,10 @@ const usageList = [
 ];
 
 const packagesList = [
-  { id: '1', points: '100', price: '₹ 79' },
+  { id: '1', points: '100', price: '₹ 79'  },
   { id: '2', points: '250', price: '₹ 179' },
   { id: '3', points: '500', price: '₹ 329' },
-  { id: '4', points: '1000', price: '₹ 549' },
+  { id: '4', points: '1000', price: '₹ 549'},
 ];
 
 export default function MyPointsScreen() {
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
   packagesOuterTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#000000',
+    color: '#000000ff',
     marginBottom: 16,
   },
   premiumBanner: {
@@ -339,8 +339,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderRadius: 20,
+    // backgroundColor:'#fafafaff',
     padding: 16,
-    marginBottom: 20,
+    // marginBottom:0,
   },
   premiumBannerLeft: {
     flexDirection: 'row',
@@ -362,7 +363,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   upgradePill: {
-    backgroundColor: '#FF1DC',
+    backgroundColor: '#FF929233',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
