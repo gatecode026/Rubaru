@@ -13,7 +13,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import StoryAvatar from '../components/common/StoryAvatar';
-import SegmentedTabs from '../components/common/SegmentedTabs';
 import FeedCard from '../components/common/FeedCard';
 import BottomTabBar from '../components/common/BottomTabBar';
 import { usePointsStore } from '../store/pointsStore';
@@ -192,9 +191,6 @@ export default function HomeScreen({ isNestedInPager }) {
                 contentContainerStyle={styles.storiesContentContainer}
                 style={styles.storiesContainer}
               />
-
-              {/* Segmented Filter Tabs */}
-              <SegmentedTabs />
             </>
           }
           contentContainerStyle={styles.feedContentContainer}
@@ -289,7 +285,7 @@ const styles = StyleSheet.create({
   },
   storiesContainer: {
     marginTop: 8,
-    marginBottom: 4,
+    marginBottom: 18,
   },
   storiesContentContainer: {
     paddingHorizontal: 20,
