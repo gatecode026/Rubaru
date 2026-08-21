@@ -15,6 +15,7 @@ import {
   Inter_800ExtraBold,
 } from '@expo-google-fonts/inter';
 
+
 const queryClient = new QueryClient();
 
 export default function RootLayout() {
@@ -38,41 +39,47 @@ export default function RootLayout() {
         <ThemeProvider>
           <IncomingCallProvider>
             <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="sign-in" />
-            <Stack.Screen name="signup-options" />
-            <Stack.Screen name="email-verification" />
-            <Stack.Screen name="phone-verification" />
-            <Stack.Screen name="otp-verification" />
-            <Stack.Screen name="profile-details" />
-            <Stack.Screen name="birthday-picker" />
-            <Stack.Screen name="gender-selection" />
-            <Stack.Screen name="interests-selection" />
-            <Stack.Screen name="search-friends" />
-            <Stack.Screen name="search-users" />
-            <Stack.Screen name="enable-notifications" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="user-profile" />
-            <Stack.Screen name="notification-settings" />
-            <Stack.Screen name="edit-profile" />
-            <Stack.Screen name="help-support" />
-            <Stack.Screen name="scam-protection" />
-            <Stack.Screen name="report-violations" />
-            <Stack.Screen name="reports" />
-            <Stack.Screen name="safety-notices" />
-            <Stack.Screen name="violations" />
-            <Stack.Screen name="violation-details" />
-            <Stack.Screen name="community-standards" />
-            <Stack.Screen name="contact-us" />
-            <Stack.Screen name="report-problem" />
-            <Stack.Screen name="privacy-security-help" />
-            <Stack.Screen name="customer-support-flow" />
-            <Stack.Screen name="feedback" />
-            <Stack.Screen name="faqs" />
-          </Stack>
-        </IncomingCallProvider>
-      </ThemeProvider>
-    </LanguageProvider>
-  </QueryClientProvider>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="sign-in" />
+              <Stack.Screen name="forgot-password" />
+              <Stack.Screen name="signup-options" />
+              <Stack.Screen name="email-verification" />
+              <Stack.Screen name="phone-verification" />
+              <Stack.Screen name="otp-verification" />
+              <Stack.Screen name="profile-details" />
+              <Stack.Screen name="birthday-picker" />
+              <Stack.Screen name="gender-selection" />
+              <Stack.Screen name="interests-selection" />
+              <Stack.Screen name="search-friends" />
+              <Stack.Screen name="search-users" />
+              <Stack.Screen name="enable-notifications" />
+              <Stack.Screen name="group-chat" />
+              <Stack.Screen name="group-settings" />
+              <Stack.Screen name="group-admin-settings" />
+              <Stack.Screen name="edit-group-info" />
+              <Stack.Screen name="create-group" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="user-profile" />
+              <Stack.Screen name="notification-settings" />
+              <Stack.Screen name="edit-profile" />
+              <Stack.Screen name="help-support" />
+              <Stack.Screen name="scam-protection" />
+              <Stack.Screen name="report-violations" />
+              <Stack.Screen name="reports" />
+              <Stack.Screen name="safety-notices" />
+              <Stack.Screen name="violations" />
+              <Stack.Screen name="violation-details" />
+              <Stack.Screen name="community-standards" />
+              <Stack.Screen name="contact-us" />
+              <Stack.Screen name="report-problem" />
+              <Stack.Screen name="privacy-security-help" />
+              <Stack.Screen name="customer-support-flow" />
+              <Stack.Screen name="feedback" />
+              <Stack.Screen name="faqs" />
+            </Stack>
+          </IncomingCallProvider>
+        </ThemeProvider>
+      </LanguageProvider>
+    </QueryClientProvider>
   );
 }

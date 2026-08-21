@@ -29,6 +29,10 @@ export default function SignInScreen() {
     router.push('/signup-options');
   };
 
+  const handleForgotPassword = () => {
+    router.push('/forgot-password');
+  };
+
   return (
     <View style={styles.rootContainer}>
       {/* Full-Screen Blush Hearts Background Image */}
@@ -96,7 +100,7 @@ export default function SignInScreen() {
             </View>
 
             {/* Forgot Password Row */}
-            <Pressable style={styles.forgotRow} hitSlop={8}>
+            <Pressable onPress={handleForgotPassword} style={styles.forgotRow} hitSlop={8}>
               <Text style={styles.forgotText}>Forgot password?</Text>
             </Pressable>
 

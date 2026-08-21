@@ -17,7 +17,7 @@ export const translations = {
     // Groups Screen
     groups: 'Groups',
     addGroup: 'Add Group',
-    joinGroup: '+Join Group',
+    joinGroup: 'Join Group',
     gamingGroup: 'Gaming Group',
     allGroups: 'All Groups',
     allGroupsCount: 'All Groups',

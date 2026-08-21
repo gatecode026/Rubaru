@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,8 @@ import { useRouter, Stack } from 'expo-router';
 import QuickActionAvatar from '../components/common/QuickActionAvatar';
 import GroupCard from '../components/common/GroupCard';
 import BottomTabBar from '../components/common/BottomTabBar';
+import GroupFilterModal from '../components/common/GroupFilterModal';
+import { useTheme } from '../theme';
 import { useLanguage } from '../localization/LanguageContext';
 
 const groupsMockData = [
@@ -24,6 +26,7 @@ const groupsMockData = [
     name: 'Faster MJ',
     statusColor: '#34C759',
     adminName: 'RAHUL YADAV',
+    membersCount: '2.4k',
   },
   {
     id: '2',
@@ -32,6 +35,7 @@ const groupsMockData = [
     name: 'Gossip Master',
     statusColor: '#E63956',
     adminName: 'ANAMIKA SAINI',
+    membersCount: '1.8k',
   },
   {
     id: '3',
@@ -40,6 +44,7 @@ const groupsMockData = [
     name: 'Faster MJ',
     statusColor: '#34C759',
     adminName: 'RAHUL YADAV',
+    membersCount: '950',
   },
   {
     id: '4',
@@ -48,6 +53,7 @@ const groupsMockData = [
     name: 'Gossip Master',
     statusColor: '#E63956',
     adminName: 'ANAMIKA SAINI',
+    membersCount: '3.1k',
   },
   {
     id: '5',
@@ -56,6 +62,7 @@ const groupsMockData = [
     name: 'Apex Predators',
     statusColor: '#34C759',
     adminName: 'VIKRAM SINGH',
+    membersCount: '4.2k',
   },
   {
     id: '6',
@@ -64,6 +71,7 @@ const groupsMockData = [
     name: 'Bollywood Charcha',
     statusColor: '#E63956',
     adminName: 'PRIYA SHARMA',
+    membersCount: '5.6k',
   },
   {
     id: '7',
@@ -72,6 +80,7 @@ const groupsMockData = [
     name: 'Valorant Club',
     statusColor: '#34C759',
     adminName: 'ADITYA ROY',
+    membersCount: '1.1k',
   },
   {
     id: '8',
@@ -80,6 +89,7 @@ const groupsMockData = [
     name: 'Coffee & Tea',
     statusColor: '#E63956',
     adminName: 'SNEHA GUPTA',
+    membersCount: '840',
   },
   {
     id: '9',
@@ -88,6 +98,7 @@ const groupsMockData = [
     name: 'PUBG Warriors',
     statusColor: '#34C759',
     adminName: 'KARAN MALHOTRA',
+    membersCount: '3.8k',
   },
   {
     id: '10',
@@ -96,6 +107,7 @@ const groupsMockData = [
     name: 'Campus Confessions',
     statusColor: '#E63956',
     adminName: 'NEHA KAPOOR',
+    membersCount: '2.9k',
   },
   {
     id: '11',
@@ -104,6 +116,7 @@ const groupsMockData = [
     name: 'FIFA Elite',
     statusColor: '#34C759',
     adminName: 'ROHIT MEHTA',
+    membersCount: '1.7k',
   },
   {
     id: '12',
@@ -112,6 +125,7 @@ const groupsMockData = [
     name: 'Midnight Talks',
     statusColor: '#E63956',
     adminName: 'TANYA JOSHI',
+    membersCount: '4.5k',
   },
   {
     id: '13',
@@ -120,6 +134,7 @@ const groupsMockData = [
     name: 'Speed Racers',
     statusColor: '#34C759',
     adminName: 'DEEPAK KUMAR',
+    membersCount: '1.2k',
   },
 ];
 
@@ -127,6 +142,23 @@ export default function GroupsScreen({ isNestedInPager }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
+  const { isDarkMode } = useTheme();
+
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [filterState, setFilterState] = useState({
+    category: 'all',
+    sortBy: 'popular',
+    status: 'all',
+    groupSize: 'any',
+  });
+
+  // Dynamically filter mock data based on category
+  const filteredGroups = groupsMockData.filter((item) => {
+    if (filterState.category === 'all') return true;
+    const cat = filterState.category.toLowerCase();
+    const badge = (item.badgeLabel || '').toLowerCase();
+    return badge.includes(cat);
+  });
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -144,26 +176,29 @@ export default function GroupsScreen({ isNestedInPager }) {
           label={t('addGroup', 'Add Group')}
           imageUri="https://i.pravatar.cc/150?img=12"
           showPlus={true}
-          onPress={() => alert('Add Group tapped')}
+          onPress={() => router.push('/create-group')}
         />
         <QuickActionAvatar
           label={t('gamingGroup', 'Gaming Group')}
           imageUri="https://i.pravatar.cc/150?img=33"
           showPlus={false}
-          onPress={() => alert('Gaming Group tapped')}
+          onPress={() => setFilterState((prev) => ({ ...prev, category: 'gaming' }))}
         />
         <QuickActionAvatar
           label={t('allGroups', 'All Groups')}
           imageUri="https://i.pravatar.cc/150?img=33"
           showPlus={false}
-          onPress={() => alert('All Groups tapped')}
+          onPress={() => setFilterState((prev) => ({ ...prev, category: 'all' }))}
         />
       </View>
 
-      {/* "All Groups 13" Section Title */}
+      {/* "All Groups" Section Title with Count */}
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitleText}>
-          {t('allGroupsCount', 'All Groups')} <Text style={styles.sectionCountText}>13</Text>
+          {t('allGroupsCount', 'All Groups')}{' '}
+          <Text style={[styles.sectionCountText, isDarkMode && styles.sectionCountTextDark]}>
+            {filteredGroups.length}
+          </Text>
         </Text>
       </View>
     </View>
@@ -174,7 +209,7 @@ export default function GroupsScreen({ isNestedInPager }) {
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="dark-content" backgroundColor="#FFF0F3" />
 
-      {/* Main Soft Pink Gradient Background */}
+      {/* Main Soft Pink Gradient Background (Preserved) */}
       <LinearGradient colors={['#FFF0F3', '#FFE3E8', '#FFFFFF']} style={styles.gradientBackground}>
         {/* Scattered faint watermark hearts */}
         <View style={styles.watermarkContainer} pointerEvents="none">
@@ -196,14 +231,18 @@ export default function GroupsScreen({ isNestedInPager }) {
         <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top + 6, 16) }]}>
           <Text style={styles.headerTitleText}>{t('groups', 'Groups')}</Text>
 
-          <TouchableOpacity activeOpacity={0.7} style={styles.circularHeaderButton}>
-            <Ionicons name="options-outline" size={22} color="#000000" />
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => setFilterModalVisible(true)}
+            style={[styles.circularHeaderButton, isDarkMode && styles.circularHeaderButtonDark]}
+          >
+            <Ionicons name="options-outline" size={22} color={isDarkMode ? '#FFFFFF' : '#000000'} />
           </TouchableOpacity>
         </View>
 
         {/* 2-Column Scrollable Groups Grid */}
         <FlatList
-          data={groupsMockData}
+          data={filteredGroups}
           keyExtractor={(item) => item.id}
           numColumns={2}
           columnWrapperStyle={styles.gridColumnWrapper}
@@ -213,6 +252,14 @@ export default function GroupsScreen({ isNestedInPager }) {
           showsVerticalScrollIndicator={false}
         />
       </LinearGradient>
+
+      {/* Filter Bottom Sheet Modal */}
+      <GroupFilterModal
+        visible={filterModalVisible}
+        onClose={() => setFilterModalVisible(false)}
+        onApplyFilters={setFilterState}
+        initialFilters={filterState}
+      />
       {!isNestedInPager && (
         <BottomTabBar
           activeTab="Groups"
@@ -261,6 +308,9 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
+  circularHeaderButtonDark: {
+    backgroundColor: '#1C1C1E',
+  },
   headerTitleText: {
     fontSize: 24,
     fontWeight: '800',
@@ -289,6 +339,9 @@ const styles = StyleSheet.create({
   sectionCountText: {
     color: '#E63956',
     fontWeight: '800',
+  },
+  sectionCountTextDark: {
+    color: '#000000',
   },
   gridColumnWrapper: {
     justifyContent: 'space-between',
