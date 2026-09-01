@@ -46,6 +46,15 @@ import PollResultsModal from '../../src/components/common/PollResultsModal';
 import CreatePollModal from '../../src/components/common/CreatePollModal';
 import ReplyPreviewBar from '../../src/components/common/ReplyPreviewBar';
 import { useTheme } from '../../src/theme';
+import api from '../../src/services/api';
+import { getSocket } from '../../src/services/socket';
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || '';
+function getFullUrl(uri) {
+  if (!uri) return '';
+  if (uri.startsWith('http') || uri.startsWith('file://') || uri.startsWith('content://')) return uri;
+  return `${BASE_URL}${uri}`;
+}
 
 const initialMessages = [
   { id: '1', text: 'Hi ! Rahul', time: '4:56 pm', isSent: true, isRead: true, type: 'text' },
@@ -200,7 +209,10 @@ export default function ChatDetailScreen() {
   const insets = useSafeAreaInsets();
   const { isDarkMode, colors } = useTheme();
   const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState(initialMessages);
+  const [messages, setMessages] = useState([]);
+  const [myUserId, setMyUserId] = useState(null);
+  const [activeChatId, setActiveChatId] = useState(null);
+  const [loadingMsgs, setLoadingMsgs] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -219,8 +231,113 @@ export default function ChatDetailScreen() {
   const timerRef = useRef(null);
   const flatListRef = useRef(null);
 
-  const displayName = params.name || 'Rahul Kumawat';
-  const displayAvatar = params.avatarUrl || 'https://i.pravatar.cc/150?img=11';
+  // id = chatId OR userId depending on entry point
+  const routeId = params.id;
+  const recipientId = params.recipientId; // set when coming from user profile
+  const displayName = params.name || 'User';
+  const displayAvatar = params.avatarUrl ? getFullUrl(params.avatarUrl) : '';
+
+  // Load messages from API
+  useEffect(() => {
+    const loadMessages = async () => {
+      try {
+        // Get my profile to know my userId
+        const meRes = await api.get('/profiles/me');
+        setMyUserId(meRes.data.user || meRes.data._id);
+
+        let chatId = routeId;
+
+        // Fetch chats to determine if routeId is a chatId or a userId
+        const chatsRes = await api.get('/chats');
+        
+        // Check if routeId matches the other participant's userId of any existing chat
+        const existing = chatsRes.data.find(
+          (c) => !c.isGroup && c.otherParticipant?.userId?.toString() === routeId.toString()
+        );
+
+        if (existing) {
+          // If we have an existing chat with this user, resolve to the correct chatId
+          chatId = existing.id;
+        } else {
+          // If not found, check if routeId is already a valid chatId in our list
+          const isChatId = chatsRes.data.some((c) => c.id?.toString() === routeId.toString());
+          if (!isChatId) {
+            // It's a new chat with a user we've never chatted with before
+            chatId = null;
+          }
+        }
+
+        setActiveChatId(chatId);
+
+        if (chatId) {
+          const msgsRes = await api.get(`/chats/${chatId}/messages`);
+          // Map API messages to the format expected by MessageBubble
+          const mapped = msgsRes.data.map((m) => ({
+            id: m.id,
+            type: m.type || 'text',
+            text: m.text || '',
+            attachmentUri: m.attachmentUri ? getFullUrl(m.attachmentUri) : '',
+            time: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+            isSent: m.senderId?.toString() === (meRes.data.user || meRes.data._id)?.toString(),
+            isRead: m.isRead,
+            replyTo: m.replyTo ? {
+              senderName: m.replyTo.senderName || 'User',
+              text: m.replyTo.text || '',
+            } : null,
+          }));
+          setMessages(mapped);
+        }
+      } catch (e) {
+        console.log('[LOAD MESSAGES ERROR]', e.message);
+      } finally {
+        setLoadingMsgs(false);
+      }
+    };
+    loadMessages();
+  }, [routeId, recipientId]);
+
+  // --- SOCKET: Join room + listen for real-time messages ---
+  useEffect(() => {
+    if (!activeChatId) return;
+
+    const socket = getSocket();
+    if (!socket) return;
+
+    // Join the chat room
+    socket.emit('join_chat', activeChatId);
+    console.log('[SOCKET] Joined chat room:', activeChatId);
+
+    const onReceiveMessage = (msg) => {
+      // Only add if not already in list (avoid duplicates from our own optimistic update)
+      setMessages((prev) => {
+        const alreadyExists = prev.some(
+          (m) => m.id === msg.id || (m.isSent && m.text === msg.text && !msg.senderId?.toString().includes(myUserId?.toString()))
+        );
+        if (alreadyExists) return prev;
+        return [
+          ...prev,
+          {
+            id: msg.id,
+            type: msg.type || 'text',
+            text: msg.text || '',
+            attachmentUri: msg.attachmentUri ? getFullUrl(msg.attachmentUri) : '',
+            time: new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+            isSent: msg.senderId?.toString() === myUserId?.toString(),
+            isRead: false,
+            replyTo: msg.replyTo ? { senderName: msg.senderName || 'User', text: msg.replyTo.text || '' } : null,
+          },
+        ];
+      });
+    };
+
+    socket.on('receive_message', onReceiveMessage);
+
+    return () => {
+      socket.off('receive_message', onReceiveMessage);
+      socket.emit('leave_chat', activeChatId);
+      console.log('[SOCKET] Left chat room:', activeChatId);
+    };
+  }, [activeChatId, myUserId]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -246,8 +363,10 @@ export default function ChatDetailScreen() {
     };
   }, []);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (inputText.trim() === '') return;
+    const text = inputText;
+    setInputText('');
 
     const replyData = replyingTo
       ? {
@@ -263,30 +382,162 @@ export default function ChatDetailScreen() {
         }
       : null;
 
+    // Optimistic UI update
+    const tempId = Date.now().toString();
     const newMsg = {
-      id: Date.now().toString(),
+      id: tempId,
       type: 'text',
-      text: inputText,
+      text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
       isSent: true,
       isRead: false,
       replyTo: replyData,
     };
     setMessages((prev) => [...prev, newMsg]);
-    setInputText('');
     setReplyingTo(null);
+
+    // Send via socket if we already have a chatId (fast path)
+    // Otherwise use REST to create the chat first, then join room
+    try {
+      if (activeChatId) {
+        // Emit via socket — server saves to DB and broadcasts to room
+        const socket = getSocket();
+        if (socket && socket.connected) {
+          socket.emit('send_message', {
+            chatId: activeChatId,
+            text,
+            type: 'text',
+            replyTo: replyingTo?.id || undefined,
+          });
+        } else {
+          // Socket not available, fall back to REST
+          await api.post('/chats/message', { chatId: activeChatId, text, type: 'text' });
+        }
+      } else {
+        // First message in a new chat — use REST to create chat
+        const targetRecipientId = recipientId || routeId;
+        const res = await api.post('/chats/message', { recipientId: targetRecipientId, text, type: 'text' });
+        const newChatId = String(res.data.chat);
+        setActiveChatId(newChatId);
+        // Update temp msg id
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...m, id: res.data._id || tempId } : m))
+        );
+      }
+    } catch (e) {
+      console.log('[SEND MESSAGE ERROR]', e.message);
+    }
   };
 
-  const handleSendImage = (uri) => {
-    const newMsg = {
-      id: Date.now().toString(),
-      type: 'image',
-      imageUri: uri,
+  const uploadAttachment = async (uri, type, duration = '') => {
+    if (!uri) {
+      alert(`${type.charAt(0).toUpperCase() + type.slice(1)} is not supported or failed to resolve in this environment.`);
+      return;
+    }
+    const tempId = Date.now().toString();
+    
+    // Add optimistic UI message
+    const tempMsg = {
+      id: tempId,
+      type: type,
+      text: '',
+      attachmentUri: uri, // local preview
+      voiceUri: type === 'voice' ? uri : undefined,
+      duration: type === 'voice' ? duration : undefined,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
       isSent: true,
       isRead: false,
     };
-    setMessages((prev) => [...prev, newMsg]);
+    setMessages((prev) => [...prev, tempMsg]);
+
+    try {
+      // 1. Resolve chatId if activeChatId is null
+      let targetChatId = activeChatId;
+      if (!targetChatId) {
+        // Create chat first with placeholder text to obtain chatId
+        const targetRecipientId = recipientId || routeId;
+        const chatRes = await api.post('/chats/message', {
+          recipientId: targetRecipientId,
+          text: `Sent a ${type}`,
+          type: 'text',
+        });
+        targetChatId = String(chatRes.data.chat);
+        setActiveChatId(targetChatId);
+      }
+
+      // 2. Upload the file
+      const formData = new FormData();
+      formData.append('chatId', targetChatId);
+      formData.append('type', type);
+      
+      const fileExtension = uri.split('.').pop() || (type === 'image' ? 'jpg' : 'm4a');
+      const mimeType = type === 'image' ? 'image/jpeg' : 'audio/m4a';
+
+      let fileToUpload;
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        fileToUpload = new File([blob], `file.${fileExtension}`, { type: mimeType });
+      } else {
+        fileToUpload = {
+          uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+          name: `file.${fileExtension}`,
+          type: mimeType,
+        };
+      }
+
+      formData.append('attachment', fileToUpload);
+
+      const res = await api.post('/chats/message', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      // 3. Update the temporary message in local state with the saved DB message details
+      const dbMsg = res.data;
+      const finalMsg = {
+        id: dbMsg._id || dbMsg.id || tempId,
+        type: type,
+        text: dbMsg.text || '',
+        attachmentUri: getFullUrl(dbMsg.attachmentUri),
+        voiceUri: type === 'voice' ? getFullUrl(dbMsg.attachmentUri) : undefined,
+        duration: type === 'voice' ? duration : undefined,
+        time: new Date(dbMsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+        isSent: true,
+        isRead: false,
+      };
+
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? finalMsg : m))
+      );
+
+      // 4. Relay the final message payload via socket so the other party gets it in real-time
+      const socket = getSocket();
+      if (socket && socket.connected) {
+        socket.emit('relay_message', {
+          chatId: targetChatId,
+          message: {
+            id: dbMsg._id || dbMsg.id,
+            chatId: targetChatId,
+            senderId: myUserId,
+            senderName: displayName,
+            type: type,
+            text: '',
+            attachmentUri: dbMsg.attachmentUri,
+            isRead: false,
+            createdAt: dbMsg.createdAt,
+          },
+        });
+      }
+    } catch (e) {
+      console.log('[ATTACHMENT UPLOAD ERROR]', e.message);
+      // Remove optimistic message on failure
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      alert(`Failed to send ${type}. Please try again.`);
+    }
+  };
+
+  const handleSendImage = (uri) => {
+    uploadAttachment(uri, 'image');
   };
 
   const handleSendSticker = (emoji) => {
@@ -357,16 +608,8 @@ export default function ChatDetailScreen() {
         return `${m}:${s < 10 ? '0' : ''}${s}`;
       };
 
-      const newMsg = {
-        id: Date.now().toString(),
-        type: 'voice',
-        voiceUri: uri,
-        duration: formatTime(recordingTime),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
-        isSent: true,
-        isRead: false,
-      };
-      setMessages((prev) => [...prev, newMsg]);
+      const duration = formatTime(recordingTime);
+      uploadAttachment(uri, 'voice', duration);
     } catch (err) {
       console.error('Failed to stop recording', err);
     }

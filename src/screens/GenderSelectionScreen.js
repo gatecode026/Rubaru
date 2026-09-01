@@ -8,18 +8,30 @@ import {
   Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function GenderSelectionScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const [selectedGender, setSelectedGender] = useState('man');
 
   const handleContinue = () => {
-    router.push('/interests-selection');
+    let genderDbValue = 'Other';
+    if (selectedGender === 'man') genderDbValue = 'Male';
+    else if (selectedGender === 'woman') genderDbValue = 'Female';
+    else if (selectedGender === 'other') genderDbValue = 'More';
+
+    router.push({
+      pathname: '/interests-selection',
+      params: {
+        ...params,
+        gender: genderDbValue,
+      }
+    });
   };
 
   const handleSkip = () => {

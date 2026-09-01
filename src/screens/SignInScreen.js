@@ -7,22 +7,83 @@ import {
   TextInput,
   ImageBackground,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import api from '@services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { connectSocket } from '@services/socket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [activeTab, setActiveTab] = useState('email'); // 'email' | 'phone'
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSignIn = () => {
-    router.replace('/(tabs)');
+  const handleSignIn = async () => {
+    if (activeTab === 'email') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!email || !emailRegex.test(email.trim())) {
+        alert('Please enter a valid email address.');
+        return;
+      }
+    } else {
+      if (!phone || phone.trim().length < 10) {
+        alert('Please enter a valid phone number (minimum 10 digits).');
+        return;
+      }
+    }
+
+    if (!password || password.trim().length < 6) {
+      alert('Please enter your password (minimum 6 characters).');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const payload = { password: password.trim() };
+      if (activeTab === 'email') {
+        payload.email = email.trim().toLowerCase();
+      } else {
+        payload.phone = phone.trim();
+      }
+
+      const response = await api.post('/auth/login', payload);
+      setLoading(false);
+
+      const { token, isProfileSetup } = response.data;
+
+      // Store JWT token
+      await AsyncStorage.setItem('userToken', token);
+
+      // Set headers for all future requests
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+      // Connect socket with the fresh token so real-time events work immediately
+      connectSocket(token);
+
+      if (isProfileSetup) {
+        router.replace('/(tabs)');
+      } else {
+        router.push({
+          pathname: '/profile-details',
+          params: { token }
+        });
+      }
+    } catch (error) {
+      setLoading(false);
+      console.error(error);
+      const errMsg = error.response?.data?.message || 'Invalid email or password. Please try again.';
+      alert(errMsg);
+    }
   };
 
   const handleSignUpLink = () => {
@@ -65,19 +126,51 @@ export default function SignInScreen() {
               Sign in to continue discovering matches{'\n'}and connecting with people.
             </Text>
 
-            {/* Email Input Field Card */}
-            <View style={styles.inputCard}>
-              <Ionicons name="mail-outline" size={22} color="#9CA3AF" style={{ marginRight: 12 }} />
-              <TextInput
-                style={styles.textInput}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Email address"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+            {/* Segmented Tab Selector */}
+            <View style={styles.tabContainer}>
+              <Pressable
+                style={[styles.tabButton, activeTab === 'email' && styles.activeTabButton]}
+                onPress={() => setActiveTab('email')}
+              >
+                <Text style={[styles.tabText, activeTab === 'email' && styles.activeTabText]}>Email</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tabButton, activeTab === 'phone' && styles.activeTabButton]}
+                onPress={() => setActiveTab('phone')}
+              >
+                <Text style={[styles.tabText, activeTab === 'phone' && styles.activeTabText]}>Phone</Text>
+              </Pressable>
             </View>
+
+            {/* Email Input Field Card */}
+            {activeTab === 'email' ? (
+              <View style={styles.inputCard}>
+                <Ionicons name="mail-outline" size={22} color="#9CA3AF" style={{ marginRight: 12 }} />
+                <TextInput
+                  style={styles.textInput}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Email address"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+            ) : (
+              /* Phone Input Field Card */
+              <View style={styles.inputCard}>
+                <Ionicons name="call-outline" size={22} color="#9CA3AF" style={{ marginRight: 12 }} />
+                <TextInput
+                  style={styles.textInput}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="Phone number (e.g. +91...)"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                />
+              </View>
+            )}
 
             {/* Password Input Field Card */}
             <View style={styles.inputCard}>
@@ -106,12 +199,17 @@ export default function SignInScreen() {
 
             {/* Primary Sign In Button */}
             <Pressable
-              onPress={handleSignIn}
-              style={({ pressed }) => [styles.signInButton, pressed && styles.buttonPressed]}
+              onPress={loading ? null : handleSignIn}
+              style={({ pressed }) => [styles.signInButton, (pressed || loading) && styles.buttonPressed]}
               accessibilityRole="button"
               accessibilityLabel="Sign In"
+              disabled={loading}
             >
-              <Text style={styles.signInButtonText}>Sign In</Text>
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.signInButtonText}>Sign In</Text>
+              )}
             </Pressable>
 
             {/* Don't have an account? Sign Up */}
@@ -254,5 +352,38 @@ const styles = StyleSheet.create({
   buttonPressed: {
     opacity: 0.88,
     transform: [{ scale: 0.99 }],
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(243, 244, 246, 0.9)',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 231, 235, 0.5)',
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 11,
+  },
+  activeTabButton: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  activeTabText: {
+    color: '#111827',
+    fontWeight: '700',
   },
 });

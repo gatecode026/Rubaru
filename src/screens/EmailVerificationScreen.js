@@ -7,20 +7,46 @@ import {
   TextInput,
   ImageBackground,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import api from '@services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function EmailVerificationScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleContinue = () => {
-    router.push('/otp-verification');
+  const handleContinue = async () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email.trim())) {
+      alert('Please enter a valid email address.');
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    setLoading(true);
+    try {
+      const response = await api.post('/auth/register-email', { email: cleanEmail });
+      setLoading(false);
+      
+      router.push({
+        pathname: '/otp-verification',
+        params: { email: cleanEmail, otp: response.data.otp }
+      });
+    } catch (error) {
+      setLoading(false);
+      console.error(error);
+      const errMsg = error.response?.data?.message || 'Failed to connect. Please try again.';
+      alert(errMsg);
+    }
   };
 
   return (
@@ -73,12 +99,17 @@ export default function EmailVerificationScreen() {
 
             {/* Primary Continue Button */}
             <Pressable
-              onPress={handleContinue}
-              style={({ pressed }) => [styles.continueButton, pressed && styles.buttonPressed]}
+              onPress={loading ? null : handleContinue}
+              style={({ pressed }) => [styles.continueButton, (pressed || loading) && styles.buttonPressed]}
               accessibilityRole="button"
               accessibilityLabel="Continue to OTP verification"
+              disabled={loading}
             >
-              <Text style={styles.continueButtonText}>Continue</Text>
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.continueButtonText}>Continue</Text>
+              )}
             </Pressable>
           </View>
 

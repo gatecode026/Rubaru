@@ -14,24 +14,30 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import api from '../services/api';
+import { getSocket } from '../services/socket';
+import { v4 as uuidv4 } from 'uuid';
 
 export default function ActiveCallScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
 
-  const contactName = params.contactName || 'Rahul Kumawat';
-  const phoneNumber = params.phoneNumber || '+91 73404 45907';
-  const avatarUri = params.avatarUri || 'https://i.pravatar.cc/150?img=11';
+  const contactName = params.contactName || 'User';
+  const phoneNumber = params.phoneNumber || '';
+  const avatarUri = params.avatarUri || '';
+  const receiverId = params.receiverId || '';
   const initialStatus = params.initialStatus || 'calling';
   const initialCallType = params.callType === 'video';
+  // Stable call session ID for this call
+  const callSessionId = useRef(params.callSessionId || `call_${Date.now()}`).current;
 
-  const [callStatus, setCallStatus] = useState(initialStatus); // 'calling' | 'ringing' | 'connected'
+  const [callStatus, setCallStatus] = useState(initialStatus);
   const [secondsElapsed, setSecondsElapsed] = useState(0);
 
   // In-call toggles
-  const [isVideo, setIsVideo] = useState(initialCallType !== false); // Video Call mode active
-  const [isSpeaker, setIsSpeaker] = useState(true); // Video calls default to speaker on
+  const [isVideo, setIsVideo] = useState(initialCallType !== false);
+  const [isSpeaker, setIsSpeaker] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [hasFilter, setHasFilter] = useState(false);
@@ -41,22 +47,68 @@ export default function ActiveCallScreen() {
 
   const timerRef = useRef(null);
 
+  // --- SOCKET: Outgoing call signaling ---
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    // Only emit call_user for outgoing calls (not when accepted via banner)
+    if (initialStatus !== 'connected' && receiverId) {
+      socket.emit('call_user', {
+        recipientId: receiverId,
+        callType: params.callType || 'voice',
+        callSessionId,
+      });
+      console.log('[SOCKET] Emitting call_user to:', receiverId);
+    }
+
+    // Recipient accepted our call
+    const onCallConnected = ({ callSessionId: sid }) => {
+      if (sid === callSessionId) {
+        console.log('[SOCKET] Call connected!');
+        setCallStatus('connected');
+      }
+    };
+
+    // Recipient declined our call
+    const onCallDeclined = ({ callSessionId: sid }) => {
+      if (sid === callSessionId) {
+        console.log('[SOCKET] Call declined');
+        handleEndCallSocket();
+      }
+    };
+
+    // Remote party hung up
+    const onCallHungUp = ({ callSessionId: sid }) => {
+      if (sid === callSessionId) {
+        console.log('[SOCKET] Remote party hung up');
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.push('/call-logs');
+        }
+      }
+    };
+
+    socket.on('call_connected', onCallConnected);
+    socket.on('call_declined', onCallDeclined);
+    socket.on('call_hungup', onCallHungUp);
+
+    return () => {
+      socket.off('call_connected', onCallConnected);
+      socket.off('call_declined', onCallDeclined);
+      socket.off('call_hungup', onCallHungUp);
+    };
+  }, [receiverId, initialStatus]);
+
   useEffect(() => {
     if (initialStatus === 'connected') {
       setCallStatus('connected');
     } else {
-      const t1 = setTimeout(() => {
-        setCallStatus('ringing');
-      }, 2000);
-
-      const t2 = setTimeout(() => {
-        setCallStatus('connected');
-      }, 4500);
-
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
+      // Fallback timer — auto-connect after 4.5s if socket hasn't connected
+      const t1 = setTimeout(() => { setCallStatus('ringing'); }, 2000);
+      const t2 = setTimeout(() => { setCallStatus('connected'); }, 4500);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     }
   }, [initialStatus]);
 
@@ -79,7 +131,42 @@ export default function ActiveCallScreen() {
     return `${formattedMins}:${formattedSecs}`;
   };
 
-  const handleEndCall = () => {
+  const handleEndCallSocket = () => {
+    // Emit call_ended so the other party hangs up too
+    const socket = getSocket();
+    if (socket && receiverId) {
+      socket.emit('call_ended', { recipientId: receiverId, callSessionId });
+    }
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.push('/call-logs');
+    }
+  };
+
+  const handleEndCall = async () => {
+    // Emit hang-up signal to the other party
+    const socket = getSocket();
+    if (socket && receiverId) {
+      socket.emit('call_ended', { recipientId: receiverId, callSessionId });
+    }
+
+    // Save call log to database
+    if (receiverId) {
+      try {
+        const duration = secondsElapsed > 0
+          ? `${String(Math.floor(secondsElapsed / 60)).padStart(2, '0')}:${String(secondsElapsed % 60).padStart(2, '0')}`
+          : 'missed';
+        await api.post('/calls/logs', {
+          receiverId,
+          callType: callStatus === 'connected' ? 'outgoing' : 'missed',
+          callIconType: params.callType === 'video' ? 'video' : 'voice',
+          duration,
+        });
+      } catch (e) {
+        console.log('[SAVE CALL LOG ERROR]', e.message);
+      }
+    }
     if (router.canGoBack()) {
       router.back();
     } else {

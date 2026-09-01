@@ -9,8 +9,10 @@ import {
   Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { ActivityIndicator } from 'react-native';
+import api from '@services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -33,8 +35,10 @@ const INTERESTS_LIST = [
 
 export default function InterestsSelectionScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const [selectedIds, setSelectedIds] = useState(['shopping', 'run', 'traveling']);
+  const [loading, setLoading] = useState(false);
 
   const toggleInterest = (id) => {
     setSelectedIds((prev) =>
@@ -42,12 +46,94 @@ export default function InterestsSelectionScreen() {
     );
   };
 
+  const saveProfileToDb = async (interestsToSave) => {
+    setLoading(true);
+    try {
+      const displayName = `${params.firstName} ${params.lastName}`;
+      
+      let dobStr = params.dob;
+      let parsedDate = new Date(dobStr);
+      if (isNaN(parsedDate.getTime())) {
+        const cleanStr = dobStr.replace(',', '');
+        parsedDate = new Date(cleanStr);
+        if (isNaN(parsedDate.getTime())) {
+          parsedDate = new Date('1998-01-01');
+        }
+      }
+
+      if (params.token) {
+        api.defaults.headers.common['Authorization'] = `Bearer ${params.token}`;
+      }
+
+      if (params.avatarUri) {
+        // Send as FormData for multipart avatar file setup
+        const formData = new FormData();
+        formData.append('displayName', displayName);
+        formData.append('dateOfBirth', parsedDate.toISOString());
+        formData.append('gender', params.gender || 'Female');
+        formData.append('interests', JSON.stringify(interestsToSave));
+        formData.append('bio', 'Hello, I am new on Rubaru!');
+        formData.append('locationName', params.location || '');
+
+        const localUri = params.avatarUri;
+        const filename = localUri.split('/').pop() || 'avatar.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+        formData.append('avatar', {
+          uri: localUri,
+          name: filename,
+          type,
+        });
+
+        await api.post('/auth/profile-setup', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          transformRequest: (data, headers) => {
+            if (headers && headers.delete) {
+              headers.delete('Content-Type');
+            } else if (headers) {
+              delete headers['Content-Type'];
+            }
+            return data;
+          },
+        });
+      } else {
+        // Send as standard JSON payload
+        const payload = {
+          displayName,
+          dateOfBirth: parsedDate.toISOString(),
+          gender: params.gender || 'Female',
+          interests: interestsToSave,
+          bio: 'Hello, I am new on Rubaru!',
+          locationName: params.location || '',
+        };
+        await api.post('/auth/profile-setup', payload);
+      }
+
+      setLoading(false);
+      router.replace('/(tabs)');
+    } catch (error) {
+      setLoading(false);
+      console.error('[PROFILE SETUP ERROR]', error);
+      const errMsg = error.response?.data?.message || 'Failed to save profile. Please try again.';
+      alert(errMsg);
+    }
+  };
+
   const handleContinue = () => {
-    router.push('/search-friends');
+    if (loading) return;
+    const finalInterests = selectedIds
+      .map(id => INTERESTS_LIST.find(item => item.id === id)?.label)
+      .filter(Boolean);
+    
+    saveProfileToDb(finalInterests);
   };
 
   const handleSkip = () => {
-    router.push('/search-friends');
+    if (loading) return;
+    saveProfileToDb([]);
   };
 
   return (
@@ -122,12 +208,17 @@ export default function InterestsSelectionScreen() {
           {/* Bottom Continue Button */}
           <View style={styles.bottomButtonWrapper}>
             <Pressable
-              onPress={handleContinue}
-              style={({ pressed }) => [styles.continueButton, pressed && styles.buttonPressed]}
+              onPress={loading ? null : handleContinue}
+              style={({ pressed }) => [styles.continueButton, (pressed || loading) && styles.buttonPressed]}
               accessibilityRole="button"
               accessibilityLabel="Continue"
+              disabled={loading}
             >
-              <Text style={styles.continueButtonText}>Continue</Text>
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.continueButtonText}>Continue</Text>
+              )}
             </Pressable>
           </View>
 

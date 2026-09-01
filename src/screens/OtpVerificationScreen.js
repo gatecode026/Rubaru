@@ -8,16 +8,21 @@ import {
   Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import api from '@services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { connectSocket } from '@services/socket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function OtpVerificationScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const [otp, setOtp] = useState(['', '', '', '']);
   const [secondsLeft, setSecondsLeft] = useState(60);
+  const [verifying, setVerifying] = useState(false);
 
   // Countdown Timer Interval
   useEffect(() => {
@@ -37,8 +42,51 @@ export default function OtpVerificationScreen() {
     return `${m}:${s}`;
   };
 
+  const verifyOtpCode = async (otpCodeString) => {
+    setVerifying(true);
+    try {
+      const payload = { otpCode: otpCodeString };
+      if (params.email) {
+        payload.email = params.email;
+      } else {
+        payload.phone = params.phone;
+      }
+
+      const response = await api.post('/auth/verify-otp', payload);
+      
+      setVerifying(false);
+      const { token, isProfileSetup } = response.data;
+      
+      // Store token in local storage
+      await AsyncStorage.setItem('userToken', token);
+      
+      // Configure default header for future requests
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+      // Connect socket so real-time chat and calls work from first session
+      connectSocket(token);
+
+      if (isProfileSetup) {
+        router.replace('/(tabs)');
+      } else {
+        router.push({
+          pathname: '/create-password',
+          params: { token }
+        });
+      }
+    } catch (error) {
+      setVerifying(false);
+      console.error(error);
+      const errMsg = error.response?.data?.message || 'Invalid OTP. Please try again.';
+      alert(errMsg);
+      setOtp(['', '', '', '']);
+    }
+  };
+
   // Handle number pad tap
   const handleKeyPress = (val) => {
+    if (verifying) return;
+    
     const emptyIndex = otp.findIndex((digit) => digit === '');
     if (emptyIndex !== -1) {
       const newOtp = [...otp];
@@ -47,8 +95,9 @@ export default function OtpVerificationScreen() {
 
       // Auto-submit when 4th digit is typed
       if (emptyIndex === 3) {
+        const finalOtp = newOtp.join('');
         setTimeout(() => {
-          router.push('/profile-details');
+          verifyOtpCode(finalOtp);
         }, 250);
       }
     }
@@ -109,6 +158,7 @@ export default function OtpVerificationScreen() {
           {/* Subtitle */}
           <Text style={styles.subtitleText}>
             Type the verification code{'\n'}we've sent you
+            {params.otp ? `\n(Your dummy OTP is: ${params.otp})` : ''}
           </Text>
 
           {/* 4-Digit OTP Grid Boxes */}

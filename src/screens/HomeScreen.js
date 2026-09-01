@@ -11,11 +11,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import StoryAvatar from '../components/common/StoryAvatar';
 import FeedCard from '../components/common/FeedCard';
 import BottomTabBar from '../components/common/BottomTabBar';
 import { usePointsStore } from '../store/pointsStore';
+import api from '../services/api';
 
 const storiesData = [
   { id: '1', name: 'Sapna_Singh', imageUrl: 'https://i.pravatar.cc/150?img=32', isFirst: true },
@@ -77,6 +78,35 @@ export default function HomeScreen({ isNestedInPager }) {
   const flatListRef = React.useRef(null);
   const insets = useSafeAreaInsets();
   const balance = usePointsStore((state) => state.balance);
+  const [profile, setProfile] = React.useState(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let isMounted = true;
+      const fetchMyProfile = async () => {
+        try {
+          const res = await api.get('/profiles/me');
+          if (isMounted && res.data) {
+            setProfile(res.data);
+          }
+        } catch (err) {
+          console.log('[HOME PROFILE FETCH ERROR]', err.message);
+        }
+      };
+      fetchMyProfile();
+      return () => {
+        isMounted = false;
+      };
+    }, [])
+  );
+
+  const getFullUrl = (uri) => {
+    if (!uri) return 'https://i.pravatar.cc/150?img=60';
+    if (uri.startsWith('http') || uri.startsWith('file://') || uri.startsWith('content://')) return uri;
+    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.70:5000/api';
+    const host = apiBase.replace('/api', '');
+    return `${host}${uri}`;
+  };
 
   const renderFixedHeader = () => (
     <View style={[styles.topHeaderContainer, { paddingTop: Math.max(insets.top + 6, 16) }]}>
@@ -86,10 +116,16 @@ export default function HomeScreen({ isNestedInPager }) {
         style={styles.avatarGradientBorder}
         onPress={() => router.push('/user-profile')}
       >
-        <Image
-          source={{ uri: 'https://i.pravatar.cc/150?img=60' }}
-          style={styles.headerAvatarImage}
-        />
+        {(!profile?.avatarUri || profile.avatarUri.includes('pravatar.cc')) ? (
+          <View style={[styles.headerAvatarImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+            <Ionicons name="person" size={20} color="#9CA3AF" />
+          </View>
+        ) : (
+          <Image
+            source={{ uri: getFullUrl(profile.avatarUri) }}
+            style={styles.headerAvatarImage}
+          />
+        )}
       </TouchableOpacity>
 
       {/* Right Action Buttons matching exact reference images */}

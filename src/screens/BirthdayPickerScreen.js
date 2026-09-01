@@ -10,13 +10,14 @@ import {
   Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function BirthdayPickerScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const [selectedYear, setSelectedYear] = useState(1995);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(6); // July (0-indexed)
@@ -61,7 +62,10 @@ export default function BirthdayPickerScreen() {
     const formattedDob = `${selectedDay} ${months[selectedMonthIndex]} ${selectedYear}`;
     router.push({
       pathname: '/profile-details',
-      params: { selectedDob: formattedDob },
+      params: { 
+        ...params,
+        selectedDob: formattedDob 
+      },
     });
   };
 
