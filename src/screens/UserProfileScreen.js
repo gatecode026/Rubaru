@@ -13,6 +13,7 @@ import {
   PanResponder,
   Animated,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -26,9 +27,29 @@ import StatsBar from '../components/common/StatsBar';
 import InfoPill from '../components/common/InfoPill';
 import PhotoThumbnail from '../components/common/PhotoThumbnail';
 import InterestPill from '../components/common/InterestPill';
+import api from '@services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { disconnectSocket } from '@services/socket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_WIDTH = (SCREEN_WIDTH - 60) / 3;
+
+const ALL_INTERESTS = [
+  { id: 'photography', name: 'Photography', icon: 'camera-outline' },
+  { id: 'shopping', name: 'Shopping', icon: 'bag-handle-outline' },
+  { id: 'karaoke', name: 'Karaoke', icon: 'mic-outline' },
+  { id: 'yoga', name: 'Yoga', icon: 'flower-outline' },
+  { id: 'cooking', name: 'Cooking', icon: 'restaurant-outline' },
+  { id: 'tennis', name: 'Tennis', icon: 'tennisball-outline' },
+  { id: 'run', name: 'Run', icon: 'walk-outline' },
+  { id: 'swimming', name: 'Swimming', icon: 'water-outline' },
+  { id: 'art', name: 'Art', icon: 'color-palette-outline' },
+  { id: 'traveling', name: 'Traveling', icon: 'airplane-outline' },
+  { id: 'extreme', name: 'Extreme', icon: 'diamond-outline' },
+  { id: 'music', name: 'Music', icon: 'musical-notes-outline' },
+  { id: 'drink', name: 'Drink', icon: 'wine-outline' },
+  { id: 'videogames', name: 'Video games', icon: 'game-controller-outline' },
+];
 
 export default function UserProfileScreen() {
   const router = useRouter();
@@ -38,8 +59,64 @@ export default function UserProfileScreen() {
   const [activeTab, setActiveTab] = useState('top');
   const [isFollowing, setIsFollowing] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [userReels, setUserReels] = useState([]);
 
   const scrollOffsetRef = useRef(0);
+
+  const fetchProfileData = async () => {
+    try {
+      let response;
+      if (params.userId) {
+        response = await api.get(`/profiles/${params.userId}`);
+      } else {
+        response = await api.get('/profiles/me');
+      }
+      setProfile(response.data);
+      setLoading(false);
+
+      // Also fetch user's reels / short videos
+      try {
+        const reelEndpoint = params.userId
+          ? `/reels/user/${params.userId}`
+          : '/reels/user/me';
+        const reelRes = await api.get(reelEndpoint);
+        setUserReels(reelRes.data || []);
+      } catch (reelErr) {
+        console.log('[FETCH USER REELS ERROR]', reelErr.message);
+      }
+    } catch (error) {
+      console.log('[FETCH PROFILE ERROR]', error.message || error);
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchProfileData();
+    }, [params.userId])
+  );
+
+  const getFullUrl = (uri) => {
+    if (!uri) return 'https://i.pravatar.cc/150?img=60';
+    if (uri.startsWith('http') || uri.startsWith('file://') || uri.startsWith('content://')) return uri;
+    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.70:5000/api';
+    const host = apiBase.replace('/api', '');
+    return `${host}${uri}`;
+  };
+
+  const getAge = (dobString) => {
+    if (!dobString) return 22;
+    const birthDate = new Date(dobString);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
 
   // Swipe-to-dismiss & Tap-to-dismiss for Settings Bottom Sheet Handle
   const handlePanResponder = useRef(
@@ -61,6 +138,7 @@ export default function UserProfileScreen() {
     React.useCallback(() => {
       if (params?.openSettings === 'true') {
         setShowSettingsModal(true);
+        router.setParams({ openSettings: undefined });
       }
     }, [params?.openSettings])
   );
@@ -94,6 +172,14 @@ export default function UserProfileScreen() {
     }
   };
 
+  if (loading) {
+    return (
+      <View style={[styles.rootContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#FF2E63" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.rootContainer}>
       {/* Full-Screen Blush Hearts Background Image */}
@@ -117,7 +203,7 @@ export default function UserProfileScreen() {
             </Pressable>
 
             <Text numberOfLines={1} style={styles.headerTitle}>
-              Geeta Bisht
+              {profile?.displayName || 'Profile'}
             </Text>
 
             {/* 3 Dots Menu Button - Opens Settings Bottom Sheet Sidebar */}
@@ -139,45 +225,73 @@ export default function UserProfileScreen() {
             {/* Avatar Photo Section */}
             <View style={styles.avatarSection}>
               <View style={styles.avatarRingOuter}>
-                <Image
-                  source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=500&q=80' }}
-                  defaultSource={require('@assets/images/onboarding2.jpg')}
-                  style={styles.avatarImage}
-                  resizeMode="cover"
-                />
+                {(!profile?.avatarUri || profile.avatarUri.includes('pravatar.cc')) ? (
+                  <View style={[styles.avatarImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Ionicons name="person-outline" size={36} color="#9CA3AF" />
+                  </View>
+                ) : (
+                  <Image
+                    source={{ uri: getFullUrl(profile.avatarUri) }}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                )}
               </View>
-              <Text style={styles.followersText}>{t('followersCount', '63K Followers')}</Text>
+              <Text style={styles.followersText}>
+                {profile?.followersCount !== undefined ? `${profile.followersCount} Followers` : '0 Followers'}
+              </Text>
             </View>
 
-            {/* Action Buttons Row (Follow, Message, Call) */}
-            <View style={styles.actionRow}>
-              <Pressable
-                onPress={() => setIsFollowing(!isFollowing)}
-                style={({ pressed }) => [
-                  styles.actionPill,
-                  isFollowing && styles.actionPillActive,
-                  pressed && styles.buttonPressed,
-                ]}
-              >
-                <Text style={[styles.actionPillText, isFollowing && styles.actionPillTextActive]}>
-                  {isFollowing ? t('following', 'Following') : t('follow', 'Follow')}
-                </Text>
-              </Pressable>
+            {/* Action Buttons Row (Follow, Message, Call) - Hidden for Own Profile */}
+            {params.userId ? (
+              <View style={styles.actionRow}>
+                <Pressable
+                  onPress={() => setIsFollowing(!isFollowing)}
+                  style={({ pressed }) => [
+                    styles.actionPill,
+                    isFollowing && styles.actionPillActive,
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <Text style={[styles.actionPillText, isFollowing && styles.actionPillTextActive]}>
+                    {isFollowing ? t('following', 'Following') : t('follow', 'Follow')}
+                  </Text>
+                </Pressable>
 
-              <Pressable
-                style={({ pressed }) => [styles.actionPill, pressed && styles.buttonPressed]}
-                onPress={() => router.push('/chats')}
-              >
-                <Text style={styles.actionPillText}>{t('message', 'Message')}</Text>
-              </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.actionPill, pressed && styles.buttonPressed]}
+                  onPress={() => {
+                    // Open or create a private chat with this user
+                    router.push({
+                      pathname: `/chat/${params.userId}`,
+                      params: {
+                        recipientId: params.userId,
+                        name: profile?.displayName || 'User',
+                        avatarUrl: profile?.avatarUri || '',
+                      },
+                    });
+                  }}
+                >
+                  <Text style={styles.actionPillText}>{t('message', 'Message')}</Text>
+                </Pressable>
 
-              <Pressable
-                style={({ pressed }) => [styles.actionPill, pressed && styles.buttonPressed]}
-                onPress={() => router.push('/active-call')}
-              >
-                <Text style={styles.actionPillText}>{t('call', 'Call')}</Text>
-              </Pressable>
-            </View>
+                <Pressable
+                  style={({ pressed }) => [styles.actionPill, pressed && styles.buttonPressed]}
+                  onPress={() => router.push({
+                    pathname: '/active-call',
+                    params: {
+                      contactName: profile?.displayName || 'User',
+                      avatarUri: profile?.avatarUri || '',
+                      callType: 'voice',
+                      receiverId: params.userId,
+                      initialStatus: 'calling',
+                    },
+                  })}
+                >
+                  <Text style={styles.actionPillText}>{t('call', 'Call')}</Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             {/* Tabs Filter Bar Header (Top & About Me options) */}
             <View style={styles.tabsHeaderContainer}>
@@ -196,7 +310,9 @@ export default function UserProfileScreen() {
                   style={styles.tabItem}
                 >
                   <Text style={[styles.tabText, activeTab === 'about' && styles.tabTextActive]}>
-                    {t('aboutMe', 'About Me')}
+                    {params.userId
+                      ? `About ${profile?.displayName?.split(' ')[0] || 'User'}`
+                      : t('aboutMe', 'About Me')}
                   </Text>
                 </Pressable>
               </View>
@@ -223,138 +339,140 @@ export default function UserProfileScreen() {
             </View>
 
             {activeTab === 'top' ? (
-              /* Staggered Masonry Media Grid */
-              <View style={styles.masonryGrid}>
-                {/* Column 1 */}
-                <View style={styles.masonryColumn}>
-                  {/* Card 1: Beach Waves Reel with Play Icon Overlay */}
-                  <View style={[styles.mediaCard, { height: 215 }]}>
-                    <Image
-                      source={{ uri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=400&q=80' }}
-                      defaultSource={require('@assets/images/onboarding3.jpg')}
-                      style={styles.mediaImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.playButtonOverlayCenter}>
-                      <Ionicons name="play" size={15} color="#111827" style={{ marginLeft: 2 }} />
+              /* Dynamic User Reels & Photos Grid */
+              <View style={{ paddingHorizontal: 4, marginTop: 12 }}>
+                {userReels.length === 0 && (!profile?.photos || profile.photos.length === 0) ? (
+                  /* Empty state */
+                  <Pressable
+                    onPress={() => !params.userId && router.push('/add-story')}
+                    style={styles.emptyInterestsContainer}
+                  >
+                    <Ionicons name="videocam-outline" size={20} color="#FF2E63" />
+                    <Text style={styles.emptyInterestsText}>
+                      {params.userId
+                        ? `${profile?.displayName?.split(' ')[0] || 'This user'} hasn't posted anything yet`
+                        : 'No posts yet — tap to add your first short video'}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  /* 3-column masonry grid */
+                  <View style={styles.masonryGrid}>
+                    {/* Column 1 */}
+                    <View style={styles.masonryColumn}>
+                      {[...userReels, ...(profile?.photos || [])]
+                        .filter((_, i) => i % 3 === 0)
+                        .map((item, idx) => {
+                          const isReel = typeof item === 'object' && item.videoUri;
+                          const uri = isReel
+                            ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
+                            : getFullUrl(item);
+                          const cardHeight = idx % 2 === 0 ? 200 : 130;
+                          return (
+                            <Pressable
+                              key={`col1-${idx}`}
+                              onPress={() => isReel && router.push('/reels')}
+                              style={[styles.mediaCard, { height: cardHeight }]}
+                            >
+                              {uri ? (
+                                <Image source={{ uri }} style={styles.mediaImage} resizeMode="cover" />
+                              ) : (
+                                <View style={[styles.mediaImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                                  <Ionicons name="videocam-outline" size={28} color="#9CA3AF" />
+                                </View>
+                              )}
+                              {isReel && (
+                                <View style={styles.playButtonOverlayCenter}>
+                                  <Ionicons name="play" size={15} color="#111827" style={{ marginLeft: 2 }} />
+                                </View>
+                              )}
+                            </Pressable>
+                          );
+                        })}
+                    </View>
+
+                    {/* Column 2 */}
+                    <View style={styles.masonryColumn}>
+                      {[...userReels, ...(profile?.photos || [])]
+                        .filter((_, i) => i % 3 === 1)
+                        .map((item, idx) => {
+                          const isReel = typeof item === 'object' && item.videoUri;
+                          const uri = isReel
+                            ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
+                            : getFullUrl(item);
+                          const cardHeight = idx % 2 === 0 ? 130 : 170;
+                          return (
+                            <Pressable
+                              key={`col2-${idx}`}
+                              onPress={() => isReel && router.push('/reels')}
+                              style={[styles.mediaCard, { height: cardHeight }]}
+                            >
+                              {uri ? (
+                                <Image source={{ uri }} style={styles.mediaImage} resizeMode="cover" />
+                              ) : (
+                                <View style={[styles.mediaImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                                  <Ionicons name="videocam-outline" size={28} color="#9CA3AF" />
+                                </View>
+                              )}
+                              {isReel && (
+                                <View style={styles.playButtonOverlayCenter}>
+                                  <Ionicons name="play" size={15} color="#111827" style={{ marginLeft: 2 }} />
+                                </View>
+                              )}
+                            </Pressable>
+                          );
+                        })}
+                    </View>
+
+                    {/* Column 3 */}
+                    <View style={styles.masonryColumn}>
+                      {[...userReels, ...(profile?.photos || [])]
+                        .filter((_, i) => i % 3 === 2)
+                        .map((item, idx) => {
+                          const isReel = typeof item === 'object' && item.videoUri;
+                          const uri = isReel
+                            ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
+                            : getFullUrl(item);
+                          const cardHeight = idx % 2 === 0 ? 150 : 120;
+                          return (
+                            <Pressable
+                              key={`col3-${idx}`}
+                              onPress={() => isReel && router.push('/reels')}
+                              style={[styles.mediaCard, { height: cardHeight }]}
+                            >
+                              {uri ? (
+                                <Image source={{ uri }} style={styles.mediaImage} resizeMode="cover" />
+                              ) : (
+                                <View style={[styles.mediaImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                                  <Ionicons name="videocam-outline" size={28} color="#9CA3AF" />
+                                </View>
+                              )}
+                              {isReel && (
+                                <View style={styles.playButtonOverlayBottom}>
+                                  <Ionicons name="play" size={15} color="#111827" style={{ marginLeft: 2 }} />
+                                </View>
+                              )}
+                            </Pressable>
+                          );
+                        })}
                     </View>
                   </View>
-
-                  {/* Card 2: Girl in White Top at Night */}
-                  <View style={[styles.mediaCard, { height: 135 }]}>
-                    <Image
-                      source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80' }}
-                      defaultSource={require('@assets/images/onboarding1.jpg')}
-                      style={styles.mediaImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-
-                  {/* Card 3: Girl Portrait */}
-                  <View style={[styles.mediaCard, { height: 100 }]}>
-                    <Image
-                      source={{ uri: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80' }}
-                      defaultSource={require('@assets/images/onboarding2.jpg')}
-                      style={styles.mediaImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-                </View>
-
-                {/* Column 2 */}
-                <View style={styles.masonryColumn}>
-                  {/* Card 1: Blue Jacket Girl */}
-                  <View style={[styles.mediaCard, { height: 130 }]}>
-                    <Image
-                      source={{ uri: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=400&q=80' }}
-                      defaultSource={require('@assets/images/onboarding2.jpg')}
-                      style={styles.mediaImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-
-                  {/* Card 2: Windmill Sky Girl */}
-                  <View style={[styles.mediaCard, { height: 110 }]}>
-                    <Image
-                      source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80' }}
-                      defaultSource={require('@assets/images/onboarding3.jpg')}
-                      style={styles.mediaImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-
-                  {/* Card 3: Yellow Sunglasses Girl */}
-                  <View style={[styles.mediaCard, { height: 135 }]}>
-                    <Image
-                      source={{ uri: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=400&q=80' }}
-                      defaultSource={require('@assets/images/onboarding1.jpg')}
-                      style={styles.mediaImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-
-                  {/* Card 4: Shadow Portrait */}
-                  <View style={[styles.mediaCard, { height: 95 }]}>
-                    <Image
-                      source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80' }}
-                      defaultSource={require('@assets/images/onboarding2.jpg')}
-                      style={styles.mediaImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-                </View>
-
-                {/* Column 3 */}
-                <View style={styles.masonryColumn}>
-                  {/* Card 1: Green Sweater Smile */}
-                  <View style={[styles.mediaCard, { height: 115 }]}>
-                    <Image
-                      source={{ uri: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?auto=format&fit=crop&w=400&q=80' }}
-                      defaultSource={require('@assets/images/onboarding1.jpg')}
-                      style={styles.mediaImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-
-                  {/* Card 2: Laundromat Sitting */}
-                  <View style={[styles.mediaCard, { height: 120 }]}>
-                    <Image
-                      source={{ uri: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=400&q=80' }}
-                      defaultSource={require('@assets/images/onboarding2.jpg')}
-                      style={styles.mediaImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-
-                  {/* Card 3: Tall Outdoor Reel with Play Overlay near Bottom */}
-                  <View style={[styles.mediaCard, { height: 195 }]}>
-                    <Image
-                      source={{ uri: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&w=400&q=80' }}
-                      defaultSource={require('@assets/images/onboarding3.jpg')}
-                      style={styles.mediaImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.playButtonOverlayBottom}>
-                      <Ionicons name="play" size={15} color="#111827" style={{ marginLeft: 2 }} />
-                    </View>
-                  </View>
-                </View>
+                )}
               </View>
             ) : (
               /* Inline About Me Content */
               <View style={styles.aboutMeInlineContainer}>
                 {/* 2. Bio Quote Card */}
                 <QuoteCard
-                  quoteStart="Looking for meaningful connections and "
-                  quoteEmphasis="great conversations."
+                  quoteStart={profile?.bio || 'Hello, I am new on Rubaru!'}
+                  quoteEmphasis=""
                   width={SCREEN_WIDTH - 36}
                 />
 
                 {/* 3. Stats Bar */}
                 <StatsBar
-                  likes="2.5 K"
-                  connections="128"
-                  views="1.2 K"
+                  likes={profile?.followersCount !== undefined ? String(profile.followersCount) : '0'}
+                  connections={profile?.followingCount !== undefined ? String(profile.followingCount) : '0'}
+                  views="0"
                 />
 
                 {/* 4. About Section */}
@@ -367,45 +485,77 @@ export default function UserProfileScreen() {
                     </View>
                   </View>
                   <View style={styles.detailsGrid}>
-                    <InfoPill icon="gift-outline" label="19" />
-                    <InfoPill icon="phone-portrait-outline" label={"5' 6\""} />
-                    <InfoPill icon="location-outline" label="Rambagh" />
-                    <InfoPill icon="home-outline" label="Jaipur" />
-                    <InfoPill icon="briefcase-outline" label="Model" />
-                    <InfoPill icon="school-outline" label="UPES" />
-                    <InfoPill icon="book-outline" label="Hindu" />
+                    <InfoPill icon="gift-outline" label={`${getAge(profile?.dateOfBirth)} Yrs`} />
+                    <InfoPill icon="transgender-outline" label={profile?.gender || 'N/A'} />
+                    <InfoPill icon="location-outline" label={profile?.locationName || 'India'} />
+                    <InfoPill icon="call-outline" label={profile?.user?.phone || 'N/A'}  />
                   </View>
+                  {/* <InfoPill icon="mail-outline" label={profile?.user?.email || 'N/A'} fullWidth /> */}
                 </View>
 
                 {/* 5. Captured Moments Section */}
                 <View style={styles.aboutSectionContainer}>
                   <View style={styles.momentsHeaderRow}>
                     <Text style={styles.aboutSerifTitle}>{t('capturedMoments', 'Captured Moments')}</Text>
-                    <Pressable onPress={() => {}} style={styles.viewAllBtn}>
-                      <Text style={styles.viewAllText}>{t('viewAll', 'View All')}</Text>
-                      <Ionicons name="chevron-forward" size={14} color="#F04452" style={{ marginLeft: 2 }} />
-                    </Pressable>
+                    {!params.userId && (
+                      <Pressable onPress={() => router.push('/edit-profile')} style={styles.viewAllBtn}>
+                        <Text style={styles.viewAllText}>{t('viewAll', 'View All')}</Text>
+                        <Ionicons name="chevron-forward" size={14} color="#F04452" style={{ marginLeft: 2 }} />
+                      </Pressable>
+                    )}
                   </View>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.momentsScrollContent}>
-                    <PhotoThumbnail uri="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80" fallback={require('../assets/images/profile-hero.jpg')} onPress={() => {}} />
-                    <PhotoThumbnail uri="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80" fallback={require('../assets/images/profile-hero.jpg')} onPress={() => {}} />
-                    <PhotoThumbnail uri="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80" fallback={require('../assets/images/profile-hero.jpg')} onPress={() => {}} />
-                    <PhotoThumbnail uri="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80" fallback={require('../assets/images/profile-hero.jpg')} onPress={() => {}} />
-                    <PhotoThumbnail uri="https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=400&q=80" fallback={require('../assets/images/profile-hero.jpg')} onPress={() => {}} />
-                  </ScrollView>
+                  {profile?.photos && profile.photos.length > 0 ? (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.momentsScrollContent}>
+                      {profile.photos.map((photo, index) => (
+                        <PhotoThumbnail
+                          key={index}
+                          uri={getFullUrl(photo)}
+                          fallback={require('@assets/images/onboarding2.jpg')}
+                          onPress={() => { }}
+                        />
+                      ))}
+                    </ScrollView>
+                  ) : (
+                    <Pressable
+                      onPress={() => !params.userId && router.push('/edit-profile')}
+                      style={styles.emptyInterestsContainer}
+                    >
+                      <Ionicons name="image-outline" size={20} color="#FF2E63" />
+                      <Text style={styles.emptyInterestsText}>
+                        {params.userId
+                          ? 'No photos shared yet'
+                          : 'Add photos to showcase your moments'}
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
 
                 {/* 6. Things I Love Section */}
                 <View style={styles.aboutSectionContainer}>
                   <Text style={[styles.aboutSerifTitle, { marginBottom: 14 }]}>{t('thingsILove', 'Things I Love')}</Text>
-                  <View style={styles.interestsWrappedGrid}>
-                    <InterestPill icon="airplane-outline" label="Travel" />
-                    <InterestPill icon="musical-notes-outline" label="Music" />
-                    <InterestPill icon="reader-outline" label="Reading" />
-                    <InterestPill icon="cafe-outline" label="Coffee" />
-                    <InterestPill icon="barbell-outline" label="Fitness" />
-                    <InterestPill icon="color-palette-outline" label="Art" />
-                  </View>
+                  {profile?.interests && profile.interests.length > 0 ? (
+                    <View style={styles.interestsWrappedGrid}>
+                      {profile.interests.map((interest, index) => {
+                        const matchingInterest = ALL_INTERESTS.find(i => i.name.toLowerCase() === interest.toLowerCase());
+                        const icon = matchingInterest ? matchingInterest.icon : 'heart-outline';
+                        return (
+                          <InterestPill key={index} icon={icon} label={interest} />
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Pressable
+                      onPress={() => !params.userId && router.push('/edit-profile')}
+                      style={styles.emptyInterestsContainer}
+                    >
+                      <Ionicons name={params.userId ? 'heart-outline' : 'add-circle-outline'} size={20} color="#FF2E63" />
+                      <Text style={styles.emptyInterestsText}>
+                        {params.userId
+                          ? `${profile?.displayName?.split(' ')[0] || 'This user'} hasn't added interests yet`
+                          : 'Add interests to show what you love'}
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
               </View>
             )}
@@ -489,16 +639,19 @@ export default function UserProfileScreen() {
                 <Ionicons name="time-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                 <Text style={styles.sectionHeaderTitle}>{t('profile', 'Profile')}</Text>
               </View>
-              <Pressable
-                onPress={() => {
-                  setShowSettingsModal(false);
-                  router.push('/edit-profile');
-                }}
-                style={styles.settingItemRow}
-              >
-                <View style={styles.bulletDot} />
-                <Text style={styles.settingItemText}>{t('editProfile', 'Edit Profile')}</Text>
-              </Pressable>
+              {/* Only show Edit Profile when on own profile */}
+              {!params.userId && (
+                <Pressable
+                  onPress={() => {
+                    setShowSettingsModal(false);
+                    router.push('/edit-profile');
+                  }}
+                  style={styles.settingItemRow}
+                >
+                  <View style={styles.bulletDot} />
+                  <Text style={styles.settingItemText}>{t('editProfile', 'Edit Profile')}</Text>
+                </Pressable>
+              )}
 
               {/* Group 2: Quick Links */}
               <View style={[styles.sectionHeaderRow, { marginTop: 18 }]}>
@@ -631,6 +784,26 @@ export default function UserProfileScreen() {
               >
                 <View style={styles.bulletDot} />
                 <Text style={styles.settingItemText}>{t('deleteAccount', 'Delete Account')}</Text>
+              </Pressable>
+
+              {/* Sign Out Option */}
+              <Pressable
+                onPress={async () => {
+                  setShowSettingsModal(false);
+                  try {
+                    await AsyncStorage.removeItem('userToken');
+                    disconnectSocket();
+                    router.replace('/sign-in');
+                  } catch (e) {
+                    console.log('Logout error:', e.message);
+                  }
+                }}
+                style={styles.settingItemRow}
+              >
+                <View style={styles.bulletDot} />
+                <Text style={[styles.settingItemText, { color: '#FF2E63', fontWeight: '700' }]}>
+                  {t('signOut', 'Sign Out')}
+                </Text>
               </Pressable>
 
               {/* Group 6: App Language — Segmented Pill Control */}
@@ -1588,7 +1761,7 @@ const styles = StyleSheet.create({
   },
   aboutMeInlineContainer: {
     paddingHorizontal: 4,
-    marginTop: 18,
+    marginTop: 45,
   },
   aboutSectionContainer: {
     marginBottom: 20,
@@ -1648,5 +1821,23 @@ const styles = StyleSheet.create({
   interestsWrappedGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+  emptyInterestsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'rgba(255, 46, 99, 0.05)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 46, 99, 0.15)',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  emptyInterestsText: {
+    fontSize: 14,
+    color: '#FF2E63',
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });

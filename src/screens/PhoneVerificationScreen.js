@@ -7,21 +7,66 @@ import {
   TextInput,
   ImageBackground,
   Dimensions,
+  ActivityIndicator,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import api from '@services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+const COUNTRIES = [
+  { name: 'India', flag: '🇮🇳', code: '+91', digits: 10, placeholder: 'Enter 10-digit mobile number' },
+  { name: 'United States', flag: '🇺🇸', code: '+1', digits: 10, placeholder: 'Enter 10-digit mobile number' },
+  { name: 'United Kingdom', flag: '🇬🇧', code: '+44', digits: 10, placeholder: 'Enter 10-digit mobile number' },
+  { name: 'Canada', flag: '🇨🇦', code: '+1', digits: 10, placeholder: 'Enter 10-digit mobile number' },
+  { name: 'United Arab Emirates', flag: '🇦🇪', code: '+971', digits: 9, placeholder: 'Enter 9-digit mobile number' },
+  { name: 'Saudi Arabia', flag: '🇸🇦', code: '+966', digits: 9, placeholder: 'Enter 9-digit mobile number' },
+];
+
 export default function PhoneVerificationScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
+  
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [countryCode, setCountryCode] = useState('+91');
+  const [showCountryModal, setShowCountryModal] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleContinue = () => {
-    router.push('/otp-verification');
+  const handleContinue = async () => {
+    // Validate phone number length strictly based on country
+    if (!phoneNumber || phoneNumber.trim().length !== selectedCountry.digits) {
+      alert(`Please enter a valid ${selectedCountry.digits}-digit mobile number for ${selectedCountry.name}.`);
+      return;
+    }
+    
+    const fullPhone = selectedCountry.code + phoneNumber.trim();
+
+    setLoading(true);
+    try {
+      const response = await api.post('/auth/register-phone', { phone: fullPhone });
+      setLoading(false);
+      
+      router.push({
+        pathname: '/otp-verification',
+        params: { phone: fullPhone, otp: response.data.otp }
+      });
+    } catch (error) {
+      setLoading(false);
+      console.error(error);
+      const errMsg = error.response?.data?.message || 'Failed to connect. Please try again.';
+      alert(errMsg);
+    }
+  };
+
+  const handleSelectCountry = (country) => {
+    setSelectedCountry(country);
+    setPhoneNumber(''); // Reset phone input on country change
+    setShowCountryModal(false);
   };
 
   return (
@@ -60,9 +105,12 @@ export default function PhoneVerificationScreen() {
             {/* Phone Number Input Card */}
             <View style={styles.phoneInputContainer}>
               {/* Country Code Dropdown Trigger */}
-              <Pressable style={styles.countryPickerTrigger}>
-                <Text style={styles.flagEmoji}>🇮🇳</Text>
-                <Text style={styles.countryCodeText}>({countryCode})</Text>
+              <Pressable 
+                onPress={() => setShowCountryModal(true)} 
+                style={styles.countryPickerTrigger}
+              >
+                <Text style={styles.flagEmoji}>{selectedCountry.flag}</Text>
+                <Text style={styles.countryCodeText}>({selectedCountry.code})</Text>
                 <Ionicons name="chevron-down" size={14} color="#6B7280" style={{ marginLeft: 4 }} />
               </Pressable>
 
@@ -75,22 +123,61 @@ export default function PhoneVerificationScreen() {
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
                 keyboardType="phone-pad"
-                placeholder="Enter mobile number"
+                placeholder={selectedCountry.placeholder}
                 placeholderTextColor="#9CA3AF"
-                maxLength={15}
+                maxLength={selectedCountry.digits}
               />
             </View>
 
             {/* Continue Button */}
             <Pressable
-              onPress={handleContinue}
-              style={({ pressed }) => [styles.continueButton, pressed && styles.buttonPressed]}
+              onPress={loading ? null : handleContinue}
+              style={({ pressed }) => [styles.continueButton, (pressed || loading) && styles.buttonPressed]}
               accessibilityRole="button"
               accessibilityLabel="Continue"
+              disabled={loading}
             >
-              <Text style={styles.continueButtonText}>Continue</Text>
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.continueButtonText}>Continue</Text>
+              )}
             </Pressable>
           </View>
+
+          {/* Country Selection Modal */}
+          <Modal
+            visible={showCountryModal}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setShowCountryModal(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Select Country</Text>
+                <FlatList
+                  data={COUNTRIES}
+                  keyExtractor={(item) => item.code + item.name}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      style={styles.countryItem}
+                      onPress={() => handleSelectCountry(item)}
+                    >
+                      <Text style={styles.flagEmoji}>{item.flag}</Text>
+                      <Text style={styles.countryItemText}>{item.name}</Text>
+                      <Text style={styles.countryItemCode}>{item.code}</Text>
+                    </Pressable>
+                  )}
+                />
+                <Pressable
+                  style={styles.closeModalButton}
+                  onPress={() => setShowCountryModal(false)}
+                >
+                  <Text style={styles.closeModalButtonText}>Cancel</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
 
         </View>
       </ImageBackground>
@@ -213,5 +300,61 @@ const styles = StyleSheet.create({
   buttonPressed: {
     opacity: 0.88,
     transform: [{ scale: 0.99 }],
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: SCREEN_WIDTH - 64,
+    maxHeight: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  countryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  countryItemText: {
+    fontSize: 16,
+    color: '#111827',
+    fontWeight: '600',
+    marginLeft: 12,
+    flex: 1,
+  },
+  countryItemCode: {
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '700',
+  },
+  closeModalButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  closeModalButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#374151',
   },
 });

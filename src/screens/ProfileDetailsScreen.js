@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -19,14 +20,54 @@ export default function ProfileDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  const [firstName, setFirstName] = useState(params.firstName || '');
+  const [lastName, setLastName] = useState(params.lastName || '');
   const [birthday, setBirthday] = useState('');
+  const [location, setLocation] = useState(params.location || '');
+  const [avatarUri, setAvatarUri] = useState(params.avatarUri || '');
 
   const displayDob = params.selectedDob || birthday || 'Choose birthday date';
 
+  const handlePickAvatar = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      alert("Permission to access camera roll is required!");
+      return;
+    }
+
+    const pickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
+      setAvatarUri(pickerResult.assets[0].uri);
+    }
+  };
+
   const handleConfirm = () => {
-    router.push('/gender-selection');
+    if (!firstName.trim() || !lastName.trim()) {
+      alert('Please enter your first and last name.');
+      return;
+    }
+    if (displayDob === 'Choose birthday date') {
+      alert('Please select your birthday.');
+      return;
+    }
+
+    router.push({
+      pathname: '/gender-selection',
+      params: {
+        ...params,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        dob: displayDob,
+        location: location.trim(),
+        avatarUri,
+      }
+    });
   };
 
   return (
@@ -45,19 +86,19 @@ export default function ProfileDetailsScreen() {
             <Text style={styles.titleText}>Profile details</Text>
 
             {/* Avatar Photo Section with Camera Badge Overlay */}
-            <View style={styles.avatarSection}>
+            <Pressable onPress={handlePickAvatar} style={styles.avatarSection}>
               <View style={styles.avatarWrapper}>
                 <Image
-                  source={require('@assets/images/onboarding2.jpg')}
+                  source={avatarUri ? { uri: avatarUri } : require('@assets/images/onboarding2.jpg')}
                   style={styles.avatarImage}
                   resizeMode="cover"
                 />
               </View>
               {/* Camera Badge Overlay */}
-              <Pressable style={styles.cameraBadge} accessibilityLabel="Upload profile photo">
+              <View style={styles.cameraBadge}>
                 <Ionicons name="camera" size={18} color="#FFFFFF" />
-              </Pressable>
-            </View>
+              </View>
+            </Pressable>
 
             {/* First Name Input Field Card */}
             <View style={styles.inputCard}>
@@ -87,9 +128,31 @@ export default function ProfileDetailsScreen() {
               />
             </View>
 
+            {/* Location Input Field Card */}
+            <View style={styles.inputCard}>
+              <View style={styles.floatingLabelWrapper}>
+                <Text style={styles.floatingLabelText}>Location</Text>
+              </View>
+              <TextInput
+                style={styles.textInput}
+                value={location}
+                onChangeText={setLocation}
+                placeholder="Location (e.g. Jaipur)"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
             {/* Choose Birthday Date Field Card */}
             <Pressable
-              onPress={() => router.push('/birthday-picker')}
+              onPress={() => router.push({
+                pathname: '/birthday-picker',
+                params: {
+                  ...params,
+                  firstName,
+                  lastName,
+                  location,
+                }
+              })}
               style={({ pressed }) => [styles.birthdayCard, pressed && styles.buttonPressed]}
               accessibilityLabel="Choose birthday date"
             >

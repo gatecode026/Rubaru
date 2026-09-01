@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,89 +11,146 @@ import {
   Image,
   TouchableOpacity,
   Keyboard,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import api from '@services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const ALL_USERS = [
-  { id: '1', name: 'Rani', username: 'rani_jaipur', avatar: 'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?auto=compress&cs=tinysrgb&w=800', relation: 'New user' },
-  { id: '2', name: 'Vandana', username: 'vandana_mumbai', avatar: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=800', relation: '4.8 km away' },
-  { id: '3', name: 'Keshav', username: 'keshav_delhi', avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=800', relation: '2.2 km away' },
-  { id: '4', name: 'Meera', username: 'meera_pune', avatar: 'https://images.pexels.com/photos/1462637/pexels-photo-1462637.jpeg?auto=compress&cs=tinysrgb&w=800', relation: '1.2 km away' },
-  { id: '5', name: 'Sapna Singh', username: 'Sapna_Singh', avatar: 'https://i.pravatar.cc/150?img=32', relation: 'Mutual friend' },
-  { id: '6', name: 'Deepika Sharma', username: 'Deepika_Sharma', avatar: 'https://i.pravatar.cc/150?img=47', relation: 'Suggested for you' },
-  { id: '7', name: 'Mahi Rajput', username: 'Mahi_Rajput', avatar: 'https://i.pravatar.cc/150?img=38', relation: 'Suggested for you' },
-  { id: '8', name: 'Sonali Thakur', username: 'Sonali_Thakur', avatar: 'https://i.pravatar.cc/150?img=49', relation: 'Mutual friend' },
-  { id: '9', name: 'Pooja Singh', username: 'Pooja_Singh', avatar: 'https://i.pravatar.cc/150?img=32', relation: 'Active 2h ago' },
-  { id: '10', name: 'Samridhi Vijayvargi', username: 'samridhi_v', avatar: 'https://i.pravatar.cc/150?img=32', relation: 'Active 10m ago' },
-  { id: '11', name: 'Ananya Roy', username: 'Ananya_Roy', avatar: 'https://i.pravatar.cc/150?img=49', relation: 'Suggested for you' },
-  { id: '12', name: 'Kavya Sharma', username: 'Kavya_Sharma', avatar: 'https://i.pravatar.cc/150?img=44', relation: 'Suggested for you' },
-];
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || '';
+function getAvatarUrl(uri) {
+  if (!uri) return '';
+  if (uri.startsWith('http')) return uri;
+  return `${BASE_URL}${uri}`;
+}
 
 export default function SearchUsersScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
-  const [connectedUsers, setConnectedUsers] = useState({});
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const searchInputRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  // Load all users on mount for discovery
+  useEffect(() => {
+    async function loadAll() {
+      try {
+        const res = await api.get('/profiles/all');
+        setUsers(res.data || []);
+      } catch (e) {
+        console.log('[SEARCH USERS] load all error:', e.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadAll();
+  }, []);
+
+  const handleSearch = useCallback((q) => {
+    setSearchQuery(q);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (!q.trim()) {
+      // Show all users when query cleared
+      setLoading(true);
+      debounceRef.current = setTimeout(async () => {
+        try {
+          const res = await api.get('/profiles/all');
+          setUsers(res.data || []);
+        } catch (e) {
+          console.log('[SEARCH USERS] load all error:', e.message);
+        } finally {
+          setLoading(false);
+        }
+      }, 200);
+      return;
+    }
+
+    // Debounce search
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await api.get(`/profiles/search?q=${encodeURIComponent(q.trim())}`);
+        setUsers(res.data || []);
+      } catch (e) {
+        console.log('[SEARCH USERS] search error:', e.message);
+      } finally {
+        setLoading(false);
+      }
+    }, 350);
+  }, []);
 
   const handleClearSearch = () => {
-    setSearchQuery('');
+    handleSearch('');
     searchInputRef.current?.focus();
   };
 
-  const toggleConnect = (userId) => {
-    setConnectedUsers((prev) => ({
-      ...prev,
-      [userId]: !prev[userId],
-    }));
+  const navigateToProfile = (user) => {
+    Keyboard.dismiss();
+    router.push({
+      pathname: '/user-profile',
+      params: { userId: user.userId },
+    });
   };
 
-  const filteredUsers = ALL_USERS.filter(
-    (user) =>
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const renderUserRow = ({ item }) => {
+    const avatarUrl = getAvatarUrl(item.avatarUri);
+    const initials = item.displayName
+      ? item.displayName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+      : '?';
 
-  const isQueryEmpty = searchQuery.trim().length === 0;
-  const listData = isQueryEmpty
-    ? ALL_USERS.slice(4)
-    : filteredUsers;
-
-  const renderSearchItem = ({ item }) => {
-    const isConnected = connectedUsers[item.id];
     return (
-      <View style={styles.userRow}>
-        <View style={styles.userLeft}>
-          <Image source={{ uri: item.avatar }} style={styles.userAvatar} />
-          <View>
-            <Text style={styles.userNameText}>{item.name}</Text>
-            <Text style={styles.userUsernameText}>@{item.username}</Text>
-            <Text style={styles.userRelationText}>{item.relation}</Text>
+      <TouchableOpacity
+        style={styles.userRow}
+        activeOpacity={0.7}
+        onPress={() => navigateToProfile(item)}
+      >
+        {/* Avatar */}
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={styles.userAvatar} />
+        ) : (
+          <View style={[styles.userAvatar, styles.initialsAvatar]}>
+            <Text style={styles.initialsText}>{initials}</Text>
           </View>
+        )}
+
+        {/* Info */}
+        <View style={styles.userInfo}>
+          <Text style={styles.userNameText} numberOfLines={1}>{item.displayName || 'Rubaru User'}</Text>
+          {item.username ? (
+            <Text style={styles.userUsernameText}>@{item.username}</Text>
+          ) : null}
+          {item.locationName ? (
+            <View style={styles.locationRow}>
+              <Ionicons name="location-outline" size={12} color="#8E8E93" />
+              <Text style={styles.userRelationText}>{item.locationName}</Text>
+            </View>
+          ) : item.bio ? (
+            <Text style={styles.userRelationText} numberOfLines={1}>{item.bio}</Text>
+          ) : null}
         </View>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          style={isConnected ? styles.connectedButton : styles.connectButton}
-          onPress={() => toggleConnect(item.id)}
-        >
-          <Text style={isConnected ? styles.connectedText : styles.connectText}>
-            {isConnected ? 'Connected' : 'Connect'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+
+        {/* Arrow */}
+        <Ionicons name="chevron-forward" size={18} color="#C7C7CC" />
+      </TouchableOpacity>
     );
   };
 
   const renderEmptyResults = () => (
     <View style={styles.emptyContainer}>
       <Ionicons name="search-outline" size={48} color="#9CA3AF" style={{ marginBottom: 12 }} />
-      <Text style={styles.emptyTitleText}>No users found</Text>
+      <Text style={styles.emptyTitleText}>
+        {searchQuery.trim() ? 'No users found' : 'No users yet'}
+      </Text>
       <Text style={styles.emptySubtitleText}>
-        We couldn't find any user matching "{searchQuery}"
+        {searchQuery.trim()
+          ? `No user matching "${searchQuery}"`
+          : 'Be the first to invite friends to Rubaru!'}
       </Text>
     </View>
   );
@@ -106,13 +163,10 @@ export default function SearchUsersScreen() {
         resizeMode="cover"
       >
         <View style={[styles.mainWrapper, { paddingTop: Math.max(insets.top + 16, 44), paddingBottom: Math.max(insets.bottom + 16, 32) }]}>
-          
+
           <View style={styles.topHeaderRow}>
             <Pressable
-              onPress={() => {
-                Keyboard.dismiss();
-                router.back();
-              }}
+              onPress={() => { Keyboard.dismiss(); router.back(); }}
               style={({ pressed }) => [styles.backButton, pressed && styles.buttonPressed]}
               hitSlop={12}
               accessibilityLabel="Go back"
@@ -124,37 +178,42 @@ export default function SearchUsersScreen() {
               <Ionicons name="search" size={18} color="#8E8E93" />
               <TextInput
                 ref={searchInputRef}
-                placeholder="Search"
+                placeholder="Search people..."
                 placeholderTextColor="#8E8E93"
                 style={styles.searchInput}
                 value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoFocus={true}
+                onChangeText={handleSearch}
+                autoFocus
                 returnKeyType="search"
+                autoCapitalize="none"
               />
               {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={handleClearSearch} hitSlop={8}>
+                <Pressable onPress={handleClearSearch} hitSlop={8}>
                   <Ionicons name="close-circle" size={18} color="#8E8E93" />
-                </TouchableOpacity>
+                </Pressable>
               )}
             </View>
           </View>
 
-          <FlatList
-            data={listData}
-            keyExtractor={(item) => item.id}
-            renderItem={renderSearchItem}
-            ListHeaderComponent={() => (
-              <Text style={styles.sectionHeaderTitle}>
-                {isQueryEmpty ? 'Suggested for you' : 'Search results'}
-              </Text>
-            )}
-            ListEmptyComponent={renderEmptyResults}
-            contentContainerStyle={styles.listContentContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          />
+          <Text style={styles.sectionLabel}>
+            {searchQuery.trim() ? `Results for "${searchQuery}"` : 'Discover People'}
+          </Text>
 
+          {loading ? (
+            <View style={styles.loaderContainer}>
+              <ActivityIndicator size="large" color="#FF2E63" />
+            </View>
+          ) : (
+            <FlatList
+              data={users}
+              keyExtractor={(item) => String(item.userId)}
+              renderItem={renderUserRow}
+              ListEmptyComponent={renderEmptyResults}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+              keyboardShouldPersistTaps="handled"
+            />
+          )}
         </View>
       </ImageBackground>
     </View>
@@ -162,166 +221,53 @@ export default function SearchUsersScreen() {
 }
 
 const styles = StyleSheet.create({
-  rootContainer: {
-    flex: 1,
-    backgroundColor: '#FFF0F3',
-  },
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  mainWrapper: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
-  topHeaderRow: {
-    width: '100%',
-    height: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(229, 231, 235, 0.8)',
-    marginRight: 12,
-  },
+  rootContainer: { flex: 1 },
+  backgroundImage: { flex: 1, width: SCREEN_WIDTH },
+  mainWrapper: { flex: 1, paddingHorizontal: 20 },
+  topHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  backButton: { padding: 6, marginRight: 8 },
+  buttonPressed: { opacity: 0.6 },
   searchBarContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: 14,
-    height: 44,
     paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(229, 231, 235, 0.8)',
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#111827',
-    paddingHorizontal: 8,
-    paddingVertical: 0,
-    fontWeight: '500',
-  },
-  listContentContainer: {
-    paddingVertical: 8,
-  },
-  sectionHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#111827',
-    marginTop: 8,
-    marginBottom: 16,
-    letterSpacing: -0.2,
-  },
+  searchInput: { flex: 1, fontSize: 15, color: '#111827', padding: 0 },
+  sectionLabel: { fontSize: 13, fontWeight: '600', color: '#6B7280', marginBottom: 8, marginLeft: 2 },
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  listContent: { paddingBottom: 24, flexGrow: 1 },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(229, 231, 235, 0.8)',
+    padding: 12,
+    marginBottom: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
     elevation: 1,
   },
-  userLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 12,
-  },
-  userAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginRight: 12,
-    backgroundColor: '#E5E7EB',
-  },
-  userNameText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  userUsernameText: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 1,
-  },
-  userRelationText: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  connectButton: {
-    backgroundColor: '#111827',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  connectedButton: {
-    backgroundColor: 'rgba(244, 70, 73, 0.1)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(244, 70, 73, 0.25)',
-  },
-  connectText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  connectedText: {
-    color: '#F44649',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyTitleText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  emptySubtitleText: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 32,
-  },
-  buttonPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.99 }],
-  },
+  userAvatar: { width: 50, height: 50, borderRadius: 25, marginRight: 12, backgroundColor: '#E5E7EB' },
+  initialsAvatar: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#A288E3' },
+  initialsText: { color: '#FFFFFF', fontWeight: '700', fontSize: 18 },
+  userInfo: { flex: 1 },
+  userNameText: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 2 },
+  userUsernameText: { fontSize: 13, color: '#6B7280', marginBottom: 2 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  userRelationText: { fontSize: 12, color: '#8E8E93' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
+  emptyTitleText: { fontSize: 17, fontWeight: '700', color: '#374151', marginBottom: 6 },
+  emptySubtitleText: { fontSize: 14, color: '#9CA3AF', textAlign: 'center', maxWidth: '80%' },
 });

@@ -2,11 +2,11 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function InfoPill({ icon, label }) {
+export default function InfoPill({ icon, label, fullWidth }) {
   return (
-    <View style={styles.chipContainer}>
+    <View style={[styles.chipContainer, fullWidth && { width: '100%' }]}>
       <Ionicons name={icon} size={20} color="#F04452" style={styles.icon} />
-      <Text style={styles.labelText}>{label}</Text>
+      <Text numberOfLines={1} style={styles.labelText}>{label}</Text>
     </View>
   );
 }

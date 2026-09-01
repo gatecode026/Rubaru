@@ -14,11 +14,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, Feather, FontAwesome5 } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import PointsUsageIcon from '../components/common/PointsUsageIcon';
 import PointsPackageRow from '../components/common/PointsPackageRow';
 import BottomTabBar from '../components/common/BottomTabBar';
 import { usePointsStore } from '../store/pointsStore';
+import api from '../services/api';
 
 const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
 
@@ -41,6 +42,35 @@ export default function MyPointsScreen() {
   const router = useRouter();
   const scrollViewRef = useRef(null);
   const balance = usePointsStore((state) => state.balance);
+  const [profile, setProfile] = useState(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let isMounted = true;
+      const fetchMyProfile = async () => {
+        try {
+          const res = await api.get('/profiles/me');
+          if (isMounted && res.data) {
+            setProfile(res.data);
+          }
+        } catch (err) {
+          console.log('[POINTS PROFILE FETCH ERROR]', err.message);
+        }
+      };
+      fetchMyProfile();
+      return () => {
+        isMounted = false;
+      };
+    }, [])
+  );
+
+  const getFullUrl = (uri) => {
+    if (!uri) return 'https://i.pravatar.cc/150?img=60';
+    if (uri.startsWith('http') || uri.startsWith('file://') || uri.startsWith('content://')) return uri;
+    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.70:5000/api';
+    const host = apiBase.replace('/api', '');
+    return `${host}${uri}`;
+  };
 
   const handleGetMorePoints = () => {
     router.push('/buy-points');
@@ -64,7 +94,13 @@ export default function MyPointsScreen() {
         {/* Header Row */}
         <View style={styles.headerContainer}>
           <TouchableOpacity activeOpacity={0.8} style={styles.avatarGradientBorder} onPress={() => router.push('/user-profile')}>
-            <Image source={{ uri: 'https://i.pravatar.cc/150?img=60' }} style={styles.headerAvatarImage} />
+            {(!profile?.avatarUri || profile.avatarUri.includes('pravatar.cc')) ? (
+              <View style={[styles.headerAvatarImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                <Ionicons name="person" size={16} color="#9CA3AF" />
+              </View>
+            ) : (
+              <Image source={{ uri: getFullUrl(profile.avatarUri) }} style={styles.headerAvatarImage} />
+            )}
           </TouchableOpacity>
 
           <Text style={styles.headerTitle}>My Points</Text>
