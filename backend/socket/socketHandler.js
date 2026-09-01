@@ -36,6 +36,8 @@ const socketHandler = (io) => {
   io.on('connection', (socket) => {
     const userId = socket.user._id.toString();
     userSocketMap.set(userId, socket.id);
+    socket.join(`user:${userId}`);
+    socket.join(`user_${userId}`);
     console.log(`[SOCKET] User connected: ${userId} (Socket ID: ${socket.id})`);
 
     // --- CHAT ROOMS MANAGEMENT ---

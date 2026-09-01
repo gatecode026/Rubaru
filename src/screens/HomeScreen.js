@@ -17,8 +17,11 @@ import FeedCard from '../components/common/FeedCard';
 import BottomTabBar from '../components/common/BottomTabBar';
 import { usePointsStore } from '../store/pointsStore';
 import api from '../services/api';
+import feedService from '../services/feedService';
+import storyService from '../services/storyService';
+import impressionTracker from '../services/impressionTracker';
 
-const storiesData = [
+const fallbackStories = [
   { id: '1', name: 'Sapna_Singh', imageUrl: 'https://i.pravatar.cc/150?img=32', isFirst: true },
   { id: '2', name: 'Deepika_Sharma', imageUrl: 'https://i.pravatar.cc/150?img=47' },
   { id: '3', name: 'Mahi_Rajput', imageUrl: 'https://i.pravatar.cc/150?img=38' },
@@ -26,7 +29,7 @@ const storiesData = [
   { id: '5', name: 'Pooja_Rana', imageUrl: 'https://i.pravatar.cc/150?img=45' },
 ];
 
-const feedCardsData = [
+const fallbackFeedCards = [
   {
     id: 'feed-1',
     category: 'Travel',
@@ -49,28 +52,6 @@ const feedCardsData = [
     location: 'DELHI, INDIA',
     isLiked: true,
   },
-  {
-    id: 'feed-3',
-    category: 'Music',
-    categoryEmoji: '🎵',
-    imageUri: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=800',
-    caption: 'What song is on repeat for you right now?',
-    userName: 'Sonali_Thakur',
-    userAvatar: 'https://i.pravatar.cc/150?img=49',
-    location: 'MUMBAI, INDIA',
-    isLiked: false,
-  },
-  {
-    id: 'feed-4',
-    category: 'Coffee',
-    categoryEmoji: '☕',
-    imageUri: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=800',
-    caption: 'Morning coffee or evening tea?',
-    userName: 'Deepika_Sharma',
-    userAvatar: 'https://i.pravatar.cc/150?img=47',
-    location: 'BANGALORE, INDIA',
-    isLiked: false,
-  },
 ];
 
 export default function HomeScreen({ isNestedInPager }) {
@@ -79,6 +60,65 @@ export default function HomeScreen({ isNestedInPager }) {
   const insets = useSafeAreaInsets();
   const balance = usePointsStore((state) => state.balance);
   const [profile, setProfile] = React.useState(null);
+  const [feedItems, setFeedItems] = React.useState([]);
+  const [storyTray, setStoryTray] = React.useState([]);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const [nextCursor, setNextCursor] = React.useState(null);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [currentBatchId, setCurrentBatchId] = React.useState(null);
+
+  const viewabilityConfig = React.useRef({
+    itemVisiblePercentThreshold: 50,
+  }).current;
+
+  const onViewableItemsChanged = React.useRef(({ viewableItems }) => {
+    impressionTracker.onViewableItemsChanged(viewableItems, currentBatchId);
+  }).current;
+
+  const fetchFeed = async (isRefresh = false) => {
+    try {
+      if (isRefresh) setRefreshing(true);
+      const [feedRes, trayRes] = await Promise.all([
+        feedService.getConnectedFeed({ limit: 10 }).catch(() => null),
+        storyService.getStoryTray().catch(() => null),
+      ]);
+
+      if (feedRes?.data?.items && Array.isArray(feedRes.data.items)) {
+        setFeedItems(feedRes.data.items);
+        setNextCursor(feedRes.data.pageInfo?.nextCursor || null);
+        setHasMore(Boolean(feedRes.data.pageInfo?.hasMore));
+        if (feedRes.data.feed?.batchId) {
+          setCurrentBatchId(feedRes.data.feed.batchId);
+        }
+      }
+
+      if (trayRes?.data?.groups && Array.isArray(trayRes.data.groups)) {
+        setStoryTray(trayRes.data.groups);
+      }
+    } catch (err) {
+      console.log('[HOME FEED FETCH ERROR]', err.message);
+    } finally {
+      if (isRefresh) setRefreshing(false);
+    }
+  };
+
+  const handleLoadMore = async () => {
+    if (!hasMore || !nextCursor || loadingMore) return;
+    try {
+      setLoadingMore(true);
+      const res = await feedService.getConnectedFeed({ cursor: nextCursor, limit: 10 });
+      if (res?.data?.items && Array.isArray(res.data.items)) {
+        setFeedItems((prev) => [...prev, ...res.data.items]);
+        setNextCursor(res.data.pageInfo?.nextCursor || null);
+        setHasMore(Boolean(res.data.pageInfo?.hasMore));
+      }
+    } catch (err) {
+      console.log('[HOME FEED LOAD MORE ERROR]', err.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   useFocusEffect(
     React.useCallback(() => {
@@ -94,8 +134,10 @@ export default function HomeScreen({ isNestedInPager }) {
         }
       };
       fetchMyProfile();
+      fetchFeed(false);
       return () => {
         isMounted = false;
+        impressionTracker.cleanup();
       };
     }, [])
   );
@@ -205,23 +247,78 @@ export default function HomeScreen({ isNestedInPager }) {
         {/* Single Scrollable Feed (FlatList) */}
         <FlatList
           ref={flatListRef}
-          data={feedCardsData}
-          keyExtractor={(item) => item.id}
+          data={feedItems}
+          keyExtractor={(item) => item.postId || item.id || item._id}
           renderItem={({ item }) => <FeedCard item={item} />}
+          onRefresh={() => fetchFeed(true)}
+          refreshing={refreshing}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          viewabilityConfig={viewabilityConfig}
+          onViewableItemsChanged={onViewableItemsChanged}
+          ListEmptyComponent={
+            !refreshing ? (
+              <View style={styles.emptyFeedContainer}>
+                <Ionicons name="images-outline" size={48} color="#9CA3AF" />
+                <Text style={styles.emptyFeedTitle}>Your feed is quiet</Text>
+                <Text style={styles.emptyFeedSubtitle}>
+                  Follow creators and friends to see their latest posts and photos here.
+                </Text>
+                <TouchableOpacity
+                  style={styles.exploreBtn}
+                  onPress={() => router.push('/search-friends')}
+                >
+                  <Text style={styles.exploreBtnText}>Discover People</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null
+          }
           ListHeaderComponent={
             <>
               {/* Stories Horizontal Row */}
               <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                data={storiesData}
+                data={
+                  storyTray.length > 0
+                    ? storyTray.map((g, idx) => ({
+                        id: g.authorId || String(idx),
+                        name: g.author?.displayName || g.author?.username || 'User',
+                        imageUrl: g.author?.avatarUri || g.previewThumbnail || 'https://i.pravatar.cc/150?img=32',
+                        isFirst: g.author?.isSelf || idx === 0,
+                        hasUnviewed: g.hasUnviewed,
+                        userId: g.authorId,
+                      }))
+                    : [
+                        {
+                          id: 'self_story',
+                          name: 'Your Story',
+                          imageUrl: profile?.avatarUri || 'https://i.pravatar.cc/150?img=60',
+                          isFirst: true,
+                          hasUnviewed: false,
+                        },
+                      ]
+                }
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                   <StoryAvatar
                     name={item.name}
                     imageUrl={item.imageUrl}
                     isFirst={item.isFirst}
-                    onPress={item.isFirst ? () => router.push('/add-story') : () => router.push({ pathname: '/view-story', params: { name: item.name, imageUrl: item.imageUrl } })}
+                    hasUnviewed={item.hasUnviewed}
+                    onPress={
+                      item.isFirst
+                        ? () => router.push('/add-story')
+                        : () =>
+                            router.push({
+                              pathname: '/view-story',
+                              params: {
+                                userId: item.userId,
+                                name: item.name,
+                                imageUrl: item.imageUrl,
+                              },
+                            })
+                    }
                   />
                 )}
                 contentContainerStyle={styles.storiesContentContainer}
@@ -328,5 +425,36 @@ const styles = StyleSheet.create({
   },
   feedContentContainer: {
     paddingBottom: 90,
+  },
+  emptyFeedContainer: {
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyFeedTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 12,
+  },
+  emptyFeedSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 20,
+  },
+  exploreBtn: {
+    marginTop: 18,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    backgroundColor: '#EE3B52',
+    borderRadius: 24,
+  },
+  exploreBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

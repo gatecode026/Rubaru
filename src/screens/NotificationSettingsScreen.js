@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
+import notificationService from '../services/notificationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -37,6 +38,28 @@ export default function NotificationSettingsScreen() {
   const [pauseAll, setPauseAll] = useState(false);
   const [sleepMode, setSleepMode] = useState(false);
   const [messagesOnly, setMessagesOnly] = useState(false);
+
+  useEffect(() => {
+    const fetchPrefs = async () => {
+      try {
+        const res = await notificationService.getPreferences();
+        const data = res.data || res;
+        if (data.pauseAll !== undefined) setPauseAll(Boolean(data.pauseAll));
+      } catch (err) {
+        console.log('[LOAD PREFS ERROR]:', err.message);
+      }
+    };
+    fetchPrefs();
+  }, []);
+
+  const handleTogglePauseAll = async (val) => {
+    setPauseAll(val);
+    try {
+      await notificationService.updatePreferences({ pauseAll: val });
+    } catch (err) {
+      console.log('[UPDATE PAUSE ALL ERROR]:', err.message);
+    }
+  };
 
   // 2. Posts, Stories States
   const [likesOption, setLikesOption] = useState('everyone'); // 'off' | 'profiles' | 'everyone'
@@ -134,7 +157,7 @@ export default function NotificationSettingsScreen() {
                   </View>
                   <Switch
                     value={pauseAll}
-                    onValueChange={setPauseAll}
+                    onValueChange={handleTogglePauseAll}
                     trackColor={switchTrackColor}
                     thumbColor="#FFFFFF"
                   />

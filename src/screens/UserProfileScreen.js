@@ -28,6 +28,7 @@ import InfoPill from '../components/common/InfoPill';
 import PhotoThumbnail from '../components/common/PhotoThumbnail';
 import InterestPill from '../components/common/InterestPill';
 import api from '@services/api';
+import followService from '@services/followService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { disconnectSocket } from '@services/socket';
 
@@ -76,6 +77,17 @@ export default function UserProfileScreen() {
       setProfile(response.data);
       setLoading(false);
 
+      // Check follow status if viewing someone else
+      if (params.userId) {
+        try {
+          const followStatusRes = await followService.getFollowStatus(params.userId);
+          const status = followStatusRes.status || followStatusRes.data?.status;
+          setIsFollowing(status === 'ACCEPTED');
+        } catch (fErr) {
+          console.log('[FETCH FOLLOW STATUS ERROR]', fErr.message);
+        }
+      }
+
       // Also fetch user's reels / short videos
       try {
         const reelEndpoint = params.userId
@@ -89,6 +101,22 @@ export default function UserProfileScreen() {
     } catch (error) {
       console.log('[FETCH PROFILE ERROR]', error.message || error);
       setLoading(false);
+    }
+  };
+
+  const handleFollowToggle = async () => {
+    if (!params.userId) return;
+    const prev = isFollowing;
+    setIsFollowing(!prev);
+    try {
+      if (prev) {
+        await followService.unfollowUser(params.userId);
+      } else {
+        await followService.followUser(params.userId);
+      }
+    } catch (err) {
+      console.log('[FOLLOW TOGGLE ERROR]', err.message);
+      setIsFollowing(prev);
     }
   };
 
@@ -246,7 +274,7 @@ export default function UserProfileScreen() {
             {params.userId ? (
               <View style={styles.actionRow}>
                 <Pressable
-                  onPress={() => setIsFollowing(!isFollowing)}
+                  onPress={handleFollowToggle}
                   style={({ pressed }) => [
                     styles.actionPill,
                     isFollowing && styles.actionPillActive,

@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import interactionService from '../../services/interactionService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -98,6 +99,7 @@ const INITIAL_COMMENTS = [
 export default function PostCommentsModal({
   visible,
   onClose,
+  postId,
   postAuthor = 'Priya Sharma',
   postAuthorAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
   postCaption = 'What is your favorite travel destination?',
@@ -109,6 +111,49 @@ export default function PostCommentsModal({
   const [expandedReplies, setExpandedReplies] = useState({});
   const [filterSort, setFilterSort] = useState('top'); // 'top' | 'newest'
   const scrollViewRef = useRef(null);
+
+  useEffect(() => {
+    if (visible && postId) {
+      const fetchComments = async () => {
+        try {
+          const res = await interactionService.getComments(postId);
+          const items = res.items || res.data?.items || [];
+          if (items.length > 0) {
+            setComments(
+              items.map((c) => ({
+                id: c._id || c.id,
+                user: c.author?.username || 'user',
+                name: c.author?.displayName || 'User',
+                avatar: c.author?.avatarUri || 'https://i.pravatar.cc/150?img=33',
+                isVerified: Boolean(c.author?.isVerified),
+                text: c.text,
+                time: c.createdAt
+                  ? new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : 'Just now',
+                likesCount: c.likesCount || 0,
+                isLiked: Boolean(c.viewerInteractions?.isLiked),
+                replies: (c.replies || []).map((r) => ({
+                  id: r._id || r.id,
+                  user: r.author?.username || 'user',
+                  name: r.author?.displayName || 'User',
+                  avatar: r.author?.avatarUri || 'https://i.pravatar.cc/150?img=33',
+                  text: r.text,
+                  time: r.createdAt
+                    ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : 'Just now',
+                  likesCount: r.likesCount || 0,
+                  isLiked: Boolean(r.viewerInteractions?.isLiked),
+                })),
+              }))
+            );
+          }
+        } catch (err) {
+          console.log('[FETCH COMMENTS ERROR]:', err.message);
+        }
+      };
+      fetchComments();
+    }
+  }, [visible, postId]);
 
   // Swipe-down-to-dismiss PanResponder
   const panResponder = useRef(
@@ -124,7 +169,7 @@ export default function PostCommentsModal({
   ).current;
 
   // Toggle Like on Comment
-  const toggleLikeComment = (commentId) => {
+  const toggleLikeComment = async (commentId) => {
     setComments((prev) =>
       prev.map((c) => {
         if (c.id === commentId) {
@@ -138,10 +183,15 @@ export default function PostCommentsModal({
         return c;
       })
     );
+    try {
+      await interactionService.toggleCommentLike(commentId);
+    } catch (err) {
+      console.log('[COMMENT LIKE TOGGLE ERROR]:', err.message);
+    }
   };
 
   // Toggle Like on Reply
-  const toggleLikeReply = (commentId, replyId) => {
+  const toggleLikeReply = async (commentId, replyId) => {
     setComments((prev) =>
       prev.map((c) => {
         if (c.id === commentId) {
@@ -161,6 +211,11 @@ export default function PostCommentsModal({
         return c;
       })
     );
+    try {
+      await interactionService.toggleCommentLike(replyId);
+    } catch (err) {
+      console.log('[REPLY LIKE TOGGLE ERROR]:', err.message);
+    }
   };
 
   // Toggle expand/collapse replies
@@ -172,24 +227,27 @@ export default function PostCommentsModal({
   };
 
   // Handle Post Comment or Reply
-  const handleSendComment = () => {
+  const handleSendComment = async () => {
     if (!inputText.trim()) return;
+    const textToSend = inputText.trim();
+    setInputText('');
+    const targetParentId = replyingTo?.id || null;
 
     if (replyingTo) {
       // Adding as reply
+      const newReply = {
+        id: `r_${Date.now()}`,
+        user: 'you',
+        name: 'You',
+        avatar: 'https://i.pravatar.cc/150?img=60',
+        text: `@${replyingTo.user} ${textToSend}`,
+        time: 'Just now',
+        likesCount: 0,
+        isLiked: false,
+      };
       setComments((prev) =>
         prev.map((c) => {
           if (c.id === replyingTo.id) {
-            const newReply = {
-              id: `r_${Date.now()}`,
-              user: 'you',
-              name: 'You',
-              avatar: 'https://i.pravatar.cc/150?img=60',
-              text: `@${replyingTo.user} ${inputText.trim()}`,
-              time: 'Just now',
-              likesCount: 0,
-              isLiked: false,
-            };
             return {
               ...c,
               replies: [...c.replies, newReply],
@@ -198,7 +256,6 @@ export default function PostCommentsModal({
           return c;
         })
       );
-      // Auto expand replies for that comment
       setExpandedReplies((prev) => ({
         ...prev,
         [replyingTo.id]: true,
@@ -212,7 +269,7 @@ export default function PostCommentsModal({
         name: 'You',
         avatar: 'https://i.pravatar.cc/150?img=60',
         isVerified: false,
-        text: inputText.trim(),
+        text: textToSend,
         time: 'Just now',
         likesCount: 0,
         isLiked: false,
@@ -221,7 +278,13 @@ export default function PostCommentsModal({
       setComments((prev) => [newComment, ...prev]);
     }
 
-    setInputText('');
+    if (postId) {
+      try {
+        await interactionService.createComment(postId, textToSend, targetParentId);
+      } catch (err) {
+        console.log('[CREATE COMMENT API ERROR]:', err.message);
+      }
+    }
   };
 
   const handleEmojiPress = (emoji) => {

@@ -1,160 +1,187 @@
-const Reel = require('../models/Reel');
-const Profile = require('../models/Profile');
-const Notification = require('../models/Notification');
+const reelService = require('../services/reelService');
 
-// @desc    Upload a new Reel
-// @route   POST /api/reels/upload
+// @desc    Create a Reel
+// @route   POST /v1/reels
 // @access  Private
 const createReel = async (req, res) => {
-  const { caption, category, location } = req.body;
-
-  if (!req.file) {
-    return res.status(400).json({ message: 'Please upload a video file' });
-  }
-
   try {
-    const videoUri = `/uploads/videos/${req.file.filename}`;
-
-    const reel = await Reel.create({
-      user: req.user._id,
-      videoUri,
-      caption: caption || '',
-      category: category || 'General',
-      location: location || '',
+    const authorId = req.user._id;
+    const result = await reelService.createReel(authorId, req.body);
+    return res.status(201).json({
+      success: true,
+      data: result,
     });
-
-    res.status(201).json(reel);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      code: error.code || 'REEL_CREATION_FAILED',
+      message: error.message,
+    });
   }
 };
 
-// @desc    Get Reels Feed (all reels or by category)
-// @route   GET /api/reels
-// @access  Private
-const getReels = async (req, res) => {
-  const { category, page = 1, limit = 10 } = req.query;
-
+// @desc    Get Single Reel
+// @route   GET /v1/reels/:reelId
+// @access  Private / Public
+const getReelById = async (req, res) => {
   try {
-    const query = {};
-    if (category) {
-      query.category = category;
-    }
-
-    const skipIndex = (page - 1) * limit;
-
-    // Find reels, populated with user info
-    const reels = await Reel.find(query)
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip(skipIndex)
-      .populate('user', 'email');
-
-    // Build rich reels objects matching frontend ReelItem expectancies
-    const populatedReels = await Promise.all(
-      reels.map(async (reel) => {
-        const creatorProfile = await Profile.findOne({ user: reel.user._id });
-        const isLiked = reel.likes.includes(req.user._id);
-
-        return {
-          id: reel._id,
-          videoUri: reel.videoUri,
-          caption: reel.caption,
-          category: reel.category,
-          location: reel.location,
-          likesCount: reel.likes.length,
-          isLiked: isLiked,
-          userName: creatorProfile ? creatorProfile.displayName : 'Rubaru User',
-          userAvatar: creatorProfile ? creatorProfile.avatarUri : 'https://i.pravatar.cc/150?img=60',
-          sharesCount: reel.sharesCount,
-          commentsCount: reel.commentsCount,
-          createdAt: reel.createdAt,
-        };
-      })
-    );
-
-    res.status(200).json(populatedReels);
+    const viewerId = req.user?._id;
+    const { reelId } = req.params;
+    const result = await reelService.getReelById(viewerId, reelId);
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      code: error.code || 'REEL_FETCH_FAILED',
+      message: error.message,
+    });
   }
 };
 
-// @desc    Like / Unlike a Reel
-// @route   POST /api/reels/:id/like
-// @access  Private
-const likeReel = async (req, res) => {
-  try {
-    const reel = await Reel.findById(req.params.id);
-    if (!reel) {
-      return res.status(404).json({ message: 'Reel not found' });
-    }
-
-    const currentUserId = req.user._id;
-    const isLiked = reel.likes.includes(currentUserId);
-
-    if (isLiked) {
-      // Unlike
-      reel.likes = reel.likes.filter(id => id.toString() !== currentUserId.toString());
-      await reel.save();
-
-      res.status(200).json({ isLiked: false, likesCount: reel.likes.length });
-    } else {
-      // Like
-      reel.likes.push(currentUserId);
-      await reel.save();
-
-      // Trigger notification if liker is not the owner
-      if (reel.user.toString() !== currentUserId.toString()) {
-        const currentProfile = await Profile.findOne({ user: currentUserId });
-        
-        await Notification.create({
-          recipient: reel.user,
-          sender: currentUserId,
-          type: 'like',
-          message: `${currentProfile ? currentProfile.displayName : 'Someone'} liked your short video.`,
-          relatedReel: reel._id,
-        });
-      }
-
-      res.status(200).json({ isLiked: true, likesCount: reel.likes.length });
-    }
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// @desc    Get Reels by user
-// @route   GET /api/reels/user/:userId
+// @desc    Get User Reels
+// @route   GET /v1/users/:userId/reels
 // @access  Private
 const getUserReels = async (req, res) => {
   try {
-    const userId = req.params.userId || req.user._id;
-    const reels = await Reel.find({ user: userId })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    const result = reels.map((reel) => ({
-      id: reel._id,
-      videoUri: reel.videoUri,
-      thumbnailUri: reel.thumbnailUri || '',
-      caption: reel.caption,
-      category: reel.category,
-      likesCount: reel.likes ? reel.likes.length : 0,
-      isLiked: reel.likes ? reel.likes.map(String).includes(String(req.user._id)) : false,
-      sharesCount: reel.sharesCount,
-      commentsCount: reel.commentsCount,
-      createdAt: reel.createdAt,
-    }));
-
-    res.status(200).json(result);
+    const viewerId = req.user?._id;
+    const { userId } = req.params;
+    const { cursor, limit } = req.query;
+    const result = await reelService.getUserReels(viewerId, userId, { cursor, limit });
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      code: error.code || 'USER_REELS_FAILED',
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Get Connected Chronological Reels Feed
+// @route   GET /v1/reels/feed
+// @access  Private
+const getConnectedReelsFeed = async (req, res) => {
+  try {
+    const viewerId = req.user._id;
+    const { cursor, limit } = req.query;
+    const result = await reelService.getConnectedReelsFeed(viewerId, { cursor, limit });
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      code: error.code || 'REELS_FEED_FAILED',
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Record Reel Playback Events
+// @route   POST /v1/reels/playback-events
+// @access  Private
+const recordPlaybackEvents = async (req, res) => {
+  try {
+    const viewerId = req.user._id;
+    const result = await reelService.recordPlaybackEvents(viewerId, req.body);
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      code: error.code || 'PLAYBACK_EVENTS_FAILED',
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Delete Reel
+// @route   DELETE /v1/reels/:reelId
+// @access  Private
+const deleteReel = async (req, res) => {
+  try {
+    const viewerId = req.user._id;
+    const { reelId } = req.params;
+    const result = await reelService.deleteReel(viewerId, reelId);
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      code: error.code || 'REEL_DELETE_FAILED',
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Archive Reel
+// @route   POST /v1/reels/:reelId/archive
+// @access  Private
+const archiveReel = async (req, res) => {
+  try {
+    const viewerId = req.user._id;
+    const { reelId } = req.params;
+    const result = await reelService.archiveReel(viewerId, reelId);
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      code: error.code || 'REEL_ARCHIVE_FAILED',
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Unarchive Reel
+// @route   POST /v1/reels/:reelId/unarchive
+// @access  Private
+const unarchiveReel = async (req, res) => {
+  try {
+    const viewerId = req.user._id;
+    const { reelId } = req.params;
+    const result = await reelService.unarchiveReel(viewerId, reelId);
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      code: error.code || 'REEL_UNARCHIVE_FAILED',
+      message: error.message,
+    });
   }
 };
 
 module.exports = {
   createReel,
-  getReels,
-  likeReel,
+  getReelById,
   getUserReels,
+  getConnectedReelsFeed,
+  recordPlaybackEvents,
+  deleteReel,
+  archiveReel,
+  unarchiveReel,
 };

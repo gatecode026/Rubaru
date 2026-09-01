@@ -13,6 +13,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import PostCommentsModal from './PostCommentsModal';
+import interactionService from '../../services/interactionService';
+import safetyService from '../../services/safetyService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 32;
@@ -24,7 +26,18 @@ export default function FeedCard({ item }) {
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
-  const { category, categoryEmoji, imageUri, caption, userName, userAvatar, location } = item;
+  const postId = item.postId || item.id;
+  const category = item.category || 'Lifestyle';
+  const categoryEmoji = item.categoryEmoji || '✨';
+  const imageUri =
+    item.imageUri ||
+    item.mediaItems?.[0]?.variants?.[0]?.url ||
+    item.mediaItems?.[0]?.thumbnail?.url ||
+    'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?auto=compress&cs=tinysrgb&w=800';
+  const caption = item.caption || '';
+  const userName = item.userName || item.author?.displayName || item.author?.username || 'Rubaru User';
+  const userAvatar = item.userAvatar || item.author?.avatarUri || 'https://i.pravatar.cc/150?img=32';
+  const location = item.location || '';
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -38,9 +51,29 @@ export default function FeedCard({ item }) {
     showToast('✨ Marked as Interested! We’ll show more posts like this.');
   };
 
-  const handleNotInterested = () => {
+  const handleNotInterested = async () => {
     setMenuVisible(false);
     showToast('👍 Not-Interested recorded. We’ll show fewer posts like this.');
+    if (postId) {
+      try {
+        await interactionService.recordFeedback(postId, 'NOT_INTERESTED');
+      } catch (err) {
+        console.log('[NOT INTERESTED ERROR]:', err.message);
+      }
+    }
+  };
+
+  const handleLikeToggle = async () => {
+    const prev = isLiked;
+    setIsLiked(!prev);
+    if (postId) {
+      try {
+        await interactionService.toggleLike(postId, 'POST');
+      } catch (err) {
+        console.log('[LIKE TOGGLE ERROR]:', err.message);
+        setIsLiked(prev);
+      }
+    }
   };
 
   const handleReport = () => {
@@ -76,7 +109,7 @@ export default function FeedCard({ item }) {
               isLiked ? styles.likedBtn : styles.unlikedBtn,
             ]}
             activeOpacity={0.8}
-            onPress={() => setIsLiked(!isLiked)}
+            onPress={handleLikeToggle}
           >
             <Ionicons
               name="thumbs-up"
@@ -219,6 +252,7 @@ export default function FeedCard({ item }) {
       <PostCommentsModal
         visible={commentsVisible}
         onClose={() => setCommentsVisible(false)}
+        postId={postId}
         postAuthor={userName}
         postAuthorAvatar={userAvatar}
         postCaption={caption}
