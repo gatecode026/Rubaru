@@ -209,11 +209,11 @@ const profileSetup = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: 'User not found'});
     }
 
     let parsedInterests = [];
-    if (interests) {
+    if (interests) {         
       parsedInterests = typeof interests === 'string' ? JSON.parse(interests) : interests;
     }
 
