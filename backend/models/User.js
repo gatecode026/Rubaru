@@ -35,6 +35,16 @@ const UserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    accountStatus: {
+      type: String,
+      enum: ['ACTIVE', 'SUSPENDED', 'BANNED', 'DELETED'],
+      default: 'ACTIVE',
+      index: true,
+    },
+    isAgeVerified: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

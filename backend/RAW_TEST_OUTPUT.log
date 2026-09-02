@@ -1,0 +1,1523 @@
+
+--- [START OF TEST OUTPUT: test/model_level_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU DATING CORE MODEL-LEVEL TEST SUITE           
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- 1. DatingPreference Model Tests ---
+✅ [PASS] Valid DatingPreference passes validation
+✅ [PASS] Invalid age range (min > max) is rejected by schema validator
+✅ [PASS] Distance > 500 km is rejected
+
+--- 2. UserLocation Model Tests ---
+✅ [PASS] Valid GeoJSON Point passes validation
+✅ [PASS] Out-of-bounds coordinates (Lat > 90) rejected by validator
+✅ [PASS] 2dsphere geospatial index is registered on UserLocation schema
+
+--- 3. ProfileImpression Model Tests ---
+✅ [PASS] Valid ProfileImpression passes validation
+✅ [PASS] Self-impression (viewer === candidate) is rejected
+
+--- 4. DatingInteraction Model Tests ---
+✅ [PASS] Valid DatingInteraction (LIKE) passes validation
+✅ [PASS] Self-interaction (actor === target) is rejected
+✅ [PASS] Like comments exceeding 280 characters are rejected
+
+--- 5. Match Model & Canonical Ordering Tests ---
+✅ [PASS] Match model deterministically sorts user1 and user2 canonically
+✅ [PASS] Canonical pair correctly formatted: 6a96c3f7e9ef36c9eb4f15a5:6a96c3f7e9ef36c9eb4f15a6
+✅ [PASS] Self-matches are strictly prohibited and rejected
+
+--- 6. RecommendationBatch & OutboxEvent Tests ---
+✅ [PASS] Valid RecommendationBatch passes validation
+✅ [PASS] Valid OutboxEvent passes validation
+
+--- 7. Block & Report Model Tests ---
+✅ [PASS] Self-blocking is rejected
+✅ [PASS] Self-reporting is rejected
+
+===========================================================
+MODEL TESTS COMPLETED: 18 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/model_level_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/preference_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+      RUBARU DATING PREFERENCES INTEGRATION TEST SUITE     
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. Preference Service Tests ---
+✅ [PASS] Initial getPreferences returns version 1 defaults
+✅ [PASS] Initial minimumAge is 21
+✅ [PASS] Initial maximumAge is 35
+✅ [PASS] Gender preference dealbreaker is true
+✅ [PASS] Meaningful partial update increments version to 2
+✅ [PASS] Minimum age successfully updated to 23
+✅ [PASS] Maximum age successfully updated to 32
+✅ [PASS] Maximum distance successfully updated to 40 km
+✅ [PASS] No-op update retains version 2 without unnecessary increment
+✅ [PASS] Invalid age range (min > max) throws INVALID_AGE_RANGE
+✅ [PASS] Invalid distance (> 500 km) throws INVALID_DISTANCE
+✅ [PASS] Invalid gender enum throws INVALID_PREFERENCE_VALUE
+✅ [PASS] Stale expectedVersion throws PREFERENCE_VERSION_CONFLICT (409)
+✅ [PASS] Conflict returns HTTP 409 status code
+
+--- 2. HTTP REST API Endpoint Tests ---
+✅ [PASS] Unauthenticated GET /v1/dating/preferences returns 401
+✅ [PASS] Unauthenticated PATCH /v1/dating/preferences returns 401
+✅ [PASS] Authenticated GET /v1/dating/preferences returns 200 OK
+✅ [PASS] Response contains success: true envelope
+✅ [PASS] Response returns current version 2
+✅ [PASS] Database internal _id is excluded from DTO
+✅ [PASS] Authenticated PATCH /v1/dating/preferences returns 200 OK
+✅ [PASS] PATCH increments version from 2 to 3
+✅ [PASS] Normalized "30 km" string to 30 integer
+✅ [PASS] Updated dealbreaker distance to false
+✅ [PASS] Invalid age range in PATCH returns 400 Bad Request
+✅ [PASS] Error response returns code INVALID_AGE_RANGE
+✅ [PASS] Version mismatch in PATCH returns 409 Conflict
+✅ [PASS] Error response returns code PREFERENCE_VERSION_CONFLICT
+
+===========================================================
+PREFERENCE TESTS COMPLETED: 28 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/preference_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/location_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU PROTECTED LOCATION INTEGRATION TEST SUITE    
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- 1. Math & Distance Label Unit Tests ---
+✅ [PASS] Haversine distance calculated accurately (1543m)
+✅ [PASS] Distance < 1 km formatted
+✅ [PASS] Distance 3.2 km formatted
+✅ [PASS] Distance 8.5 km formatted
+✅ [PASS] Distance 15 km formatted
+✅ [PASS] Distance 45 km formatted
+✅ [PASS] hideDistance returns "Nearby"
+
+--- 2. Location Validation & Service Tests ---
+✅ [PASS] First location update status is CURRENT
+✅ [PASS] First location sets locationVersion to 1
+✅ [PASS] First location marks isSignificantMovement as true
+✅ [PASS] Response contains zero coordinate fields
+✅ [PASS] Insignificant movement (< 500m) flagged as false
+✅ [PASS] Insignificant movement does not increment locationVersion
+✅ [PASS] Significant movement (>= 500m) flagged as true
+✅ [PASS] Significant movement increments locationVersion to 2
+✅ [PASS] Retry with same requestId does not increment version
+✅ [PASS] Latitude > 90 throws INVALID_LATITUDE
+✅ [PASS] Longitude < -180 throws INVALID_LONGITUDE
+✅ [PASS] Accuracy > 2000m throws INVALID_LOCATION_ACCURACY
+✅ [PASS] CapturedAt > 60 mins old throws LOCATION_UPDATE_TOO_OLD
+
+--- 3. Geospatial Index & Query Tests ---
+✅ [PASS] Nearby query successfully finds User B within 10 km
+✅ [PASS] User B distance within 10 km (1.6 km)
+✅ [PASS] Nearby query results contain no raw coordinates
+✅ [PASS] Tight 1 km query correctly excludes distant User B
+
+--- 4. HTTP REST API Endpoint Tests ---
+✅ [PASS] Unauthenticated PUT /v1/dating/location returns 401
+✅ [PASS] Authenticated PUT /v1/dating/location returns 200 OK
+✅ [PASS] Response has success: true envelope
+✅ [PASS] Response confirms locationStatus: CURRENT
+✅ [PASS] Response is privacy-safe (zero coordinates returned)
+✅ [PASS] Attempting to spoof another user ID in body returns 403 Forbidden
+✅ [PASS] Returns error code UNAUTHORIZED_USER_ID
+
+===========================================================
+LOCATION TESTS COMPLETED: 31 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/location_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/eligibility_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU CANDIDATE ELIGIBILITY POLICY TEST SUITE      
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- 1. Self & Account Status Unit Tests ---
+✅ [PASS] Self evaluation is not eligible
+✅ [PASS] Self evaluation returns SELF reason
+✅ [PASS] Inactive viewer excluded
+✅ [PASS] Suspended candidate excluded
+
+--- 2. Mutual Gender Compatibility Tests ---
+✅ [PASS] Mutually compatible heterosexual pair is eligible
+✅ [PASS] No hard exclusions for compatible pair
+✅ [PASS] Gender incompatibility in one direction causes hard exclusion
+✅ [PASS] Returns GENDER_NOT_MUTUALLY_COMPATIBLE
+
+--- 3. Mutual Age & Dealbreaker Tests ---
+✅ [PASS] Candidate exceeding age dealbreaker is hard excluded
+✅ [PASS] Returns VIEWER_AGE_DEALBREAKER
+✅ [PASS] Candidate exceeding flexible age range remains eligible
+✅ [PASS] Records VIEWER_AGE_FLEXIBLE_MISMATCH soft mismatch
+
+--- 4. Safety, Match & Interaction Tests ---
+✅ [PASS] Blocked pair is not eligible
+✅ [PASS] Returns BLOCKED reason
+✅ [PASS] Already matched pair is excluded from discovery
+✅ [PASS] Returns ALREADY_MATCHED
+✅ [PASS] Active pass suppression excludes candidate
+✅ [PASS] Returns PASS_SUPPRESSION_ACTIVE
+✅ [PASS] Recently shown candidate is excluded from immediate resurfacing
+✅ [PASS] Returns RECENTLY_SHOWN
+
+--- 5. Database & Batch Evaluation Tests ---
+✅ [PASS] Batch evaluation returns results for all candidates
+✅ [PASS] Candidate 1 (compatible female) is eligible in batch evaluation
+✅ [PASS] Candidate 2 (incompatible male) is excluded in batch evaluation
+✅ [PASS] Candidate 2 excluded for GENDER_NOT_MUTUALLY_COMPATIBLE
+✅ [PASS] Single-pair and batch evaluations produce identical eligibility results
+
+===========================================================
+ELIGIBILITY TESTS COMPLETED: 25 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/eligibility_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/discovery_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU DISCOVERY & RANKING INTEGRATION TEST SUITE   
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- 1. Viewer Readiness Tests ---
+✅ [PASS] Ready viewer passes readiness validation
+✅ [PASS] Paused discovery throws DISCOVERY_PAUSED
+
+--- 2. Ranking & Deterministic Scoring Tests ---
+✅ [PASS] Higher compatibility candidate scores higher (88.9 vs 47.5)
+✅ [PASS] Common interests produce "Shared interests" reason
+
+--- 3. Opaque Cursor Security Tests ---
+✅ [PASS] Cursor is opaque signed string
+✅ [PASS] Cursor decodes batchId correctly
+✅ [PASS] Cursor decodes offset correctly
+✅ [PASS] Tampered cursor throws INVALID_CURSOR
+✅ [PASS] Cursor belonging to another user throws CURSOR_USER_MISMATCH
+
+--- 4. Discovery Pipeline & Privacy Tests ---
+✅ [PASS] Discovery returns items array
+✅ [PASS] Returns eligible candidates (got 12)
+✅ [PASS] Candidate 1 (Ananya) is returned
+✅ [PASS] Candidate 2 (Priya) is eligible
+✅ [PASS] Incompatible Candidate 3 (Rohan) is strictly excluded
+✅ [PASS] Candidate Ananya card found in feed
+✅ [PASS] Candidate displayName is populated
+✅ [PASS] Candidate age is populated
+✅ [PASS] Distance label populated
+✅ [PASS] Available actions include LIKE
+✅ [PASS] No GeoJSON location in profile DTO
+✅ [PASS] No raw coordinates in profile DTO
+✅ [PASS] No dateOfBirth in profile DTO
+✅ [PASS] No private preferences in profile DTO
+✅ [PASS] No raw ranking score in public DTO
+✅ [PASS] Discovery retrieval does NOT create ProfileImpression records
+
+--- 5. HTTP REST API Endpoint Tests ---
+✅ [PASS] Unauthenticated GET /v1/discovery/candidates returns 401
+✅ [PASS] Authenticated GET /v1/discovery/candidates returns 200 OK
+✅ [PASS] Response contains success: true envelope
+✅ [PASS] API returns eligible candidates
+
+===========================================================
+DISCOVERY TESTS COMPLETED: 29 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/discovery_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/impression_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+     RUBARU PROFILE IMPRESSIONS INTEGRATION TEST SUITE     
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. Validation & Security Tests ---
+✅ [PASS] Missing batchId throws INVALID_IMPRESSION_REQUEST
+✅ [PASS] Empty impressions array throws INVALID_IMPRESSION_REQUEST
+✅ [PASS] Batch ownership mismatch throws RECOMMENDATION_OWNERSHIP_INVALID (403)
+
+--- 2. Idempotency & Deduplication Tests ---
+✅ [PASS] First submission accepts 2 impressions
+✅ [PASS] First submission has 0 duplicates
+✅ [PASS] First submission has 0 rejected
+✅ [PASS] Resubmission accepts 0 new impressions
+✅ [PASS] Resubmission detects 2 duplicates idempotently
+✅ [PASS] profile.impression outbox event is recorded
+
+--- 3. Discovery Suppression Integration Tests ---
+✅ [PASS] Confirmed impression candidate is excluded from immediate rediscovery
+✅ [PASS] Returns RECENTLY_SHOWN hard exclusion reason
+✅ [PASS] Impression confirmation strictly does NOT create Pass/Like/Match records
+
+--- 4. HTTP REST API Endpoint Tests ---
+✅ [PASS] Unauthenticated POST /v1/discovery/impressions returns 401
+✅ [PASS] Authenticated POST /v1/discovery/impressions returns 200 OK
+✅ [PASS] Response contains success: true envelope
+✅ [PASS] API response confirms duplicate detection
+
+===========================================================
+IMPRESSION TESTS COMPLETED: 16 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/impression_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/pass_undo_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU PASS, REMOVE & UNDO INTEGRATION TESTS        
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. Pass Validation & Execution Tests ---
+✅ [PASS] Missing idempotencyKey throws INVALID_DISCOVERY_ACTION
+✅ [PASS] Batch ownership mismatch throws RECOMMENDATION_OWNERSHIP_INVALID (403)
+✅ [PASS] Pass action succeeds
+✅ [PASS] Returns valid signed undoToken
+✅ [PASS] Profile impression reconciled for passed candidate
+✅ [PASS] Idempotent pass retry returns valid undoToken
+✅ [PASS] profile.passed outbox event is recorded
+✅ [PASS] Passed candidate is excluded from discovery
+✅ [PASS] Returns PASS_SUPPRESSION_ACTIVE exclusion
+
+--- 2. Remove Action Tests ---
+✅ [PASS] Remove action succeeds
+✅ [PASS] profile.removed outbox event is recorded
+
+--- 3. Undo Action Tests ---
+✅ [PASS] Tampered undo token throws UNDO_TOKEN_INVALID
+✅ [PASS] Cross-user undo throws RECOMMENDATION_OWNERSHIP_INVALID (403)
+✅ [PASS] Undo action restores candidate
+✅ [PASS] Restored candidate DTO returned
+✅ [PASS] Undo allowance decremented from 3 to 2
+✅ [PASS] Pass record marked WITHDRAWN with undoneAt
+✅ [PASS] profile.pass_undone outbox event is recorded
+✅ [PASS] Pass suppression is no longer active after undo
+✅ [PASS] Already undone pass throws UNDO_NOT_AVAILABLE
+
+--- 4. HTTP REST API Endpoint Tests ---
+✅ [PASS] Unauthenticated POST /v1/discovery/pass returns 401
+✅ [PASS] Authenticated POST /v1/discovery/pass returns 200 OK
+✅ [PASS] Pass API response contains passed: true
+✅ [PASS] Authenticated POST /v1/discovery/undo returns 200 OK
+✅ [PASS] Undo API response contains restored: true
+✅ [PASS] Authenticated POST /v1/discovery/remove returns 200 OK
+✅ [PASS] Remove API response contains removed: true
+
+===========================================================
+PASS, REMOVE & UNDO TESTS: 27 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/pass_undo_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/like_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU LIKES, ROSES & QUOTAS INTEGRATION TESTS      
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. Validation & Security Tests ---
+✅ [PASS] Missing recommendationId throws INVALID_LIKE_REQUEST
+✅ [PASS] Batch ownership mismatch throws RECOMMENDATION_OWNERSHIP_INVALID (403)
+✅ [PASS] Comment >280 chars throws LIKE_COMMENT_INVALID
+
+--- 2. Standard Like Flow & Idempotency Tests ---
+✅ [PASS] Like created with status PENDING
+✅ [PASS] Remaining likes decremented from 2 to 1
+✅ [PASS] mutualInterestPending is false when no reciprocal like
+✅ [PASS] Profile impression reconciled for liked candidate
+✅ [PASS] like.created outbox event is recorded
+✅ [PASS] Idempotent like retry returns original like ID
+✅ [PASS] Idempotent retry does not consume extra like quota
+✅ [PASS] Liked candidate is excluded from discovery
+✅ [PASS] Returns PENDING_OUTGOING_LIKE exclusion
+
+--- 3. Quotas & Limits Tests ---
+✅ [PASS] Remaining likes reached 0
+✅ [PASS] Exceeded daily limit throws LIKE_LIMIT_REACHED (403)
+✅ [PASS] Rose sent successfully
+✅ [PASS] Roses balance decremented to 0
+✅ [PASS] Exhausted rose balance throws ROSE_NOT_AVAILABLE (403)
+
+--- 4. Reciprocal Interest & Match Gating Tests ---
+✅ [PASS] mutualInterestPending is true on reciprocal like
+✅ [PASS] Reciprocal like creates Match document
+✅ [PASS] Reciprocal like creates Conversation document
+
+--- 5. Sent Like Withdrawal Tests ---
+✅ [PASS] Sent like withdrawn successfully
+✅ [PASS] Like status updated to WITHDRAWN
+✅ [PASS] like.withdrawn outbox event is recorded
+
+--- 6. HTTP REST API Endpoint Tests ---
+✅ [PASS] Unauthenticated POST /v1/likes returns 401
+✅ [PASS] Authenticated POST /v1/likes returns 201 Created
+✅ [PASS] API response contains like object
+✅ [PASS] Authenticated DELETE /v1/likes/:id returns 200 OK
+✅ [PASS] Withdraw API returns withdrawn: true
+
+===========================================================
+LIKES, ROSES & QUOTAS TESTS: 28 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/like_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/incoming_likes_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU INCOMING LIKES & DECLINE INTEGRATION TESTS   
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- 1. Inbox Querying & Priority Sorting Tests ---
+✅ [PASS] getIncomingLikes returns items array
+✅ [PASS] Returns exactly 3 unblocked pending likes (got 3)
+✅ [PASS] Rose like is ranked first
+✅ [PASS] Priority like is ranked second
+✅ [PASS] Standard like is ranked third
+
+--- 2. Public DTO & Privacy Sanitization Tests ---
+✅ [PASS] Sender userId populated
+✅ [PASS] Sender age populated
+✅ [PASS] Approximate distance populated
+✅ [PASS] Sanitized plain text comment returned
+✅ [PASS] Target element preview populated
+✅ [PASS] Available actions include DECLINE
+✅ [PASS] ACCEPT action strictly omitted in Prompt 10
+✅ [PASS] Zero coordinates in sender DTO
+✅ [PASS] No dateOfBirth in sender DTO
+✅ [PASS] No private preferences in sender DTO
+
+--- 3. Cursor Pagination & Security Tests ---
+✅ [PASS] Page 1 returns 2 items
+✅ [PASS] Page 1 hasMore is true
+✅ [PASS] Page 1 returns signed nextCursor
+✅ [PASS] Page 2 returns remaining 1 item
+✅ [PASS] Page 2 hasMore is false
+✅ [PASS] Page 2 returns third like (Karan) without duplicates
+✅ [PASS] Tampered cursor throws INVALID_LIKES_CURSOR
+✅ [PASS] Cross-user cursor throws INVALID_LIKES_CURSOR (403)
+
+--- 4. Decline Flow Tests ---
+✅ [PASS] Sender attempting to decline throws LIKE_NOT_FOUND
+✅ [PASS] Decline action succeeds
+✅ [PASS] Like status updated to DECLINED
+✅ [PASS] like.declined outbox event is recorded
+✅ [PASS] Declined like is removed from incoming inbox
+✅ [PASS] getPendingIncomingLikeForDecision successfully resolves pending like
+
+--- 5. HTTP REST API Endpoint Tests ---
+✅ [PASS] Unauthenticated GET /v1/likes/incoming returns 401
+✅ [PASS] Authenticated GET /v1/likes/incoming returns 200 OK
+✅ [PASS] Inbox API returns remaining 2 likes
+✅ [PASS] Authenticated POST /v1/likes/:id/decline returns 200 OK
+✅ [PASS] Decline API returns declined: true
+✅ [PASS] CRITICAL: Zero Match documents created in Prompt 10
+✅ [PASS] CRITICAL: Zero Chat documents created in Prompt 10
+
+===========================================================
+INCOMING LIKES & DECLINE TESTS: 36 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/incoming_likes_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/match_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU ATOMIC MATCH CREATION INTEGRATION TESTS      
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
+
+--- 1. Path A: Incoming Like Acceptance Tests ---
+✅ [PASS] Sender accepting own like throws LIKE_OWNERSHIP_INVALID (403)
+✅ [PASS] Like acceptance returns matched: true
+✅ [PASS] Returns match ID
+✅ [PASS] Returns conversation ID
+✅ [PASS] otherUser populated with sender details
+✅ [PASS] Like status updated to ACCEPTED
+✅ [PASS] acceptedAt timestamp is stored
+✅ [PASS] Match document created with status ACTIVE
+✅ [PASS] Canonical pair is deterministic and sorted
+✅ [PASS] Chat document created with status ACTIVE
+✅ [PASS] Chat has exactly two participants
+✅ [PASS] Chat references Match ID
+✅ [PASS] match.created outbox event is recorded
+✅ [PASS] Idempotent accept retry returns original match ID
+
+--- 2. Path B: Reciprocal Outgoing Like Tests ---
+✅ [PASS] First outgoing like has mutualInterestPending: false
+✅ [PASS] First outgoing like is PENDING
+✅ [PASS] Reciprocal outgoing like detects mutual interest
+✅ [PASS] Reciprocal like returns match document
+✅ [PASS] Reciprocal like returns conversation document
+✅ [PASS] Initiator interaction updated to ACCEPTED
+✅ [PASS] Acceptor interaction created as ACCEPTED
+
+--- 3. Safety, Blocking & Rematch Rules ---
+✅ [PASS] Accepting like from blocked user throws MATCH_NOT_ALLOWED (403)
+
+--- 4. HTTP REST API Endpoint Tests ---
+✅ [PASS] Unauthenticated POST /v1/likes/:id/accept returns 401
+✅ [PASS] Authenticated POST /v1/likes/:id/accept returns 200 OK
+✅ [PASS] Accept API response confirms matched: true
+✅ [PASS] Accept API returns match and conversation payload
+✅ [PASS] Accepted like is removed from incoming inbox
+
+===========================================================
+MATCH CREATION TESTS: 27 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/match_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/matches_list_authorization_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU MATCHES LIST & CHAT AUTH INTEGRATION TESTS    
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
+
+--- 1. Matches List Query & Privacy DTO Tests ---
+✅ [PASS] getMatchesList returns items array
+✅ [PASS] Returns exactly 2 active matches (got 2)
+✅ [PASS] Latest match is ranked first
+✅ [PASS] otherUser displayName populated
+✅ [PASS] otherUser age populated
+✅ [PASS] Conversation reference populated
+✅ [PASS] Available actions include OPEN_CONVERSATION
+✅ [PASS] Zero coordinates in Match otherUser DTO
+✅ [PASS] No dateOfBirth in Match otherUser DTO
+✅ [PASS] No private preferences in Match otherUser DTO
+
+--- 2. Cursor Pagination Tests ---
+✅ [PASS] Page 1 returns 1 item
+✅ [PASS] Page 1 hasMore is true
+✅ [PASS] Page 1 returns signed nextCursor
+✅ [PASS] Page 2 returns remaining 1 item
+✅ [PASS] Page 2 hasMore is false
+✅ [PASS] Page 2 returns second match without duplicates
+✅ [PASS] Tampered match cursor throws INVALID_MATCH_CURSOR
+
+--- 3. Match Details & Authorization Tests ---
+✅ [PASS] Member retrieves match details successfully
+✅ [PASS] Match details returns other user profile
+✅ [PASS] Stranger accessing match details throws MATCH_ACCESS_DENIED (403)
+
+--- 4. Chat & Message Authorization Tests ---
+✅ [PASS] Member successfully sends message in active match chat (201)
+✅ [PASS] Member retrieves messages in active match chat (200)
+✅ [PASS] Returns message history array
+✅ [PASS] Stranger cannot send message in other users match chat (403/404)
+✅ [PASS] Sending message in UNMATCHED conversation is strictly rejected (403)
+
+--- 5. REST API Endpoints Tests ---
+✅ [PASS] Unauthenticated GET /v1/matches returns 401
+✅ [PASS] Authenticated GET /v1/matches returns 200 OK
+✅ [PASS] API returns active matches list
+✅ [PASS] Authenticated GET /v1/matches/:id returns 200 OK
+✅ [PASS] Match detail API returns match object
+
+===========================================================
+MATCHES LIST & CHAT AUTH TESTS: 30 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/matches_list_authorization_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/safety_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU SAFETY: UNMATCH, BLOCK & REPORT TESTS        
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. Unmatch Flow Tests ---
+✅ [PASS] Non-member unmatch throws MATCH_ACCESS_DENIED (403)
+✅ [PASS] Unmatch action returns unmatched: true
+✅ [PASS] Match status updated to UNMATCHED
+✅ [PASS] endedBy records initiating user
+✅ [PASS] Chat status updated to CLOSED
+✅ [PASS] match.unmatched outbox event is recorded
+✅ [PASS] Idempotent unmatch retry returns success
+
+--- 2. Block & Unblock Flow Tests ---
+✅ [PASS] Self-block throws SELF_BLOCK_NOT_ALLOWED (400)
+✅ [PASS] Block action returns blocked: true
+✅ [PASS] Block document persisted
+✅ [PASS] Match status transitioned to BLOCKED
+✅ [PASS] user.blocked outbox event is recorded
+✅ [PASS] Unblock action returns unblocked: true
+✅ [PASS] Block document deleted on unblock
+✅ [PASS] user.unblocked outbox event is recorded
+
+--- 3. Report Flow Tests ---
+✅ [PASS] Self-report throws SELF_REPORT_NOT_ALLOWED (400)
+✅ [PASS] Invalid category throws INVALID_REPORT_CATEGORY (400)
+✅ [PASS] Report action returns reported: true
+✅ [PASS] Returns generated report ID
+✅ [PASS] Report persisted with status PENDING
+✅ [PASS] report.created outbox event is recorded
+✅ [PASS] Combined report and block succeeds
+✅ [PASS] Block created automatically when alsoBlock is true
+
+--- 4. HTTP REST API Endpoint Tests ---
+✅ [PASS] POST /v1/matches/:id/unmatch returns 200 OK
+✅ [PASS] Unmatch API returns unmatched: true
+✅ [PASS] POST /v1/users/:id/block returns 200 OK
+✅ [PASS] Block API returns blocked: true
+✅ [PASS] DELETE /v1/users/:id/block returns 200 OK
+✅ [PASS] Unblock API returns unblocked: true
+✅ [PASS] POST /v1/users/:id/report returns 200 OK
+✅ [PASS] Report API returns reported: true
+
+===========================================================
+SAFETY TESTS: 31 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/safety_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/frontend_dating_integration_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU FRONTEND - BACKEND INTEGRATION TESTS        
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. Dating Preferences Integration ---
+✅ [PASS] GET /v1/dating/preferences returns 200 OK
+✅ [PASS] Frontend loads dating preferences
+✅ [PASS] PATCH /v1/dating/preferences returns 200 OK
+✅ [PASS] Frontend updates preferences
+
+--- 2. Protected Location Integration ---
+✅ [PASS] PUT /v1/dating/location returns 200 OK
+✅ [PASS] Frontend updates user protected location
+
+--- 3. Discovery Candidates Integration ---
+✅ [PASS] GET /v1/discovery/candidates returns 200 OK
+✅ [PASS] Discovery returns candidates items array
+✅ [PASS] POST /v1/discovery/impressions returns 200 OK
+✅ [PASS] Impression successfully tracked from frontend card visibility
+
+--- 4. Outgoing Like & Incoming Inbox Flow ---
+✅ [PASS] POST /v1/likes returns 201 Created
+✅ [PASS] Like sent successfully
+✅ [PASS] GET /v1/likes/incoming returns 200 OK
+✅ [PASS] Incoming likes inbox displays sent like
+
+--- 5. Like Acceptance & Match Creation Flow ---
+✅ [PASS] POST /v1/likes/:id/accept returns 200 OK
+✅ [PASS] Like accepted and match created
+✅ [PASS] Match ID returned to frontend
+
+--- 6. Matches List & Details Flow ---
+✅ [PASS] GET /v1/matches returns 200 OK
+✅ [PASS] Matches list returns newly created match
+✅ [PASS] GET /v1/matches/:id returns 200 OK
+✅ [PASS] Match details populated correctly
+
+--- 7. Unmatch & Safety Flow ---
+✅ [PASS] POST /v1/matches/:id/unmatch returns 200 OK
+✅ [PASS] Match unmatched from frontend
+
+===========================================================
+FRONTEND INTEGRATION TESTS: 23 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/frontend_dating_integration_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/concurrency_security_audit_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU CONCURRENCY, SECURITY & IDOR AUDIT TESTS     
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- 1. Concurrency & Race Condition Tests ---
+✅ [PASS] Concurrent accept requests both complete safely (200 OK)
+✅ [PASS] Both concurrent accepts confirm matched: true
+✅ [PASS] Idempotent canonical match ID returned to both concurrent requests
+✅ [PASS] Zero duplicate matches created under concurrency (total: 1)
+
+--- 2. IDOR & Authorization Security Audit Tests ---
+✅ [PASS] IDOR like acceptance rejected with LIKE_OWNERSHIP_INVALID (403)
+✅ [PASS] IDOR match details access rejected with MATCH_ACCESS_DENIED (403)
+✅ [PASS] Self-block rejected with SELF_BLOCK_NOT_ALLOWED (400)
+✅ [PASS] Self-report rejected with SELF_REPORT_NOT_ALLOWED (400)
+
+--- 3. Privacy & Leakage Audit Tests ---
+✅ [PASS] Zero exact coordinates in Match DTO
+✅ [PASS] Zero dateOfBirth in Match DTO
+✅ [PASS] Zero private preferences in Match DTO
+✅ [PASS] Zero exact coordinates recorded in Outbox event payloads
+
+===========================================================
+CONCURRENCY & SECURITY AUDIT TESTS: 12 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/concurrency_security_audit_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/media_foundation_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+       RUBARU MEDIA FOUNDATION INTEGRATION TEST SUITE      
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
+
+--- 1. Model & Schema Validation Tests ---
+✅ [PASS] Valid UploadSession passes Mongoose schema validation
+✅ [PASS] Valid MediaAsset passes Mongoose schema validation
+
+--- 2. Upload Session API & Validation Tests ---
+✅ [PASS] Unauthenticated POST /v1/media/upload-sessions returns 401
+✅ [PASS] Unsupported MIME type returns 400 Bad Request
+✅ [PASS] Returns UNSUPPORTED_MIME_TYPE code
+✅ [PASS] Oversized file returns 400 Bad Request
+✅ [PASS] Returns FILE_SIZE_EXCEEDS_LIMIT code
+✅ [PASS] Valid upload session returns 201 Created
+✅ [PASS] Response contains success: true
+✅ [PASS] Returns generated sessionId
+✅ [PASS] Returns generated mediaAssetId
+✅ [PASS] Returns safe scoped uploadUrl
+✅ [PASS] Idempotent request returns identical sessionId
+
+--- 3. Direct Upload & Object Storage Tests ---
+✅ [PASS] Direct upload to scoped URL returns 200 OK
+✅ [PASS] Storage provider confirms object exists
+✅ [PASS] Storage provider byte inspection accurately identifies image/jpeg
+✅ [PASS] Stored file size exactly matches uploaded bytes
+
+--- 4. Finalization & IDOR Security Tests ---
+✅ [PASS] Attacker finalize returns 403 Forbidden
+✅ [PASS] Returns MEDIA_ACCESS_DENIED code
+✅ [PASS] Owner finalize returns 200 OK
+✅ [PASS] Session status transitioned to FINALIZED
+✅ [PASS] Repeated finalize request is safely idempotent (200 OK)
+
+--- 5. Media Processing & Status Tests ---
+✅ [PASS] Attacker accessing media status returns 403 Forbidden
+✅ [PASS] Owner accessing media status returns 200 OK
+✅ [PASS] Media asset processingStatus is READY
+✅ [PASS] Media variants generated
+✅ [PASS] Safe thumbnail URL generated
+
+--- 6. Media Deletion & Lifecycle Tests ---
+✅ [PASS] Attacker deleting media returns 403 Forbidden
+✅ [PASS] Owner deleting media returns 200 OK
+✅ [PASS] Response confirms deleted: true
+✅ [PASS] MediaAsset state updated to DELETED
+✅ [PASS] MediaAsset deletedAt timestamp recorded
+✅ [PASS] cleanupExpiredUploadSessions executes without errors
+
+===========================================================
+MEDIA FOUNDATION TESTS: 33 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/media_foundation_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/follow_graph_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+         RUBARU FOLLOW GRAPH INTEGRATION TEST SUITE        
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- 1. Model Level Validation Tests ---
+✅ [PASS] Valid FollowRelationship passes schema validation
+✅ [PASS] Self-follow is rejected by model validator
+
+--- 2. Public Account Follow API Tests ---
+✅ [PASS] Unauthenticated POST /v1/users/:id/follow returns 401
+✅ [PASS] Self-follow returns 400 Bad Request
+✅ [PASS] Returns SELF_FOLLOW_DISALLOWED code
+✅ [PASS] Following public user returns 200 OK
+✅ [PASS] Public follow status is ACCEPTED
+✅ [PASS] isFollowing is true
+✅ [PASS] Alice followingCount incremented to 1
+✅ [PASS] Bob followersCount incremented to 1
+✅ [PASS] Duplicate follow request returns 200 OK
+✅ [PASS] Status remains ACCEPTED
+✅ [PASS] Duplicate follow does not increment counter twice
+
+--- 3. Private Account & Follow Request Lifecycle Tests ---
+✅ [PASS] Requesting private user returns 200 OK
+✅ [PASS] Relationship status is PENDING
+✅ [PASS] requestPending is true
+✅ [PASS] Cancelling pending request returns 200 OK
+✅ [PASS] Status transitioned to NONE
+✅ [PASS] GET /v1/follow-requests returns 200 OK
+✅ [PASS] Charlie has 1 pending follow request
+✅ [PASS] Unauthorized accept returns 403 Forbidden
+✅ [PASS] Charlie accepts request returns 200 OK
+✅ [PASS] Status transitioned to ACCEPTED
+✅ [PASS] Alice followingCount is now 2
+✅ [PASS] Charlie followersCount is now 1
+
+--- 4. Followers & Following Lists Tests ---
+✅ [PASS] Get Bob followers returns 200 OK
+✅ [PASS] Alice is in Bob followers list
+✅ [PASS] Non-follower accessing private account list returns 403 Forbidden
+✅ [PASS] Accepted follower accessing private account list returns 200 OK
+✅ [PASS] Returns Charlie followers list
+
+--- 5. Follower Removal & Unfollow Tests ---
+✅ [PASS] Bob removing Alice as follower returns 200 OK
+✅ [PASS] Response confirms removed: true
+✅ [PASS] Bob followersCount safely decremented to 0
+✅ [PASS] Alice unfollowing Charlie returns 200 OK
+✅ [PASS] Alice followingCount safely decremented to 0
+
+--- 6. Bilateral Block Integration Tests ---
+✅ [PASS] Bob followersCount is 1 prior to block
+✅ [PASS] Follow relationship transitioned to REMOVED after block
+✅ [PASS] Bob followersCount decremented to 0 after block
+✅ [PASS] Blocked user cannot follow (returns 400)
+
+--- 7. Privacy Settings & Reconciliation Tests ---
+✅ [PASS] PATCH /v1/users/me/social-privacy returns 200 OK
+✅ [PASS] Alice privacy setting is now PRIVATE
+✅ [PASS] Reconciliation confirms accurate counts (0, 0)
+
+===========================================================
+FOLLOW GRAPH TESTS: 42 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/follow_graph_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/post_lifecycle_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+         RUBARU POST & CONTENT LIFECYCLE TEST SUITE        
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
+
+--- 1. Model Level Validation Tests ---
+✅ [PASS] Valid Content passes Mongoose schema validation
+✅ [PASS] Empty mediaItems array is rejected by model validator
+
+--- 2. Media Binding & Security Tests ---
+✅ [PASS] Unauthenticated POST /v1/posts returns 401
+✅ [PASS] Cross-user media binding returns 403 Forbidden
+✅ [PASS] Returns CROSS_USER_MEDIA_BINDING_FORBIDDEN code
+✅ [PASS] Non-ready media binding returns 400 Bad Request
+✅ [PASS] Returns MEDIA_NOT_READY code
+✅ [PASS] Duplicate carousel position returns 400 Bad Request
+
+--- 3. Post Creation & Publication Lifecycle Tests ---
+✅ [PASS] Valid single-image post returns 201 Created
+✅ [PASS] Response contains success: true
+✅ [PASS] Post status is PUBLISHED
+✅ [PASS] Post contains 1 media item
+✅ [PASS] Media variants safely hydrated
+✅ [PASS] Idempotent request returns identical postId
+✅ [PASS] Carousel post returns 201 Created
+✅ [PASS] Carousel contains 2 ordered media items
+✅ [PASS] Audience is FOLLOWERS
+
+--- 4. Privacy & Audience Authorization Tests ---
+✅ [PASS] Stranger accessing public post returns 200 OK
+✅ [PASS] Non-follower accessing followers-only post returns 403 Forbidden
+✅ [PASS] Accepted follower accessing followers-only post returns 200 OK
+
+--- 5. User Post List & Cursor Pagination Tests ---
+✅ [PASS] Get user posts returns 200 OK
+✅ [PASS] Returns bounded limit of 1 post
+✅ [PASS] hasMore is true
+✅ [PASS] nextCursor is returned
+✅ [PASS] Page 2 with cursor returns 200 OK
+✅ [PASS] Returns 1 item on page 2
+✅ [PASS] Page 2 item is distinct from page 1
+
+--- 6. Edit, Archive, Unarchive & Delete Tests ---
+✅ [PASS] Non-owner edit returns 403 Forbidden
+✅ [PASS] Owner edit returns 200 OK
+✅ [PASS] Caption updated successfully
+✅ [PASS] editedAt timestamp recorded
+✅ [PASS] Owner archive returns 200 OK
+✅ [PASS] Response confirms archived: true
+✅ [PASS] Archived post is hidden from stranger (404 Not Found)
+✅ [PASS] Owner unarchive returns 200 OK
+✅ [PASS] Unarchived post is accessible again to stranger
+✅ [PASS] Owner delete returns 200 OK
+✅ [PASS] Response confirms deleted: true
+✅ [PASS] Deleted post returns 404 Not Found
+
+--- 7. Bilateral Block Suppression Tests ---
+✅ [PASS] Blocked user cannot access author posts
+
+===========================================================
+POST LIFECYCLE TESTS: 40 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/post_lifecycle_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/content_visibility_authorization_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+   RUBARU CENTRALIZED CONTENT VISIBILITY & AUTH TEST SUITE  
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- 1. Central Policy Table-Driven Matrix Tests ---
+✅ [PASS] Owner has OWNER level access to post
+✅ [PASS] Stranger has PUBLIC access to public post
+✅ [PASS] Stranger denied access to followers-only post
+✅ [PASS] Follower allowed access to followers-only post
+✅ [PASS] Stranger denied access to private author post
+✅ [PASS] Follower allowed access to private author post
+✅ [PASS] Blocked user denied access to author posts
+✅ [PASS] Stranger denied access to archived post
+✅ [PASS] Owner allowed access to own archived post
+✅ [PASS] Stranger denied access to moderation rejected post
+
+--- 2. Batch Authorization Tests ---
+✅ [PASS] Batch evaluation correctly permits ONLY public post for stranger
+✅ [PASS] Batch evaluation permits 3 posts (Public, FollowersOnly, PrivateAuthor) for follower
+
+--- 3. Media Delivery Authorization Endpoint Tests ---
+✅ [PASS] Stranger accessing public post media returns 200 OK
+✅ [PASS] Returns safe delivery URL
+✅ [PASS] Stranger accessing followers-only media returns 403 Forbidden
+✅ [PASS] Accepted follower accessing followers-only media returns 200 OK
+✅ [PASS] Stranger accessing unbound media returns 403 Forbidden
+✅ [PASS] Owner accessing unbound media returns 200 OK
+
+--- 4. Safe Serialization & Leakage Prevention Tests ---
+✅ [PASS] Serialized projection does NOT leak originalObjectKey
+✅ [PASS] Serialized projection does NOT leak bucket
+✅ [PASS] Serialized projection does NOT leak uploadSessionId
+✅ [PASS] Serialized author summary does NOT leak email
+✅ [PASS] Serialized author summary does NOT leak phone
+
+--- 5. Dynamic Revocation Lifecycle Tests ---
+✅ [PASS] Follow removal immediately revokes content access
+
+===========================================================
+CONTENT VISIBILITY TESTS: 24 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/content_visibility_authorization_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/social_interaction_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+         RUBARU SOCIAL INTERACTIONS TEST SUITE             
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. Like & Unlike Tests ---
+✅ [PASS] POST /v1/content/:id/like returns 200 OK
+✅ [PASS] Response confirms liked: true
+✅ [PASS] likesCount incremented to 1
+✅ [PASS] Duplicate like returns 200 OK
+✅ [PASS] likesCount remains 1 (no duplicate increment)
+✅ [PASS] DELETE /v1/content/:id/like returns 200 OK
+✅ [PASS] Response confirms liked: false
+✅ [PASS] likesCount decremented to 0
+✅ [PASS] likesCount never drops below 0
+
+--- 2. Comments & 1-Level Replies Tests ---
+✅ [PASS] Empty comment text returns 400 Bad Request
+✅ [PASS] Valid top-level comment returns 201 Created
+✅ [PASS] Top-level comment depth is 0
+✅ [PASS] Comment text matched
+✅ [PASS] Post commentsCount is 1
+✅ [PASS] Valid 1-level reply returns 201 Created
+✅ [PASS] Reply depth is 1
+✅ [PASS] Reply references parentCommentId
+✅ [PASS] Depth 2 reply returns 400 Bad Request
+✅ [PASS] Returns MAX_REPLY_DEPTH_EXCEEDED code
+✅ [PASS] GET /v1/content/:id/comments returns 200 OK
+✅ [PASS] Returns 1 top-level comment
+✅ [PASS] Parent comment reflects repliesCount: 1
+✅ [PASS] GET /v1/comments/:id/replies returns 200 OK
+✅ [PASS] Returns 1 reply
+✅ [PASS] Reply ID matches created reply
+
+--- 3. Comment Likes Tests ---
+✅ [PASS] POST /v1/comments/:id/like returns 200 OK
+✅ [PASS] Comment liked: true
+✅ [PASS] Comment likesCount: 1
+✅ [PASS] DELETE /v1/comments/:id/like returns 200 OK
+✅ [PASS] Comment liked: false
+✅ [PASS] Comment likesCount: 0
+
+--- 4. Comment Deletion & Tombstone Tests ---
+✅ [PASS] Stranger deleting another comment returns 403 Forbidden
+✅ [PASS] Owner deletes comment returns 200 OK
+✅ [PASS] Tombstone comment remains in list
+✅ [PASS] Text is redacted to [deleted]
+✅ [PASS] Status is DELETED
+
+--- 5. Private Saves & Saved Content List Tests ---
+✅ [PASS] POST /v1/content/:id/save returns 200 OK
+✅ [PASS] Response confirms saved: true
+✅ [PASS] GET /v1/users/me/saved-content returns 200 OK
+✅ [PASS] Saved items contains 1 post
+✅ [PASS] Saved post ID matches
+✅ [PASS] Saved content query returns 200 OK
+✅ [PASS] Blocked author post is automatically excluded from saved content
+
+--- 6. Share Event & Not Interested Tests ---
+✅ [PASS] POST /v1/content/:id/share returns 200 OK
+✅ [PASS] Response confirms shared: true
+✅ [PASS] sharesCount incremented to 1
+✅ [PASS] POST /v1/content/:id/not-interested returns 200 OK
+✅ [PASS] Response confirms notInterested: true
+✅ [PASS] DELETE /v1/content/:id/not-interested returns 200 OK
+✅ [PASS] Response confirms notInterested: false
+
+===========================================================
+SOCIAL INTERACTIONS TESTS: 50 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/social_interaction_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/connected_feed_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+           RUBARU CONNECTED HOME FEED TEST SUITE           
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. Candidate Source & Inclusion/Exclusion Tests ---
+✅ [PASS] Feed returns items array
+✅ [PASS] Feed contains exactly 4 eligible posts (got 4)
+✅ [PASS] Viewer own post is included
+✅ [PASS] Alice public post is included
+✅ [PASS] Alice followers-only post is included
+✅ [PASS] Bob accepted private post is included
+✅ [PASS] Pending follow post (Charlie) is excluded
+✅ [PASS] Stranger post is excluded
+✅ [PASS] Blocked user post (David) is excluded
+✅ [PASS] Archived post is excluded
+✅ [PASS] Deleted post is excluded
+✅ [PASS] Moderation rejected post is excluded
+
+--- 2. Deterministic Ordering Tests ---
+✅ [PASS] Ordering version matches connected_feed_chronological_v1
+✅ [PASS] Newest post (Viewer t4) is ranked 1st
+✅ [PASS] 2nd newest post (Alice t3) is ranked 2nd
+✅ [PASS] 3rd newest post (Bob t2) is ranked 3rd
+✅ [PASS] Oldest post (Alice t1) is ranked 4th
+
+--- 3. Opaque Cursor Pagination Tests ---
+✅ [PASS] Page 1 returns 2 items
+✅ [PASS] Page 1 hasMore is true
+✅ [PASS] Page 1 returns opaque nextCursor
+✅ [PASS] Page 2 returns remaining 2 items
+✅ [PASS] Page 2 starts with 3rd item (Bob t2)
+✅ [PASS] Page 2 ends with 4th item (Alice t1)
+✅ [PASS] Page 1 and Page 2 contain 0 overlapping duplicates
+✅ [PASS] Final page hasMore is false
+✅ [PASS] Final page nextCursor is null
+
+--- 4. Cursor Security & Validation Tests ---
+✅ [PASS] Malformed cursor throws INVALID_CURSOR (400)
+✅ [PASS] Incompatible cursor version throws INCOMPATIBLE_CURSOR_VERSION (400)
+
+--- 5. Bulk Hydration & Safe Projection Tests ---
+✅ [PASS] Author displayName is hydrated
+✅ [PASS] Viewer isLiked state is hydrated (true)
+✅ [PASS] Viewer isSaved state is hydrated (true)
+✅ [PASS] Viewer isLiked state is hydrated (false for Bob)
+✅ [PASS] Viewer isSaved state is hydrated (false for Bob)
+✅ [PASS] originalObjectKey is NOT leaked in feed DTO
+✅ [PASS] uploadSessionId is NOT leaked in feed DTO
+✅ [PASS] Author email is NOT leaked in feed DTO
+
+--- 6. HTTP REST API Endpoint Tests ---
+✅ [PASS] Unauthenticated GET /v1/feed returns 401 Unauthorized
+✅ [PASS] Authenticated GET /v1/feed returns 200 OK
+✅ [PASS] Response contains success: true
+✅ [PASS] API returns 4 feed items
+✅ [PASS] Feed source is CONNECTED
+✅ [PASS] Empty feed user query returns 200 OK
+✅ [PASS] Returns 0 items for empty feed
+✅ [PASS] Returns NO_CONNECTED_CONTENT reason
+
+===========================================================
+CONNECTED FEED TESTS: 44 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/connected_feed_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/feed_impression_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+      RUBARU FEED BATCHES & EXPOSURE ANALYTICS TESTS       
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. FeedBatch Creation & Response Tests ---
+✅ [PASS] GET /v1/feed returns 200 OK
+✅ [PASS] Feed response includes valid batchId
+✅ [PASS] Feed response includes surface: HOME_CONNECTED
+✅ [PASS] FeedBatch document is persisted in database
+✅ [PASS] FeedBatch belongs to authenticated viewer
+✅ [PASS] FeedBatch contains 2 issued items
+✅ [PASS] Issued item 0 has position 0
+✅ [PASS] Issued item 1 has position 1
+✅ [PASS] Item 0 has feedPosition: 0
+✅ [PASS] Item 1 has feedPosition: 1
+
+--- 2. Batched Impression Ingestion Tests ---
+✅ [PASS] POST /v1/feed/impressions returns 200 OK
+✅ [PASS] Accepted count is 2
+✅ [PASS] Duplicates count is 0
+✅ [PASS] Rejected count is 0
+✅ [PASS] Impression 1 persisted in database
+✅ [PASS] Dwell time persisted accurately (2500ms)
+✅ [PASS] Author ID resolved accurately
+✅ [PASS] Position recorded accurately (0)
+✅ [PASS] content.impression_recorded outbox event is emitted
+
+--- 3. Idempotency & Duplicate Replay Tests ---
+✅ [PASS] Duplicate submission returns 200 OK
+✅ [PASS] Accepted count is 0 for duplicate
+✅ [PASS] Duplicates count is 1
+✅ [PASS] Rejected count is 0
+
+--- 4. Security & Anti-Abuse Tests ---
+✅ [PASS] Cross-user batch submission returns 403 Forbidden
+✅ [PASS] Returns BATCH_OWNERSHIP_INVALID code
+✅ [PASS] Position mismatch request returns 200 OK
+✅ [PASS] Event with wrong position is rejected
+✅ [PASS] Event with < 50% visibility is rejected
+✅ [PASS] Mixed batch accepts 1 valid event
+✅ [PASS] Mixed batch flags 1 duplicate event
+✅ [PASS] Mixed batch flags 1 rejected event
+
+===========================================================
+FEED IMPRESSION TESTS: 31 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/feed_impression_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/story_lifecycle_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+      RUBARU STORIES & EPHEMERAL LIFECYCLE TESTS           
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- 1. Story Creation & Timing Tests ---
+✅ [PASS] POST /v1/stories returns 201 Created
+✅ [PASS] Content type is STORY
+✅ [PASS] Media type is IMAGE
+✅ [PASS] First story assigned sequence position 0
+✅ [PASS] Server-assigned expiresAt is set
+✅ [PASS] Story duration is exactly 24 hours
+✅ [PASS] POST /v1/stories returns 201 for video story
+✅ [PASS] Second story assigned sequence position 1
+
+--- 2. Story Tray & Unviewed Tests ---
+✅ [PASS] GET /v1/stories/feed returns 200 OK
+✅ [PASS] Tray returns groups array
+✅ [PASS] Author group is present in follower tray
+✅ [PASS] Author has 2 active stories
+✅ [PASS] Author group is marked unviewed (hasUnviewed: true)
+
+--- 3. Story View Recording & Idempotency Tests ---
+✅ [PASS] POST /v1/stories/:id/view returns 200 OK
+✅ [PASS] First view is marked isNewView: true
+✅ [PASS] Status is RECORDED
+✅ [PASS] Story viewsCount incremented to 1
+✅ [PASS] Duplicate view returns 200 OK
+✅ [PASS] Duplicate view is marked isNewView: false
+✅ [PASS] Status is DUPLICATE
+✅ [PASS] viewsCount remains 1 on duplicate view
+✅ [PASS] Author group is now marked viewed (hasUnviewed: false)
+
+--- 4. Owner-Only Viewer List Security Tests ---
+✅ [PASS] Story owner can retrieve viewer list (200 OK)
+✅ [PASS] Viewer list contains 1 viewer
+✅ [PASS] Viewer display name matches follower
+✅ [PASS] Non-owner viewer list access returns 403 Forbidden
+✅ [PASS] Returns VIEWER_LIST_PRIVATE error code
+
+--- 5. Expiry Enforcement Tests ---
+✅ [PASS] Expired story returns 404 on direct read
+✅ [PASS] Returns STORY_EXPIRED code
+✅ [PASS] Story count in tray reduced to 1 active story
+✅ [PASS] Expiry worker transitioned expired stories
+✅ [PASS] Story document status is EXPIRED
+
+--- 6. Story Deletion Tests ---
+✅ [PASS] Stranger cannot delete author story (403)
+✅ [PASS] Owner can delete story (200 OK)
+✅ [PASS] Story status set to DELETED
+✅ [PASS] deletedAt timestamp set
+✅ [PASS] Author group removed from tray when no active stories remain
+
+===========================================================
+STORY LIFECYCLE TESTS: 37 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/story_lifecycle_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/reel_playback_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+      RUBARU REELS PUBLICATION & PLAYBACK TESTS            
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. Reel Creation & Validation Tests ---
+✅ [PASS] POST /v1/reels returns 201 Created
+✅ [PASS] Content type is REEL
+✅ [PASS] Reel duration is 30000ms
+✅ [PASS] Reject Reel created with IMAGE media asset (400)
+✅ [PASS] POST /v1/reels returns 201 for second reel
+
+--- 2. Connected Reels Feed Tests ---
+✅ [PASS] GET /v1/reels/feed returns 200 OK
+✅ [PASS] Feed surface is REELS_CONNECTED
+✅ [PASS] Ordering version is chronological v1
+✅ [PASS] Feed returns 2 reels
+✅ [PASS] First reel has position 0
+✅ [PASS] Second reel has position 1
+✅ [PASS] Feed returns valid batchId
+✅ [PASS] FeedBatch persisted in database
+✅ [PASS] Batch contains 2 issued items
+
+--- 3. Playback Ingestion Tests ---
+✅ [PASS] POST /v1/reels/playback-events returns 200 OK
+✅ [PASS] Accepted 2 playback events
+✅ [PASS] Duplicates count is 0
+✅ [PASS] Rejected count is 0
+✅ [PASS] Playback summary event persisted
+✅ [PASS] Event marked completed (completionPercentage >= 95%)
+✅ [PASS] Completion percentage >= 95%
+✅ [PASS] Reel playCount incremented
+✅ [PASS] Duplicate playback event returns 200 OK
+✅ [PASS] Accepted count is 0 for duplicate
+✅ [PASS] Duplicates count is 1
+✅ [PASS] Cross-user batch submission rejected with 403 Forbidden
+
+--- 4. Interaction Reuse Tests ---
+✅ [PASS] Like interaction on Reel returns 200 OK
+✅ [PASS] Reel liked set to true
+✅ [PASS] Save interaction on Reel returns 200 OK
+✅ [PASS] Reel saved set to true
+
+--- 5. Archive & Deletion Tests ---
+✅ [PASS] Owner can archive Reel (200 OK)
+✅ [PASS] Reel status is ARCHIVED
+✅ [PASS] Owner can unarchive Reel (200 OK)
+✅ [PASS] Reel status restored to PUBLISHED
+✅ [PASS] Owner can delete Reel (200 OK)
+✅ [PASS] Reel status is DELETED
+
+===========================================================
+REEL PLAYBACK TESTS: 36 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/reel_playback_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/social_safety_moderation_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+    RUBARU SOCIAL CONTENT SAFETY & MODERATION TESTS        
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
+
+--- 1. Social Reporting Tests ---
+✅ [PASS] POST /v1/content/:id/report returns 200 OK
+✅ [PASS] Report submission successful
+✅ [PASS] Moderation case created and caseNumber returned
+✅ [PASS] Reject self-report on own content (400)
+✅ [PASS] Report Story returns 200 OK
+✅ [PASS] Story moderation case persisted
+✅ [PASS] Threat category escalated priority to CRITICAL
+✅ [PASS] Report Comment returns 200 OK
+
+--- 2. Duplicate Report Protection Tests ---
+✅ [PASS] Duplicate report returns 200 OK
+✅ [PASS] Duplicate report flagged idempotent (duplicate: true)
+✅ [PASS] Duplicate returns existing report ID
+
+--- 3. Immediate Reporter Suppression Tests ---
+✅ [PASS] ReporterSuppression record created immediately
+✅ [PASS] Reported post suppressed from reporter single view
+✅ [PASS] Reason code is SUPPRESSED
+✅ [PASS] Reported post still accessible to other viewers before decision
+✅ [PASS] Batch evaluation excludes suppressed post for reporter
+✅ [PASS] Batch evaluation reason is SUPPRESSED
+
+--- 4. Evidence Snapshot Preservation Tests ---
+✅ [PASS] Evidence snapshot created at report time
+✅ [PASS] Original caption preserved
+✅ [PASS] Media asset IDs recorded in snapshot
+✅ [PASS] Evidence SHA-256 checksum generated
+✅ [PASS] Evidence snapshot immune to subsequent author edits
+
+--- 5. Moderation Queue & Decision Tests ---
+✅ [PASS] GET /v1/admin/moderation/cases returns 200 OK
+✅ [PASS] Moderation cases list returned
+✅ [PASS] Cases sorted by priority (CRITICAL first)
+✅ [PASS] GET /v1/admin/moderation/cases/:id returns 200 OK
+✅ [PASS] Evidence snapshots loaded in case detail
+✅ [PASS] Evidence access audited in ModerationAuditLog
+✅ [PASS] POST /v1/admin/moderation/cases/:id/assign returns 200 OK
+✅ [PASS] Case status updated to IN_REVIEW
+✅ [PASS] POST /v1/admin/moderation/cases/:id/decision returns 200 OK
+✅ [PASS] Decision HIDE applied
+✅ [PASS] Case resolved
+✅ [PASS] Content status transitioned to HIDDEN
+✅ [PASS] Content moderationStatus transitioned to REJECTED
+✅ [PASS] Hidden content inaccessible to ordinary viewers
+✅ [PASS] RESTORE decision applied successfully
+✅ [PASS] Content status restored to PUBLISHED
+✅ [PASS] Content moderationStatus restored to APPROVED
+
+--- 6. Report and Block Integration Tests ---
+✅ [PASS] Report and block user returns 200 OK
+✅ [PASS] Block record created atomically with report
+
+===========================================================
+SOCIAL SAFETY & MODERATION TESTS: 41 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/social_safety_moderation_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/social_notification_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+===========================================================
+    RUBARU SOCIAL NOTIFICATIONS & DELIVERY TEST SUITE      
+===========================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. Model & Schema Validation Tests ---
+✅ [PASS] Valid Notification passes Mongoose schema validation
+✅ [PASS] Valid Device passes Mongoose schema validation
+✅ [PASS] Valid NotificationPreference passes Mongoose schema validation
+✅ [PASS] Default preferences enable inApp and push
+
+--- 2. Durable Notification Creation & Outbox Processing Tests ---
+✅ [PASS] Outbox event follow.requested processed successfully
+✅ [PASS] FOLLOW_REQUEST_RECEIVED notification created
+✅ [PASS] FOLLOW_REQUEST_RECEIVED record persisted in DB
+✅ [PASS] Deep link set to rubaru://follow-requests
+✅ [PASS] Outbox event content.liked processed
+✅ [PASS] POST_LIKED notification created
+✅ [PASS] Post like deep link points to rubaru://post/:id
+[DEBUG COMMENT EVENT RES]: {"processed":true,"eventType":"comment.created","createdCount":1,"duplicateCount":0,"suppressedCount":0,"results":[{"success":true,"notificationId":"6a96c462b9aac89772e3bb8b","notification":{"recipient":"6a96c460b9aac89772e3bb14","sender":"6a96c461b9aac89772e3bb2f","type":"COMMENT_REPLIED","category":"replies","subjectType":"COMMENT","subjectId":"6a96c462b9aac89772e3bb80","contentId":"6a96c461b9aac89772e3bb41","sourceEventId":"6a96c462b9aac89772e3bb81","deduplicationKey":"comment_reply_6a96c462b9aac89772e3bb80_6a96c461b9aac89772e3bb2f_6a96c462b9aac89772e3bb81","titleKey":"notif.comment_replied.title","bodyKey":"notif.comment_replied.body","message":"Aarav Actor replied to your comment.","templateData":{"actorName":"Aarav Actor"},"deepLink":"rubaru://post/6a96c461b9aac89772e3bb41?commentId=6a96c462b9aac89772e3bb80","previewMediaId":null,"previewThumbnailUri":"","isRead":false,"status":"ACTIVE","groupCount":1,"groupActors":[],"_id":"6a96c462b9aac89772e3bb8b","createdAt":"2026-09-01T12:26:10.405Z","updatedAt":"2026-09-01T12:26:10.405Z","__v":0}}]}
+✅ [PASS] Outbox event comment.created processed
+✅ [PASS] COMMENT_REPLIED notification created
+✅ [PASS] Outbox event moderation.decision_applied processed
+✅ [PASS] CONTENT_REMOVED notification created
+
+--- 3. Deduplication & Idempotency Tests ---
+✅ [PASS] Duplicate outbox event processed safely
+✅ [PASS] Duplicate detected and flagged idempotent (duplicate: true)
+✅ [PASS] Zero duplicate notifications created
+
+--- 4. Safety & Suppression Rules Tests ---
+✅ [PASS] Self-action suppressed
+✅ [PASS] Suppression reason is SELF_ACTION
+✅ [PASS] Blocked actor notification suppressed
+✅ [PASS] Suppression reason is BLOCKED
+✅ [PASS] Disabled category notification suppressed by preferences
+✅ [PASS] Reason is IN_APP_PREFERENCE_DISABLED
+
+--- 5. REST API Endpoints & Cursor Pagination Tests ---
+✅ [PASS] GET /v1/notifications returns 200 OK
+✅ [PASS] Returns bounded page size (limit: 2)
+✅ [PASS] hasMore is true when additional pages exist
+✅ [PASS] Opaque nextCursor returned
+✅ [PASS] Cursor pagination fetch returns 200 OK
+✅ [PASS] Page 2 items returned
+✅ [PASS] GET /v1/notifications/unread-count returns 200 OK
+✅ [PASS] Unread count is positive (count: 4)
+✅ [PASS] PATCH /v1/notifications/:id/read returns 200 OK
+✅ [PASS] Notification state transitioned to isRead: true
+✅ [PASS] Stranger marking other user notification read returns 404 (IDOR protected)
+✅ [PASS] PATCH /v1/notifications/read-all returns 200 OK
+✅ [PASS] Unread count becomes 0 after mark-all-read
+
+--- 6. Notification Preferences API Tests ---
+✅ [PASS] GET /v1/users/me/notification-preferences returns 200 OK
+✅ [PASS] Preferences contain likes category
+✅ [PASS] PATCH /v1/users/me/notification-preferences returns 200 OK
+✅ [PASS] Likes preference updated to inApp: false
+✅ [PASS] pauseAll updated to true
+
+--- 7. Device Token Lifecycle & Push Invalidation Tests ---
+✅ [PASS] POST /v1/devices returns 201 Created
+✅ [PASS] Device token status is ACTIVE
+✅ [PASS] Invalid token detected and revoked
+✅ [PASS] Device record transitioned to REVOKED
+✅ [PASS] DELETE /v1/devices/:id returns 200 OK
+✅ [PASS] Device status revoked on logout/delete
+
+===========================================================
+SOCIAL NOTIFICATIONS TESTS: 48 PASSED, 0 FAILED
+===========================================================
+
+
+--- [END OF TEST OUTPUT: test/social_notification_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/frontend_social_integration_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+================================================================
+ RUBARU FRONTEND SOCIAL INTEGRATION & E2E SYSTEM TEST SUITE    
+================================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- 1. Media Upload & Post Creation Flow ---
+✅ [PASS] POST /v1/posts creates post with 201 Created
+✅ [PASS] Post returns canonical payload
+✅ [PASS] GET /v1/users/:id/posts returns 200 OK
+✅ [PASS] Created post appears in user profile grid
+
+--- 2. Follow Graph & Private Follow Request Flow ---
+✅ [PASS] POST /v1/users/:id/follow on private account returns 200
+✅ [PASS] Private follow relationship is PENDING
+✅ [PASS] POST /v1/follow-requests/:id/accept returns 200 OK
+✅ [PASS] Follow status transitioned to ACCEPTED
+
+--- 3. Connected Feed & Interaction Flow ---
+✅ [PASS] GET /v1/feed returns 200 OK
+✅ [PASS] Connected feed contains followed user content
+✅ [PASS] Feed response contains authoritative batchId
+✅ [PASS] POST /v1/content/:id/like returns 200 OK
+✅ [PASS] Viewer interaction isLiked is true
+✅ [PASS] POST /v1/content/:id/comments returns 201 Created
+✅ [PASS] Comment record returned
+✅ [PASS] POST /v1/content/:id/save returns 200 OK
+✅ [PASS] Viewer interaction isSaved is true
+✅ [PASS] GET /v1/users/me/saved-content returns 200 OK
+✅ [PASS] Saved post present in user saved list
+
+--- 4. Story & Reel Lifecycle Flow ---
+✅ [PASS] POST /v1/stories creates story with 201 Created
+✅ [PASS] Story has server-controlled expiry
+✅ [PASS] GET /v1/stories/feed returns 200 OK
+✅ [PASS] Story tray contains Alice active story group
+✅ [PASS] POST /v1/stories/:id/view records view
+✅ [PASS] Story view marked recorded
+✅ [PASS] POST /v1/reels creates reel with 201 Created
+✅ [PASS] GET /v1/reels/feed returns 200 OK
+✅ [PASS] Reel feed contains created reel
+✅ [PASS] POST /v1/reels/playback-events records analytics
+✅ [PASS] Playback event acknowledged
+
+--- 5. Safety, Moderation & Reporting Flow ---
+✅ [PASS] POST /v1/content/:id/report creates moderation report
+✅ [PASS] Report ID returned safely
+✅ [PASS] Reported post suppressed for reporter (returns 404)
+
+--- 6. Notifications & Device Lifecycle Flow ---
+✅ [PASS] GET /v1/notifications returns 200 OK
+✅ [PASS] Alice has durable notifications from Bob actions
+✅ [PASS] GET /v1/notifications/unread-count returns 200 OK
+✅ [PASS] Unread count is accurate
+✅ [PASS] PATCH /v1/notifications/read-all returns 200 OK
+✅ [PASS] Unread count is 0 after mark-all-read
+✅ [PASS] POST /v1/notifications/devices registers device token
+✅ [PASS] DELETE /v1/notifications/devices/:id revokes device on logout
+
+================================================================
+FRONTEND SOCIAL INTEGRATION TESTS: 41 PASSED, 0 FAILED
+================================================================
+
+
+--- [END OF TEST OUTPUT: test/frontend_social_integration_tests.js] ---
+
+--- [START OF TEST OUTPUT: test_all_endpoints.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+====================================================
+   RUBARU BACKEND ENDPOINTS INTEGRATION TEST SUITE   
+====================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+[TEST SERVER] Started temporary test server on port 5099
+
+✅ [PASS] Health Check GET / (200) - 33ms
+[AUTH] Registered user_1788265582258@rubaru.app. Mock OTP is 1234
+✅ [PASS] Auth Register POST /api/auth/register-email (201) - 704ms
+✅ [PASS] Auth Verify OTP POST /api/auth/verify-otp (200) - 244ms
+✅ [PASS] Auth Login POST /api/auth/login (200) - 108ms
+✅ [PASS] Auth Profile Setup POST /api/auth/profile-setup (201) - 358ms
+✅ [PASS] Profiles GET /api/profiles/me (200) - 113ms
+✅ [PASS] Profiles Search GET /api/profiles/search?q=Aarav (200) - 254ms
+✅ [PASS] Profiles Nearby GET /api/profiles/discover/nearby (200) - 393ms
+✅ [PASS] Profiles All GET /api/profiles/all (200) - 110ms
+✅ [PASS] Reels GET /api/reels (200) - 101ms
+✅ [PASS] Calls Logs GET /api/calls/logs (200) - 85ms
+✅ [PASS] Notifications GET /api/notifications (200) - 110ms
+✅ [PASS] Chats GET /api/chats (200) - 67ms
+
+====================================================
+RESULTS: 13 PASSED, 0 FAILED
+====================================================
+
+[TEST SUITE] Database disconnected & test server shutdown complete.
+
+--- [END OF TEST OUTPUT: test_all_endpoints.js] ---

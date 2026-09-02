@@ -29,6 +29,18 @@ const ChatSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Message',
     },
+    match: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Match',
+      index: true,
+      sparse: true,
+    },
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'ARCHIVED', 'BLOCKED', 'CLOSED'],
+      default: 'ACTIVE',
+      index: true,
+    },
   },
   { timestamps: true }
 );

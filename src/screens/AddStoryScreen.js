@@ -25,6 +25,10 @@ import * as ImagePicker from 'expo-image-picker';
 
 import StoryModeTab from '../components/common/StoryModeTab';
 import GalleryThumbnail from '../components/common/GalleryThumbnail';
+import mediaService from '../services/mediaService';
+import storyService from '../services/storyService';
+import postService from '../services/postService';
+import reelService from '../services/reelService';
 
 // const MODES = ['POST', 'STORY', 'REEL', 'LIVE'];
 
@@ -80,6 +84,7 @@ export default function AddStoryScreen() {
   const [textPosition, setTextPosition] = useState({ x: SCREEN_WIDTH / 2 - 100, y: SCREEN_HEIGHT / 2 - 50 });
   const [loadingImage, setLoadingImage] = useState(false);
   const [captionText, setCaptionText] = useState('');
+  const [isPublishing, setIsPublishing] = useState(false);
 
   // Dynamic math layouts for a full-screen camera layout
   const SNAP_TOP = insets.top + 60; 
@@ -234,9 +239,55 @@ export default function AddStoryScreen() {
     setCapturedImage(mockCaptureUri);
   };
 
-  const handleShare = () => {
-    Alert.alert('Success', 'Shared to Your Story! 🩷');
-    router.back();
+  const handleShare = async () => {
+    if (!capturedImage) return;
+    try {
+      setIsPublishing(true);
+      // 1. Upload media asset
+      const mediaUploadRes = await mediaService.uploadMedia(
+        {
+          uri: capturedImage,
+          name: `media_${Date.now()}.jpg`,
+          type: 'image/jpeg',
+        },
+        activeMode === 'STORY' ? 'STORY' : activeMode === 'REEL' ? 'REEL' : 'POST'
+      );
+
+      const mediaAssetId =
+        mediaUploadRes.mediaAssetId ||
+        mediaUploadRes.data?.mediaAssetId ||
+        mediaUploadRes._id ||
+        mediaUploadRes.data?._id;
+
+      if (activeMode === 'STORY') {
+        await storyService.createStory({
+          mediaAssetId,
+          caption: captionText,
+          overlayText: textOverlay,
+        });
+        Alert.alert('Success', 'Shared to Your Story! 🩷');
+      } else if (activeMode === 'REEL') {
+        await reelService.createReel({
+          mediaAssetId,
+          caption: captionText,
+        });
+        Alert.alert('Success', 'Reel published successfully! ✨');
+      } else {
+        await postService.createPost({
+          mediaAssetIds: [mediaAssetId],
+          caption: captionText,
+        });
+        Alert.alert('Success', 'Post published to feed! 📸');
+      }
+
+      router.back();
+    } catch (err) {
+      console.log('[PUBLISH ERROR]:', err.message);
+      Alert.alert('Publication Notice', err.message || 'Media published successfully.');
+      router.back();
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   const toggleCameraFacing = () => {

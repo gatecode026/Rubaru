@@ -55,7 +55,8 @@ const getChats = async (req, res) => {
 
     res.status(200).json(chatList);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({ message: error.message, error: { code: error.code } });
   }
 };
 
@@ -66,10 +67,9 @@ const getMessages = async (req, res) => {
   const { page = 1, limit = 50 } = req.query;
 
   try {
-    const chat = await Chat.findOne({
-      _id: req.params.chatId,
-      participants: req.user._id,
-    });
+    const { requireActiveDatingConversation } = require('../services/matchAuthorizationService');
+    const authContext = await requireActiveDatingConversation(req.user._id, req.params.chatId);
+    const chat = authContext.chat;
 
     if (!chat) {
       return res.status(404).json({ message: 'Conversation thread not found or unauthorized' });
@@ -135,7 +135,8 @@ const getMessages = async (req, res) => {
     // Return in chronological order
     res.status(200).json(formattedMessages.reverse());
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({ message: error.message, error: { code: error.code } });
   }
 };
 
@@ -167,11 +168,10 @@ const sendMessage = async (req, res) => {
       return res.status(400).json({ message: 'Please provide chatId or recipientId' });
     }
 
-    // Double check chat access
-    const chat = await Chat.findOne({
-      _id: targetChatId,
-      participants: req.user._id,
-    });
+    // Double check chat access with active Match authorization
+    const { requireActiveDatingConversation } = require('../services/matchAuthorizationService');
+    const authContext = await requireActiveDatingConversation(req.user._id, targetChatId);
+    const chat = authContext.chat;
 
     if (!chat) {
       return res.status(404).json({ message: 'Conversation thread not found or unauthorized' });
@@ -208,7 +208,8 @@ const sendMessage = async (req, res) => {
 
     res.status(201).json(newMessage);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({ message: error.message, error: { code: error.code } });
   }
 };
 

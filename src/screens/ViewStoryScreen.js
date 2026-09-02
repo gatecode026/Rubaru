@@ -17,6 +17,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import storyService from '../services/storyService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const STORY_DURATION = 5000; // 5 seconds per story frame
@@ -77,6 +78,9 @@ export default function ViewStoryScreen() {
     elapsedBeforePause.current = 0;
     if (!isPaused) {
       startStoryTimer(STORY_DURATION);
+    }
+    if (activeStory && activeStory.id) {
+      storyService.recordStoryView(activeStory.id).catch(() => null);
     }
     return () => {
       if (animationRef.current) animationRef.current.stop();

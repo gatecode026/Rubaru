@@ -1,100 +1,118 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
-  TouchableOpacity,
   StatusBar,
   Dimensions,
+  ActivityIndicator,
+  TouchableOpacity,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import ReelItem from '../components/common/ReelItem';
 import BottomTabBar from '../components/common/BottomTabBar';
-
-const reelsData = [
-  {
-    id: '1',
-    userName: 'Vibhu',
-    isVerified: true,
-    userAvatar: 'https://i.pravatar.cc/150?img=32',
-    imageUri: 'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?auto=compress&cs=tinysrgb&w=800',
-    bgGradient: ['#7A2855', '#240A1A'],
-    caption: 'Setting breakout variables in figma, supafast...',
-    likedBy: 'ui.val and 8222 others',
-    audioTrack: 'zanderwhitehu',
-    likeCount: 8223,
-    commentCount: 82,
-    shareCount: 23,
-    isLiked: true,
-  },
-  {
-    id: '2',
-    userName: 'Uttam',
-    isVerified: true,
-    userAvatar: 'https://i.pravatar.cc/150?img=49',
-    imageUri: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=800',
-    bgGradient: ['#8C3B2B', '#240C07'],
-    caption: 'Golden hour glow in Jaipur 🌅✨',
-    likedBy: 'rohit.s and 12449 others',
-    audioTrack: 'jaipur_beats',
-    likeCount: 12450,
-    commentCount: 140,
-    shareCount: 45,
-    isLiked: false,
-  },
-  {
-    id: '3',
-    userName: 'Garv',
-    isVerified: false,
-    userAvatar: 'https://i.pravatar.cc/150?img=47',
-    imageUri: 'https://images.pexels.com/photos/1462637/pexels-photo-1462637.jpeg?auto=compress&cs=tinysrgb&w=800',
-    bgGradient: ['#2A4D69', '#0B1724'],
-    caption: "Match day vibes! Who's winning today? ⚽🔥",
-    likedBy: 'rahul_k and 6889 others',
-    audioTrack: 'stadium_chanti',
-    likeCount: 6890,
-    commentCount: 54,
-    shareCount: 18,
-    isLiked: false,
-  },
-  {
-    id: '4',
-    userName: 'Rahul',
-    isVerified: true,
-    userAvatar: 'https://i.pravatar.cc/150?img=44',
-    imageUri: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=800',
-    bgGradient: ['#4A3B69', '#140D24'],
-    caption: 'Late night coffee conversations ☕💫',
-    likedBy: 'sneha_v and 9119 others',
-    audioTrack: 'lofi_chill_beats',
-    likeCount: 9120,
-    commentCount: 98,
-    shareCount: 31,
-    isLiked: true,
-  },
-];
+import reelService from '../services/reelService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function ReelsScreen({ isNestedInPager }) {
   const router = useRouter();
-  // Each reel is the full window height — the image fills behind the tab bar, matching the reference
   const [reelHeight, setReelHeight] = useState(SCREEN_HEIGHT);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [reels, setReels] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Playback timer ref
+  const playbackStartRef = useRef(Date.now());
+
+  const fetchReels = async (isRefresh = false, cursorParam = null) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+        setError(null);
+      } else if (cursorParam) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+        setError(null);
+      }
+
+      const res = await reelService.getReelFeed({
+        limit: 10,
+        cursor: cursorParam || undefined,
+      });
+
+      const items = res.items || res.data?.items || [];
+      const pageInfo = res.pageInfo || res.data?.pageInfo || {};
+
+      if (isRefresh || !cursorParam) {
+        setReels(items);
+      } else {
+        setReels((prev) => [...prev, ...items]);
+      }
+
+      setNextCursor(pageInfo.nextCursor || res.nextCursor || null);
+      setHasMore(Boolean(pageInfo.hasMore || res.hasMore));
+    } catch (err) {
+      console.log('[REELS FEED FETCH ERROR]:', err.message);
+      setError(err.message || 'Failed to load reels');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      setLoadingMore(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchReels(true);
+      playbackStartRef.current = Date.now();
+
+      return () => {
+        // Record watch duration for the active reel on unmount / route blur
+        if (reels[activeIndex]) {
+          const durationMs = Date.now() - playbackStartRef.current;
+          reelService.recordPlayback(reels[activeIndex]._id || reels[activeIndex].id, {
+            watchDurationMs: durationMs,
+            completed: durationMs >= 5000,
+          }).catch(() => null);
+        }
+      };
+    }, [activeIndex, reels])
+  );
 
   const handleBack = () => {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.push('/explore');
+      router.push('/(tabs)');
     }
   };
 
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems.length > 0) {
-      setActiveIndex(viewableItems[0].index);
+    if (viewableItems.length > 0 && viewableItems[0].index !== activeIndex) {
+      const prevIndex = activeIndex;
+      const newIndex = viewableItems[0].index;
+
+      // Record previous reel duration
+      if (reels[prevIndex]) {
+        const durationMs = Date.now() - playbackStartRef.current;
+        reelService.recordPlayback(reels[prevIndex]._id || reels[prevIndex].id, {
+          watchDurationMs: durationMs,
+          completed: durationMs >= 5000,
+        }).catch(() => null);
+      }
+
+      setActiveIndex(newIndex);
+      playbackStartRef.current = Date.now();
     }
   }).current;
 
@@ -109,39 +127,91 @@ export default function ReelsScreen({ isNestedInPager }) {
     }
   };
 
+  const mapReelToItem = (reel) => {
+    return {
+      id: reel.id || reel._id,
+      userName: reel.author?.displayName || reel.author?.username || 'Rubaru Creator',
+      isVerified: Boolean(reel.author?.isVerified),
+      userAvatar: reel.author?.avatarUri || 'https://i.pravatar.cc/150?img=33',
+      imageUri:
+        reel.posterUri ||
+        reel.mediaItems?.[0]?.thumbnail?.url ||
+        reel.mediaItems?.[0]?.variants?.[0]?.url ||
+        'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?auto=compress&cs=tinysrgb&w=800',
+      bgGradient: ['#2A1D24', '#140D11'],
+      caption: reel.caption || '',
+      likedBy: `${reel.likesCount || 0} likes`,
+      audioTrack: reel.audioTrack || 'original_audio',
+      likeCount: reel.likesCount || 0,
+      commentCount: reel.commentsCount || 0,
+      shareCount: reel.sharesCount || 0,
+      isLiked: Boolean(reel.viewerInteractions?.isLiked),
+      authorId: reel.authorId || reel.author?._id,
+    };
+  };
+
   return (
     <View style={styles.screenContainer}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Full-window feed — image fills behind everything */}
-      <View style={styles.feedWrapper} onLayout={handleLayout}>
-        {reelHeight > 0 && (
-          <FlatList
-            data={reelsData}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <ReelItem
-                item={item}
-                height={reelHeight}
-                onBackPress={handleBack}
-              />
-            )}
-            pagingEnabled
-            snapToInterval={reelHeight}
-            snapToAlignment="start"
-            decelerationRate="fast"
-            showsVerticalScrollIndicator={false}
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
-            getItemLayout={(data, index) => ({
-              length: reelHeight,
-              offset: reelHeight * index,
-              index,
-            })}
-          />
-        )}
-      </View>
+      {/* State View */}
+      {loading && !refreshing ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={styles.loadingText}>Loading reels...</Text>
+        </View>
+      ) : error && reels.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Ionicons name="videocam-off-outline" size={48} color="#9CA3AF" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => fetchReels(true)}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : reels.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Ionicons name="film-outline" size={48} color="#9CA3AF" />
+          <Text style={styles.emptyTitle}>No reels yet</Text>
+          <Text style={styles.emptySubtitle}>Be the first to share a moment with friends!</Text>
+        </View>
+      ) : (
+        <View style={styles.feedWrapper} onLayout={handleLayout}>
+          {reelHeight > 0 && (
+            <FlatList
+              data={reels}
+              keyExtractor={(item) => item.id || item._id}
+              renderItem={({ item, index }) => (
+                <ReelItem
+                  item={mapReelToItem(item)}
+                  height={reelHeight}
+                  isActive={index === activeIndex}
+                  onBackPress={handleBack}
+                />
+              )}
+              pagingEnabled
+              snapToInterval={reelHeight}
+              snapToAlignment="start"
+              decelerationRate="fast"
+              showsVerticalScrollIndicator={false}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
+              getItemLayout={(data, index) => ({
+                length: reelHeight,
+                offset: reelHeight * index,
+                index,
+              })}
+              onEndReached={() => {
+                if (hasMore && !loadingMore && nextCursor) {
+                  fetchReels(false, nextCursor);
+                }
+              }}
+              onEndReachedThreshold={0.5}
+            />
+          )}
+        </View>
+      )}
+
       {!isNestedInPager && (
         <BottomTabBar
           activeTab="Reels"
@@ -161,6 +231,45 @@ const styles = StyleSheet.create({
   },
   feedWrapper: {
     flex: 1,
-    overflow: 'hidden',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    marginTop: 8,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: '#F44649',
+    borderRadius: 20,
+  },
+  retryText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  emptyTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  emptySubtitle: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
