@@ -5,7 +5,7 @@
        RUBARU DATING CORE MODEL-LEVEL TEST SUITE           
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
 
 --- 1. DatingPreference Model Tests ---
 ✅ [PASS] Valid DatingPreference passes validation
@@ -28,7 +28,7 @@ MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
 
 --- 5. Match Model & Canonical Ordering Tests ---
 ✅ [PASS] Match model deterministically sorts user1 and user2 canonically
-✅ [PASS] Canonical pair correctly formatted: 6a96c3f7e9ef36c9eb4f15a5:6a96c3f7e9ef36c9eb4f15a6
+✅ [PASS] Canonical pair correctly formatted: 6a992dfd0f9b21fcf9a81940:6a992dfd0f9b21fcf9a81941
 ✅ [PASS] Self-matches are strictly prohibited and rejected
 
 --- 6. RecommendationBatch & OutboxEvent Tests ---
@@ -52,7 +52,7 @@ MODEL TESTS COMPLETED: 18 PASSED, 0 FAILED
       RUBARU DATING PREFERENCES INTEGRATION TEST SUITE     
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
 
 --- 1. Preference Service Tests ---
 ✅ [PASS] Initial getPreferences returns version 1 defaults
@@ -99,7 +99,7 @@ PREFERENCE TESTS COMPLETED: 28 PASSED, 0 FAILED
        RUBARU PROTECTED LOCATION INTEGRATION TEST SUITE    
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
 
 --- 1. Math & Distance Label Unit Tests ---
 ✅ [PASS] Haversine distance calculated accurately (1543m)
@@ -153,7 +153,7 @@ LOCATION TESTS COMPLETED: 31 PASSED, 0 FAILED
        RUBARU CANDIDATE ELIGIBILITY POLICY TEST SUITE      
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
 
 --- 1. Self & Account Status Unit Tests ---
 ✅ [PASS] Self evaluation is not eligible
@@ -203,7 +203,7 @@ ELIGIBILITY TESTS COMPLETED: 25 PASSED, 0 FAILED
        RUBARU DISCOVERY & RANKING INTEGRATION TEST SUITE   
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
 
 --- 1. Viewer Readiness Tests ---
 ✅ [PASS] Ready viewer passes readiness validation
@@ -222,7 +222,7 @@ MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
 
 --- 4. Discovery Pipeline & Privacy Tests ---
 ✅ [PASS] Discovery returns items array
-✅ [PASS] Returns eligible candidates (got 12)
+✅ [PASS] Returns eligible candidates (got 20)
 ✅ [PASS] Candidate 1 (Ananya) is returned
 ✅ [PASS] Candidate 2 (Priya) is eligible
 ✅ [PASS] Incompatible Candidate 3 (Rohan) is strictly excluded
@@ -257,7 +257,7 @@ DISCOVERY TESTS COMPLETED: 29 PASSED, 0 FAILED
      RUBARU PROFILE IMPRESSIONS INTEGRATION TEST SUITE     
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
 
 --- 1. Validation & Security Tests ---
 ✅ [PASS] Missing batchId throws INVALID_IMPRESSION_REQUEST
@@ -296,7 +296,7 @@ IMPRESSION TESTS COMPLETED: 16 PASSED, 0 FAILED
        RUBARU PASS, REMOVE & UNDO INTEGRATION TESTS        
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
 
 --- 1. Pass Validation & Execution Tests ---
 ✅ [PASS] Missing idempotencyKey throws INVALID_DISCOVERY_ACTION
@@ -401,7 +401,7 @@ LIKES, ROSES & QUOTAS TESTS: 28 PASSED, 0 FAILED
        RUBARU INCOMING LIKES & DECLINE INTEGRATION TESTS   
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
 
 --- 1. Inbox Querying & Priority Sorting Tests ---
 ✅ [PASS] getIncomingLikes returns items array
@@ -462,7 +462,7 @@ INCOMING LIKES & DECLINE TESTS: 36 PASSED, 0 FAILED
        RUBARU ATOMIC MATCH CREATION INTEGRATION TESTS      
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
 
 --- 1. Path A: Incoming Like Acceptance Tests ---
 ✅ [PASS] Sender accepting own like throws LIKE_OWNERSHIP_INVALID (403)
@@ -512,7 +512,7 @@ MATCH CREATION TESTS: 27 PASSED, 0 FAILED
        RUBARU MATCHES LIST & CHAT AUTH INTEGRATION TESTS    
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
 
 --- 1. Matches List Query & Privacy DTO Tests ---
 ✅ [PASS] getMatchesList returns items array
@@ -567,14 +567,13 @@ MATCHES LIST & CHAT AUTH TESTS: 30 PASSED, 0 FAILED
        RUBARU SAFETY: UNMATCH, BLOCK & REPORT TESTS        
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
 
 --- 1. Unmatch Flow Tests ---
 ✅ [PASS] Non-member unmatch throws MATCH_ACCESS_DENIED (403)
 ✅ [PASS] Unmatch action returns unmatched: true
 ✅ [PASS] Match status updated to UNMATCHED
 ✅ [PASS] endedBy records initiating user
-✅ [PASS] Chat status updated to CLOSED
 ✅ [PASS] match.unmatched outbox event is recorded
 ✅ [PASS] Idempotent unmatch retry returns success
 
@@ -609,7 +608,7 @@ MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
 ✅ [PASS] Report API returns reported: true
 
 ===========================================================
-SAFETY TESTS: 31 PASSED, 0 FAILED
+SAFETY TESTS: 30 PASSED, 1 FAILED
 ===========================================================
 
 
@@ -621,7 +620,7 @@ SAFETY TESTS: 31 PASSED, 0 FAILED
        RUBARU FRONTEND - BACKEND INTEGRATION TESTS        
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
 
 --- 1. Dating Preferences Integration ---
 ✅ [PASS] GET /v1/dating/preferences returns 200 OK
@@ -673,7 +672,7 @@ FRONTEND INTEGRATION TESTS: 23 PASSED, 0 FAILED
        RUBARU CONCURRENCY, SECURITY & IDOR AUDIT TESTS     
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
 
 --- 1. Concurrency & Race Condition Tests ---
 ✅ [PASS] Concurrent accept requests both complete safely (200 OK)
@@ -706,7 +705,7 @@ CONCURRENCY & SECURITY AUDIT TESTS: 12 PASSED, 0 FAILED
        RUBARU MEDIA FOUNDATION INTEGRATION TEST SUITE      
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
 
 --- 1. Model & Schema Validation Tests ---
 ✅ [PASS] Valid UploadSession passes Mongoose schema validation
@@ -766,7 +765,7 @@ MEDIA FOUNDATION TESTS: 33 PASSED, 0 FAILED
          RUBARU FOLLOW GRAPH INTEGRATION TEST SUITE        
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
 
 --- 1. Model Level Validation Tests ---
 ✅ [PASS] Valid FollowRelationship passes schema validation
@@ -906,7 +905,7 @@ POST LIFECYCLE TESTS: 40 PASSED, 0 FAILED
    RUBARU CENTRALIZED CONTENT VISIBILITY & AUTH TEST SUITE  
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
 
 --- 1. Central Policy Table-Driven Matrix Tests ---
 ✅ [PASS] Owner has OWNER level access to post
@@ -925,10 +924,7 @@ MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
 ✅ [PASS] Batch evaluation permits 3 posts (Public, FollowersOnly, PrivateAuthor) for follower
 
 --- 3. Media Delivery Authorization Endpoint Tests ---
-✅ [PASS] Stranger accessing public post media returns 200 OK
-✅ [PASS] Returns safe delivery URL
 ✅ [PASS] Stranger accessing followers-only media returns 403 Forbidden
-✅ [PASS] Accepted follower accessing followers-only media returns 200 OK
 ✅ [PASS] Stranger accessing unbound media returns 403 Forbidden
 ✅ [PASS] Owner accessing unbound media returns 200 OK
 
@@ -943,7 +939,7 @@ MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
 ✅ [PASS] Follow removal immediately revokes content access
 
 ===========================================================
-CONTENT VISIBILITY TESTS: 24 PASSED, 0 FAILED
+CONTENT VISIBILITY TESTS: 21 PASSED, 3 FAILED
 ===========================================================
 
 
@@ -1032,7 +1028,7 @@ SOCIAL INTERACTIONS TESTS: 50 PASSED, 0 FAILED
            RUBARU CONNECTED HOME FEED TEST SUITE           
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
 
 --- 1. Candidate Source & Inclusion/Exclusion Tests ---
 ✅ [PASS] Feed returns items array
@@ -1157,7 +1153,7 @@ FEED IMPRESSION TESTS: 31 PASSED, 0 FAILED
       RUBARU STORIES & EPHEMERAL LIFECYCLE TESTS           
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
 
 --- 1. Story Creation & Timing Tests ---
 ✅ [PASS] POST /v1/stories returns 201 Created
@@ -1221,7 +1217,7 @@ STORY LIFECYCLE TESTS: 37 PASSED, 0 FAILED
       RUBARU REELS PUBLICATION & PLAYBACK TESTS            
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
 
 --- 1. Reel Creation & Validation Tests ---
 ✅ [PASS] POST /v1/reels returns 201 Created
@@ -1350,7 +1346,7 @@ SOCIAL SAFETY & MODERATION TESTS: 41 PASSED, 0 FAILED
     RUBARU SOCIAL NOTIFICATIONS & DELIVERY TEST SUITE      
 ===========================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
 
 --- 1. Model & Schema Validation Tests ---
 ✅ [PASS] Valid Notification passes Mongoose schema validation
@@ -1366,7 +1362,7 @@ MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
 ✅ [PASS] Outbox event content.liked processed
 ✅ [PASS] POST_LIKED notification created
 ✅ [PASS] Post like deep link points to rubaru://post/:id
-[DEBUG COMMENT EVENT RES]: {"processed":true,"eventType":"comment.created","createdCount":1,"duplicateCount":0,"suppressedCount":0,"results":[{"success":true,"notificationId":"6a96c462b9aac89772e3bb8b","notification":{"recipient":"6a96c460b9aac89772e3bb14","sender":"6a96c461b9aac89772e3bb2f","type":"COMMENT_REPLIED","category":"replies","subjectType":"COMMENT","subjectId":"6a96c462b9aac89772e3bb80","contentId":"6a96c461b9aac89772e3bb41","sourceEventId":"6a96c462b9aac89772e3bb81","deduplicationKey":"comment_reply_6a96c462b9aac89772e3bb80_6a96c461b9aac89772e3bb2f_6a96c462b9aac89772e3bb81","titleKey":"notif.comment_replied.title","bodyKey":"notif.comment_replied.body","message":"Aarav Actor replied to your comment.","templateData":{"actorName":"Aarav Actor"},"deepLink":"rubaru://post/6a96c461b9aac89772e3bb41?commentId=6a96c462b9aac89772e3bb80","previewMediaId":null,"previewThumbnailUri":"","isRead":false,"status":"ACTIVE","groupCount":1,"groupActors":[],"_id":"6a96c462b9aac89772e3bb8b","createdAt":"2026-09-01T12:26:10.405Z","updatedAt":"2026-09-01T12:26:10.405Z","__v":0}}]}
+[DEBUG COMMENT EVENT RES]: {"processed":true,"eventType":"comment.created","createdCount":1,"duplicateCount":0,"suppressedCount":0,"results":[{"success":true,"notificationId":"6a992e7ed8e4c82109fae545","notification":{"recipient":"6a992e7cd8e4c82109fae4d3","sender":"6a992e7dd8e4c82109fae4e2","type":"COMMENT_REPLIED","category":"replies","subjectType":"COMMENT","subjectId":"6a992e7ed8e4c82109fae53b","contentId":"6a992e7dd8e4c82109fae4f7","sourceEventId":"6a992e7ed8e4c82109fae53c","deduplicationKey":"comment_reply_6a992e7ed8e4c82109fae53b_6a992e7dd8e4c82109fae4e2_6a992e7ed8e4c82109fae53c","titleKey":"notif.comment_replied.title","bodyKey":"notif.comment_replied.body","message":"Aarav Actor replied to your comment.","templateData":{"actorName":"Aarav Actor"},"deepLink":"rubaru://post/6a992e7dd8e4c82109fae4f7?commentId=6a992e7ed8e4c82109fae53b","previewMediaId":null,"previewThumbnailUri":"","isRead":false,"status":"ACTIVE","groupCount":1,"groupActors":[],"_id":"6a992e7ed8e4c82109fae545","createdAt":"2026-09-03T08:23:26.591Z","updatedAt":"2026-09-03T08:23:26.591Z","__v":0}}]}
 ✅ [PASS] Outbox event comment.created processed
 ✅ [PASS] COMMENT_REPLIED notification created
 ✅ [PASS] Outbox event moderation.decision_applied processed
@@ -1428,7 +1424,7 @@ SOCIAL NOTIFICATIONS TESTS: 48 PASSED, 0 FAILED
  RUBARU FRONTEND SOCIAL INTEGRATION & E2E SYSTEM TEST SUITE    
 ================================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
 
 --- 1. Media Upload & Post Creation Flow ---
 ✅ [PASS] POST /v1/posts creates post with 201 Created
@@ -1490,34 +1486,560 @@ FRONTEND SOCIAL INTEGRATION TESTS: 41 PASSED, 0 FAILED
 
 --- [END OF TEST OUTPUT: test/frontend_social_integration_tests.js] ---
 
---- [START OF TEST OUTPUT: test_all_endpoints.js] ---
+--- [START OF TEST OUTPUT: test/conversation_foundation_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+================================================================================
+   RUBARU RESEARCH 3: CONVERSATION & MEMBERSHIP FOUNDATION TEST SUITE (R3-02)   
+================================================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+
+--- 1. Conversation & Member Model Invariants ---
+✅ [PASS] R3-02-01: Default conversation status is ACTIVE
+✅ [PASS] R3-02-01: Default conversation lastSequence is 0
+✅ [PASS] R3-02-01: Default memberCount is 2
+✅ [PASS] R3-02-01: Schema version defaults to 1.0
+✅ [PASS] R3-02-02: Default member role is MEMBER
+✅ [PASS] R3-02-02: Default member state is ACTIVE
+✅ [PASS] R3-02-02: Default lastReadSequence is 0
+✅ [PASS] R3-02-02: Default lastDeliveredSequence is 0
+✅ [PASS] R3-02-02: Default notificationPreference is ALL
+✅ [PASS] R3-02-02: Duplicate membership record for (conversationId, userId) is rejected by unique index
+
+--- 2. Direct Match Conversation Creation & Uniqueness ---
+✅ [PASS] R3-02-03: First ensureDirectMatchConversation returns isNew: true
+✅ [PASS] R3-02-03: Conversation type is DIRECT_MATCH
+✅ [PASS] R3-02-03: Conversation status is ACTIVE
+✅ [PASS] R3-02-05: Exactly 2 membership records created for match participants
+✅ [PASS] R3-02-05: Direct conversation derives participants strictly from authoritative Match record
+✅ [PASS] R3-02-04: Repeated ensureDirectMatchConversation returns existing conversation (isNew: false)
+✅ [PASS] R3-02-04: Same conversation document resolved on retry
+✅ [PASS] R3-02-06: Non-member third party actor cannot create or access conversation for another match
+✅ [PASS] R3-02-13: conversation.created outbox event recorded atomically
+✅ [PASS] R3-02-13: Outbox payload contains privacy-safe conversation metadata
+
+--- 3. Centralized Conversation Authorization ---
+✅ [PASS] R3-02-07: Active conversation member is authorized to VIEW
+✅ [PASS] R3-02-07: Authorization context correctly resolves other member ID
+✅ [PASS] R3-02-07: Non-member is strictly denied access with MEMBERSHIP_REQUIRED
+✅ [PASS] R3-02-10: Inactive/left member is denied active operations with MEMBER_NOT_ACTIVE
+
+--- 4. Lifecycle Transitions: Unmatch & Block ---
+✅ [PASS] R3-02-09: Unmatch transitions conversation status to CLOSED_BY_UNMATCH
+✅ [PASS] R3-02-09: Close reason recorded accurately
+✅ [PASS] R3-02-09: Closed conversation strictly rejects SEND_MESSAGE operation
+✅ [PASS] R3-02-09: Historical VIEW operation remains permitted after unmatch
+✅ [PASS] R3-02-08: Blocked relationship denies conversation access with USER_BLOCKED
+
+--- 5. Conversation REST Endpoints & Pagination ---
+✅ [PASS] R3-02-11: GET /v1/conversations returns HTTP 200
+✅ [PASS] R3-02-11: List returns array of items
+✅ [PASS] R3-02-11: User A conversation is returned
+✅ [PASS] R3-02-11: Other participant profile safely hydrated without N+1
+✅ [PASS] R3-02-11: Other participant display name matches
+✅ [PASS] R3-02-11: User with no memberships receives empty list
+✅ [PASS] R3-02-12: GET /v1/conversations/:id returns HTTP 200 for authorized member
+✅ [PASS] R3-02-12: Conversation ID matches
+✅ [PASS] R3-02-12: Member list returned safely
+✅ [PASS] R3-02-12: Sensitive user account fields not leaked in response
+✅ [PASS] R3-02-12: Non-member IDOR attempt returns HTTP 403 Forbidden
+✅ [PASS] R3-02-11: Tampered or invalid cursor is rejected with HTTP 400
+✅ [PASS] R3-02-03: POST /v1/conversations/ensure-direct resolves conversation successfully
+
+--- 6. Concurrency & Race Condition Audit ---
+✅ [PASS] R3-02-04: 10 concurrent creation attempts resolved to exactly ONE conversation ID
+✅ [PASS] R3-02-04: Database unique constraint guarantees exactly one conversation created under concurrency
+✅ [PASS] R3-02-04: Exactly two membership records exist without duplicates
+
+================================================================================
+TOTAL PASSED: 45
+TOTAL FAILED: 0
+================================================================================
+
+
+--- [END OF TEST OUTPUT: test/conversation_foundation_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/socket_messaging_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+================================================================================
+   RUBARU RESEARCH 3: SOCKET.IO ARCHITECTURE & SECURITY TESTS (R3-04)           
+================================================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- 1. Socket Handshake Authentication ---
+[SOCKET] User connected: 6a992e93e45f2a1076a81658 (Socket ID: tTx3_Yac2h6ODrjpAAAB)
+✅ [PASS] R3-04-02: Valid JWT token connects to Socket.io
+✅ [PASS] R3-04-02: Missing token is rejected during handshake
+✅ [PASS] R3-04-02: Invalid JWT signature is rejected
+✅ [PASS] R3-04-12: Expired token is rejected during handshake
+✅ [PASS] R3-04-12: Suspended user account connection is rejected
+
+--- 2. Server-Controlled Rooms & Subscription Security ---
+[SOCKET] User connected: 6a992e93e45f2a1076a8165c (Socket ID: y2m8b3qwDFJSQ-BJAAAL)
+[SOCKET] User connected: 6a992e93e45f2a1076a8165f (Socket ID: YtYYqXNTJDL_bFzfAAAN)
+✅ [PASS] R3-04-05: Active member successfully subscribes to conversation room
+✅ [PASS] R3-04-05: Legacy join_chat event successfully subscribes authorized member
+✅ [PASS] R3-04-06: Non-member subscription attempt is denied access
+✅ [PASS] R3-04-06: Conversation unsubscription succeeds
+
+--- 3. Real-Time Message Sending & Durable ACKs ---
+✅ [PASS] R3-04-08: message.send returns MESSAGE_ACCEPTED ACK
+✅ [PASS] R3-04-07: First message sequence is 1
+✅ [PASS] R3-04-03: Sender identity is derived strictly from socket session
+✅ [PASS] R3-04-07: Message is durably committed in MongoDB before ACK returned
+✅ [PASS] R3-04-07: Persisted message text matches payload
+✅ [PASS] R3-04-10: Repeated send returns successful ACK
+✅ [PASS] R3-04-10: Response flags idempotentReplay: true
+✅ [PASS] R3-04-10: Resolved message ID matches original message
+✅ [PASS] R3-04-07: Monotonic per-conversation sequence increments to 2
+✅ [PASS] R3-04-07: Non-member message send is rejected
+✅ [PASS] R3-04-11: Empty message text is rejected
+
+--- 4. Outbox Real-Time Delivery ---
+✅ [PASS] R3-04-09: Outbox dispatch succeeds for active conversation
+✅ [PASS] R3-04-09: message.created event received by subscribed socket
+✅ [PASS] R3-04-09: Delivered message content matches outbox payload
+
+--- 5. Dynamic Revocation on Unmatch & Block ---
+✅ [PASS] R3-04-13: Unmatching emits conversation.revoked event
+✅ [PASS] R3-04-13: Revocation specifies affected conversation ID
+✅ [PASS] R3-04-13: Sending messages to closed/unmatched conversation is rejected
+
+--- 6. Calling & WebRTC Signaling Isolation ---
+[SOCKET CALL] 6a992e93e45f2a1076a81658 calling 6a992e93e45f2a1076a8165c (video)
+✅ [PASS] R3-04-15: WebRTC call initiation signals recipient successfully
+✅ [PASS] R3-04-15: Incoming call caller ID matches sender
+[SOCKET CALL] Call accepted. Alerting caller: 6a992e93e45f2a1076a81658
+✅ [PASS] R3-04-15: Call accept relays call_connected signal
+✅ [PASS] R3-04-15: WebRTC SDP signal relayed accurately
+[SOCKET CALL] Call ended. Relaying hangup to: 6a992e93e45f2a1076a8165c
+✅ [PASS] R3-04-15: Call end relays call_hungup signal
+[SOCKET] User disconnected: 6a992e93e45f2a1076a81658 (Reason: server shutting down)
+[SOCKET] User disconnected: 6a992e93e45f2a1076a8165c (Reason: server shutting down)
+[SOCKET] User disconnected: 6a992e93e45f2a1076a8165f (Reason: server shutting down)
+
+================================================================================
+TOTAL PASSED: 31
+TOTAL FAILED: 0
+================================================================================
+
+
+--- [END OF TEST OUTPUT: test/socket_messaging_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/chat_media_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+================================================================================
+   RUBARU RESEARCH 3: CHAT MEDIA & VOICE ATTACHMENTS (R3-05 GAP CLOSURE)       
+================================================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
+
+--- GAP 1: Processing-State Lifecycle & Transitions ---
+✅ [PASS] R3-05-GAP-001: Authorized -> Pending Upload is valid
+✅ [PASS] R3-05-GAP-001: Verifying -> Processing is valid
+✅ [PASS] R3-05-GAP-001: Processing -> Ready is valid
+✅ [PASS] R3-05-GAP-001: Ready -> Pending Upload backward transition is rejected
+✅ [PASS] R3-05-GAP-001: Quarantined -> Ready transition is strictly rejected
+✅ [PASS] R3-05-GAP-001: Rejected -> Ready transition is strictly rejected
+
+--- GAP 2: Upload Status, Retry & Cancellation Contracts ---
+✅ [PASS] R3-05-GAP-002: Status contract returns session status
+✅ [PASS] R3-05-GAP-002: Status contract sanitizes private object keys and bucket internals
+✅ [PASS] R3-05-GAP-002: Non-owner cannot query session status
+✅ [PASS] R3-05-GAP-002: Retry contract returns fresh upload instructions
+✅ [PASS] R3-05-GAP-002: Cancel contract marks upload session cancelled
+✅ [PASS] R3-05-GAP-002: Cancelled session transitions MediaAsset to CANCELLED
+
+--- GAPs 4, 5 & 6: Media Probing, Codecs & Decoded Waveforms ---
+✅ [PASS] R3-05-GAP-004: Audio processor probes duration and container
+✅ [PASS] R3-05-GAP-004: Exact duration parsed from WAV data chunk (1000ms)
+✅ [PASS] R3-05-GAP-006: Waveform envelope extracted from real PCM audio amplitude data (50 bounded peaks)
+
+--- GAP 7: Fail-Closed Malware & Content Moderation ---
+✅ [PASS] R3-05-GAP-007: Malware signature quarantined by security screening
+✅ [PASS] R3-05-GAP-007: MediaAsset transitioned to QUARANTINED
+✅ [PASS] R3-05-GAP-007: Quarantined asset marked safetyHold: true
+✅ [PASS] R3-05-GAP-007: Content moderation screening flags and rejects violation
+✅ [PASS] R3-05-GAP-007: MediaAsset transitioned to REJECTED
+✅ [PASS] R3-05-GAP-007: Scanner timeout marks asset as FAILED_RETRYABLE
+✅ [PASS] R3-05-GAP-007: Transient timeout transitions to FAILED_RETRYABLE
+
+--- GAP 3: Message Persistence & Atomic Reservation ---
+✅ [PASS] R3-05-GAP-003: Message created with bound attachment
+✅ [PASS] R3-05-GAP-003: Asset bound to message atomically
+
+--- GAP 8: Deletion, Unsend & Orphan Cleanup ---
+✅ [PASS] R3-05-GAP-008: Sender unsends message successfully
+✅ [PASS] R3-05-GAP-008: Message status set to DELETED tombstone
+✅ [PASS] R3-05-GAP-008: Delivery URL revoked for unsent message attachment
+
+--- GAP 9: Strengthened Authorized Delivery ---
+✅ [PASS] R3-05-GAP-009: Delivery access denied for quarantined media
+✅ [PASS] R3-05-GAP-009: Active peer obtains authorized delivery URL for voice note
+✅ [PASS] R3-05-GAP-008: Orphan cleanup worker executes safely
+
+--- GAP 10: Expanded Concurrency & Race Tests ---
+✅ [PASS] R3-05-GAP-010: Exactly 1 concurrent send binds asset, the other is rejected
+✅ [PASS] R3-05-GAP-010: 5 concurrent upload sessions with same idempotencyKey resolve to single session
+[SOCKET] User connected: 6a992e990d1a6663011c0257 (Socket ID: ffNAj1uUTUY-gpk5AAAB)
+✅ [PASS] R3-05-GAP-010: Outbox real-time dispatch transports attachment metadata safely
+[SOCKET] User disconnected: 6a992e990d1a6663011c0257 (Reason: server shutting down)
+
+================================================================================
+TOTAL PASSED: 33
+TOTAL FAILED: 0
+================================================================================
+
+
+--- [END OF TEST OUTPUT: test/chat_media_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/watermark_receipt_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+================================================================================
+   RUBARU RESEARCH 3: DELIVERY & READ WATERMARKS (R3-06 TEST SUITE)             
+================================================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+✅ [PASS] R3-06 Setup: 3 messages sent with sequences 1, 2, 3
+
+--- Section 1: Delivery Watermark Advancement & Validation ---
+✅ [PASS] R3-06-REQ-001/024: Initial member watermarks are 0
+✅ [PASS] R3-06-REQ-005: Sequence ahead of conversation lastSequence is rejected
+✅ [PASS] R3-06-REQ-005: Negative sequence is rejected with INVALID_RECEIPT_SEQUENCE
+✅ [PASS] R3-06-REQ-001: Delivery watermark advances to sequence 2
+
+--- Section 2: Monotonic Updates & Idempotent No-Ops ---
+✅ [PASS] R3-06-REQ-003: Duplicate delivery sequence is idempotent no-op (changed: false)
+✅ [PASS] R3-06-REQ-003: Lower delivery sequence never regresses watermark (remains 2)
+
+--- Section 3: Read Watermarks & Read-Implies-Delivered ---
+✅ [PASS] R3-06-REQ-004: Read watermark to 3 automatically advances delivered watermark to 3 (Read implies delivered)
+
+--- Section 3.1: REST Watermark Contracts ---
+✅ [PASS] R3-06-REQ-007: Unauthenticated REST delivered request returns 401
+✅ [PASS] R3-06-REQ-007: Non-member REST delivered request returns 403
+✅ [PASS] R3-06-REQ-007: Authenticated REST delivered request returns 200 with receipt state
+✅ [PASS] R3-06-REQ-008: Authenticated REST read request returns 200 with receipt state
+✅ [PASS] R3-06-REQ-016: GET /v1/conversations/:conversationId/receipts returns self and peer watermarks
+
+--- Section 4: Authorization, Non-Members & Blocks ---
+✅ [PASS] R3-06-REQ-006: Non-member cannot update conversation watermark
+✅ [PASS] R3-06-REQ-020: Blocked user cannot update watermarks
+
+--- Section 5: Direct-Message Status Derivation & DTOs ---
+✅ [PASS] R3-06-REQ-015: Message 1 derived status is READ (readThroughSequence >= 1)
+✅ [PASS] R3-06-REQ-015: Message 2 derived status is READ (readThroughSequence >= 2)
+✅ [PASS] R3-06-REQ-015: Message 3 derived status is DELIVERED (deliveredThroughSequence >= 3, read < 3)
+✅ [PASS] R3-06-REQ-015: Message 4 derived status is SENT (neither delivered nor read)
+✅ [PASS] R3-06-REQ-015: Unsent message derived status remains DELETED tombstone
+✅ [PASS] R3-06-REQ-016: getConversationDetails embeds self and peer receiptState
+
+--- Section 6: Socket.io Watermark Commands & Outbox Dispatch ---
+[SOCKET] User connected: 6a992ea3cfcdef8902e56440 (Socket ID: 2qRiNTRK_pFfT9V-AAAB)
+[SOCKET] User connected: 6a992ea3cfcdef8902e5643d (Socket ID: I09Fi4yapFehR0vAAAAD)
+✅ [PASS] R3-06-REQ-009/012: Socket.io receipt.delivered returns durable ACK
+✅ [PASS] R3-06-REQ-013/014: Outbox dispatches versioned conversation.receipt_watermark.updated event to peer
+
+--- Section 7: Multi-Device Account-Level Semantics ---
+[SOCKET] User connected: 6a992ea3cfcdef8902e56440 (Socket ID: WwJqDFp6XhUGZytPAAAF)
+✅ [PASS] R3-06-REQ-017: Multi-device sync notifies second device in user room
+
+--- Section 8: Concurrency & Race Tests ---
+✅ [PASS] R3-06-REQ-026: Racing delivery updates (6 vs 8) converge to highest value (8)
+✅ [PASS] R3-06-REQ-026: Racing read updates converge to highest value (8)
+✅ [PASS] R3-06-REQ-026: Watermark invariant read <= delivered holds under concurrency
+[SOCKET] User disconnected: 6a992ea3cfcdef8902e56440 (Reason: server shutting down)
+[SOCKET] User disconnected: 6a992ea3cfcdef8902e5643d (Reason: server shutting down)
+[SOCKET] User disconnected: 6a992ea3cfcdef8902e56440 (Reason: server shutting down)
+
+================================================================================
+TOTAL PASSED: 27
+TOTAL FAILED: 0
+================================================================================
+
+
+--- [END OF TEST OUTPUT: test/watermark_receipt_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/offline_sync_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+================================================================================
+   RUBARU RESEARCH 3: OFFLINE SYNCHRONIZATION & CATCH-UP (R3-07 TEST SUITE)     
+================================================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-00.1meot8l.mongodb.net
+
+--- Section 1: Conversation Synchronization Manifest ---
+✅ [PASS] R3-07-REQ-002: Sync manifest returns user conversations
+✅ [PASS] R3-07-REQ-002: Manifest correctly indicates catchUpRequired: true (latestSequence: 6 > readThroughSequence: 0)
+✅ [PASS] R3-07-REQ-012: REST GET /v1/messaging/sync returns 200
+
+--- Section 2: Forward Catch-Up & Stable High-Water Boundary ---
+✅ [PASS] R3-07-REQ-003: Page 1 returns 3 messages
+✅ [PASS] R3-07-REQ-003: Page 1 covers sequence 1 through 3
+✅ [PASS] R3-07-REQ-004: Stable throughSequence captured as 6
+✅ [PASS] R3-07-REQ-005: Page 1 hasMore is true with nextCursor
+✅ [PASS] R3-07-REQ-003: Page 2 returns remaining 3 messages
+✅ [PASS] R3-07-REQ-003: Page 2 covers sequence 4 through 6
+✅ [PASS] R3-07-REQ-004: Page 2 preserves stable throughSequence (6), excluding mid-flight sequence 7
+✅ [PASS] R3-07-REQ-005: Catch-up session completes with hasMore: false
+
+--- Section 3: Cursor Security & Scope Validation ---
+✅ [PASS] R3-07-REQ-021: Tampered cursor signature rejected with SYNC_CURSOR_TAMPERED
+✅ [PASS] R3-07-REQ-021: Cross-user cursor rejected with SYNC_CURSOR_SCOPE_MISMATCH
+✅ [PASS] R3-07-REQ-021: Expired cursor rejected with SYNC_CURSOR_EXPIRED
+
+--- Section 4: Sequence Gap Detection ---
+✅ [PASS] R3-07-REQ-007: Normal sequential catch-up reports gapDetected: false
+
+--- Section 5: Tombstones & Attachments Synchronization ---
+✅ [PASS] R3-07-REQ-017: Unsent message synchronizes as DELETED tombstone without sequence gap
+
+--- Section 6: Socket.io Reconnect Handshake & Live Handoff ---
+[SOCKET] User connected: 6a992eadb82fb10159986222 (Socket ID: cMc_gOyO2PDZYRtVAAAB)
+[SOCKET] User connected: 6a992eadb82fb1015998621f (Socket ID: 8NDyqqcvyQ3gBRx5AAAD)
+✅ [PASS] R3-07-REQ-008/013: Socket.io conversation.sync executes handshake and returns missing delta
+
+--- Section 7: Multi-Device Independent Catch-Up ---
+✅ [PASS] R3-07-REQ-015: Device 1 catches up from sequence 6 (gets message 7)
+✅ [PASS] R3-07-REQ-015: Device 2 independently catches up from sequence 2 (gets messages 3-7)
+
+--- Section 8: Access Revocation Synchronization ---
+✅ [PASS] R3-07-REQ-020: Blocked user catch-up request is rejected with 403 authorization error
+
+--- Section 9: Read-Only Idempotency ---
+✅ [PASS] R3-07-REQ-025: Sync and catch-up operations produce zero side-effect mutations on receipt watermarks
+[SOCKET] User disconnected: 6a992eadb82fb10159986222 (Reason: server shutting down)
+[SOCKET] User disconnected: 6a992eadb82fb1015998621f (Reason: server shutting down)
+
+================================================================================
+TOTAL PASSED: 21
+TOTAL FAILED: 0
+================================================================================
+
+
+--- [END OF TEST OUTPUT: test/offline_sync_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/presence_typing_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+================================================================================
+   RUBARU RESEARCH 3: TYPING INDICATORS & REAL-TIME PRESENCE TESTS (R3-08)      
+================================================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- SECTION 1: PRESENCE STORE ABSTRACTION & LEASES (R3-08-REQ-001, REQ-002, REQ-005) ---
+✅ [PASS] R3-08-REQ-001: First connection registration marks isFirstConnection=true
+✅ [PASS] R3-08-REQ-004: Additional device connection aggregates without emitting duplicate first connection
+✅ [PASS] R3-08-REQ-004: Account presence is ONLINE when active connections > 0
+✅ [PASS] R3-08-REQ-005: Heartbeat refreshes connection lease TTL
+✅ [PASS] R3-08-REQ-006: First device disconnect does NOT mark user offline while another connection is active
+✅ [PASS] R3-08-REQ-004: User remains ONLINE with 1 remaining active connection
+✅ [PASS] R3-08-REQ-006: Final device disconnect marks isLastDisconnect=true
+✅ [PASS] R3-08-REQ-004: Account presence becomes OFFLINE when all connections disconnected
+✅ [PASS] R3-08-REQ-005: Stale connection leases expire automatically on TTL deadline
+
+--- SECTION 2: AUTHENTICATED SOCKET PRESENCE & LIFECYCLE (R3-08-REQ-003, REQ-006, REQ-011) ---
+[SOCKET] User connected: 6a992eb60f27eb9d2a70932e (Socket ID: g7qBYMjGlEp4IWavAAAB)
+✅ [PASS] R3-08-REQ-003: Authenticated socket connection succeeds with verified JWT
+✅ [PASS] R3-08-REQ-003: Socket connection automatically registers server-derived ONLINE presence
+[SOCKET] User connected: 6a992eb60f27eb9d2a70932e (Socket ID: JUbtcxKIJ2rZVWs8AAAD)
+✅ [PASS] R3-08-REQ-004: Multi-device connection tracks 2 active connections for User A
+[SOCKET] User connected: 6a992eb60f27eb9d2a709332 (Socket ID: T27v7wxBpbmG_VwvAAAF)
+✅ [PASS] R3-08-REQ-005: Socket presence.heartbeat successfully refreshes lease
+[SOCKET] User disconnected: 6a992eb60f27eb9d2a70932e (Reason: client namespace disconnect)
+✅ [PASS] R3-08-REQ-006: User A remains ONLINE after Device 1 disconnects
+✅ [PASS] R3-08-REQ-006: No OFFLINE event emitted when another active device connection remains
+[SOCKET] User disconnected: 6a992eb60f27eb9d2a70932e (Reason: client namespace disconnect)
+✅ [PASS] R3-08-REQ-006 / R3-08-REQ-011: Final disconnect emits presence.updated (OFFLINE) with server timestamp
+✅ [PASS] R3-08-REQ-020: Presence event payload contains zero socket IDs or device identifiers
+
+--- SECTION 3: PRESENCE SNAPSHOT & PRIVACY (R3-08-REQ-008, REQ-009, REQ-010) ---
+[SOCKET] User connected: 6a992eb60f27eb9d2a70932e (Socket ID: VwoaOxyTz0bJ0ZSaAAAH)
+✅ [PASS] R3-08-REQ-010: Socket presence.snapshot returns authorized presence snapshot
+✅ [PASS] R3-08-REQ-010: Member A presence state in snapshot is ONLINE
+✅ [PASS] R3-08-REQ-010: REST presence snapshot returns valid conversation presence
+✅ [PASS] R3-08-REQ-009: Non-member presence snapshot request is rejected with 403 / MEMBERSHIP_REQUIRED
+✅ [PASS] R3-08-REQ-008: Unauthorized user cannot view presence snapshot
+
+--- SECTION 4: EPHEMERAL TYPING INDICATORS (R3-08-REQ-014 to REQ-020) ---
+✅ [PASS] R3-08-REQ-015: Authorized typing.start command accepted
+✅ [PASS] R3-08-REQ-015: typing.updated (isTyping=true) broadcast to conversation members
+✅ [PASS] R3-08-REQ-020: Typing payload contains zero draft text or socket IDs
+✅ [PASS] R3-08-REQ-019: Duplicate typing.start succeeds without error
+✅ [PASS] R3-08-REQ-019: Duplicate typing.start is deduplicated and does not flood duplicate broadcasts
+✅ [PASS] R3-08-REQ-016: Authorized typing.stop command accepted
+✅ [PASS] R3-08-REQ-016: typing.updated (isTyping=false) broadcast to conversation members
+✅ [PASS] R3-08-REQ-019: Duplicate typing.stop is an idempotent no-op
+✅ [PASS] R3-08-REQ-019: Duplicate typing.stop does not broadcast duplicate stop event
+✅ [PASS] R3-08-REQ-017: Active typer registered in ephemeral store
+✅ [PASS] R3-08-REQ-017: Ephemeral typing lease automatically expires when TTL elapses
+
+--- SECTION 5: MULTI-DEVICE TYPING AGGREGATION (R3-08-REQ-018) ---
+✅ [PASS] R3-08-REQ-018: First device start is an effective typing transition
+✅ [PASS] R3-08-REQ-018: Second device typing does not trigger duplicate effective start transition
+✅ [PASS] R3-08-REQ-018: Device 1 stopping while Device 2 is active does not trigger effective stop transition
+✅ [PASS] R3-08-REQ-018: User A remains typing while Device 2 lease is active
+✅ [PASS] R3-08-REQ-018: Final device stopping triggers effective typing stop transition
+
+--- SECTION 6: BLOCK / REVOCATION / OFFLINE SYNC SAFETY (R3-08-REQ-021, REQ-022) ---
+✅ [PASS] User A typing before block
+✅ [PASS] R3-08-REQ-021: Conversation typing leases cleared on block/unmatch
+✅ [PASS] R3-08-REQ-022: Typing events are strictly ephemeral and NEVER written to Mongo Outbox
+✅ [PASS] R3-08-REQ-022: Typing indicators are NEVER persisted as Messages in MongoDB
+
+--- SECTION 7: RATE LIMITING & SECURITY CONTRACTS (R3-08-REQ-023, REQ-024, REQ-026) ---
+[SOCKET] User connected: 6a992eb60f27eb9d2a709334 (Socket ID: nd5FjMUjLTC-V3VkAAAJ)
+✅ [PASS] R3-08-REQ-024 / REQ-026: Non-member / blocked user typing attempt rejected with TYPING_ACCESS_DENIED
+
+--- SECTION 8: REDIS OUTAGE & MULTI-INSTANCE CONSISTENCY (R3-08-REQ-013, REQ-025, REQ-027) ---
+✅ [PASS] R3-08-REQ-013: Store returns UNKNOWN state during store outage without crashing
+✅ [PASS] R3-08-REQ-013: Snapshot safely reports UNKNOWN member state during outage
+✅ [PASS] R3-08-REQ-025: Cross-node registration correctly detects single first-connect transition
+✅ [PASS] R3-08-REQ-025: Cross-node disconnect does not falsely mark user offline while Node 2 connection active
+✅ [PASS] R3-08-REQ-025: Final disconnect across nodes correctly triggers single last-disconnect transition
+
+--- SECTION 9: CONCURRENCY & RACE CONDITIONS (R3-08-REQ-027) ---
+✅ [PASS] R3-08-REQ-027: Concurrent device connections produce exactly one effective first-connection transition
+✅ [PASS] R3-08-REQ-027: Concurrent typing start commands produce exactly one effective typing-start transition
+✅ [PASS] R3-08-REQ-027: Typing stop on one device does not clobber active concurrent typing on another device
+[SOCKET] User disconnected: 6a992eb60f27eb9d2a709332 (Reason: client namespace disconnect)
+[SOCKET] User disconnected: 6a992eb60f27eb9d2a70932e (Reason: client namespace disconnect)
+[SOCKET] User disconnected: 6a992eb60f27eb9d2a709334 (Reason: client namespace disconnect)
+
+================================================================================
+TOTAL PASSED: 51
+TOTAL FAILED: 0
+STATUS: ALL TESTS PASSED
+================================================================================
+
+
+--- [END OF TEST OUTPUT: test/presence_typing_tests.js] ---
+
+--- [START OF TEST OUTPUT: test/reaction_reply_poll_tests.js] ---
+[DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
+================================================================================
+   RUBARU RESEARCH 3: REACTIONS, REPLIES & IN-CHAT POLLS TESTS (R3-09)          
+================================================================================
+
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
+
+--- SECTION 1: DURABLE MESSAGE REACTIONS (R3-09-REQ-001 to REQ-006) ---
+✅ [PASS] R3-09-REQ-001 / REQ-003: User B successfully reacts LOVE to Message 1
+✅ [PASS] R3-09-REQ-004: Reaction summary materialized with total=1 and counts.LOVE=1
+✅ [PASS] R3-09-REQ-001: MessageReaction document created with compound index
+✅ [PASS] R3-09-REQ-005: Duplicate reaction submission is an idempotent no-op without double counting
+✅ [PASS] R3-09-REQ-002 / REQ-003: Reaction replaced and emoji normalized to LIKE
+✅ [PASS] R3-09-REQ-004: Reaction replace decrements old count and increments new count atomically
+✅ [PASS] R3-09-REQ-004: Multi-user reactions aggregate correctly without unbounded arrays
+✅ [PASS] R3-09-REQ-003: Reaction removal decrements count correctly
+✅ [PASS] R3-09-REQ-005: Duplicate remove reaction is an idempotent no-op
+✅ [PASS] R3-09-REQ-006: Transactional OutboxEvents created for reaction mutations with versioning
+✅ [PASS] R3-09-REQ-004: Paginated reactor list query returns authorized conversation members only
+
+--- SECTION 2: SECURE QUOTED-MESSAGE REPLIES (R3-09-REQ-007 to REQ-011) ---
+✅ [PASS] R3-09-REQ-007: Reply captures replyToMessageId and replyToSequence accurately
+✅ [PASS] R3-09-REQ-009: Message DTO contains derived safe reply preview
+✅ [PASS] R3-09-REQ-007: Replying to another reply references direct parent correctly
+✅ [PASS] R3-09-REQ-008: Cross-conversation reply attempt rejected with REPLY_TARGET_CONVERSATION_MISMATCH
+✅ [PASS] R3-09-REQ-008: Cross-conversation reply security check passed
+✅ [PASS] R3-09-REQ-008: Non-existent reply target rejected with REPLY_TARGET_NOT_FOUND
+✅ [PASS] R3-09-REQ-008: Missing reply target check passed
+✅ [PASS] R3-09-REQ-010: Unsent message content is redacted and cannot leak via reply previews
+
+--- SECTION 3: IN-CHAT POLLS (R3-09-REQ-012 to REQ-019) ---
+✅ [PASS] R3-09-REQ-012 / REQ-014: Poll message created transactionally with message service
+✅ [PASS] R3-09-REQ-013: Poll options have server-generated unique option IDs
+✅ [PASS] R3-09-REQ-012: New poll initializes with OPEN status and 0 total voters
+✅ [PASS] R3-09-REQ-013: Duplicate poll options rejected with DUPLICATE_POLL_OPTIONS
+✅ [PASS] R3-09-REQ-013: Duplicate option validation check passed
+✅ [PASS] R3-09-REQ-015: User B votes on poll successfully
+✅ [PASS] R3-09-REQ-016: Vote increments option voteCount and totalVoters atomically
+✅ [PASS] R3-09-REQ-018: Poll DTO includes currentUserOptionIds for authorized voter
+✅ [PASS] R3-09-REQ-016: Duplicate poll vote is an idempotent no-op without double counting
+✅ [PASS] R3-09-REQ-016: User B changes vote to Central Park
+✅ [PASS] R3-09-REQ-016: Previous option voteCount decremented to 0 (never negative)
+✅ [PASS] R3-09-REQ-016: New option voteCount incremented to 1
+✅ [PASS] R3-09-REQ-016: Total voters remains 1 on vote change
+✅ [PASS] R3-09-REQ-016: Multiple users voting on same option tracks totalVoters=2 and voteCount=2
+✅ [PASS] R3-09-REQ-016: Multiple selections on single-select poll rejected
+✅ [PASS] R3-09-REQ-016: Selection limit check passed
+✅ [PASS] R3-09-REQ-017: Poll creator closes poll successfully
+✅ [PASS] R3-09-REQ-017: Voting on closed poll rejected with POLL_CLOSED
+✅ [PASS] R3-09-REQ-017: Closed poll vote rejection check passed
+✅ [PASS] R3-09-REQ-019: Transactional OutboxEvents created for poll votes and closing
+
+--- SECTION 4: SOCKET.IO INTERACTION CONTRACTS (R3-09-REQ-021, REQ-022) ---
+[SOCKET] User connected: 6a992ebd8f2e349d19e7dc47 (Socket ID: NLj-_cOkA04uMh99AAAB)
+[SOCKET] User connected: 6a992ebd8f2e349d19e7dc4b (Socket ID: 5BW2EkkiKPtdbnF8AAAD)
+✅ [PASS] R3-09-REQ-021: Socket command message.reaction.set acknowledged after commit
+✅ [PASS] R3-09-REQ-021: message.reaction.updated broadcast delivered to conversation room
+✅ [PASS] R3-09-REQ-021: Socket command message.send successfully creates in-chat poll message
+✅ [PASS] R3-09-REQ-021: Socket command poll.vote.set acknowledged after commit
+✅ [PASS] R3-09-REQ-021: poll.vote.updated broadcast delivered to conversation room
+
+--- SECTION 5: OFFLINE SYNC COMPATIBILITY & ZERO N+1 (R3-09-REQ-023) ---
+✅ [PASS] R3-09-REQ-023: Offline sync catch-up returns conversation messages
+✅ [PASS] R3-09-REQ-023: Sync message DTO includes fully resolved poll document without N+1 queries
+✅ [PASS] R3-09-REQ-023: Sync message DTO includes fully resolved reply preview without N+1 queries
+
+--- SECTION 6: CONCURRENCY & RACE CONDITIONS (R3-09-REQ-028) ---
+✅ [PASS] R3-09-REQ-028: Concurrent reaction submissions produce exactly 1 reaction document
+✅ [PASS] R3-09-REQ-028: Concurrent voting on same option increments count and totalVoters atomically
+
+--- SECTION 7: SECURITY, PRIVACY & BLOCKING (R3-09-REQ-024, REQ-027) ---
+✅ [PASS] R3-09-REQ-024: Non-member reaction rejected with 403 / MEMBERSHIP_REQUIRED
+✅ [PASS] R3-09-REQ-024: Non-member reaction access control passed
+✅ [PASS] R3-09-REQ-024: Blocked user reaction rejected with code MEMBER_NOT_ACTIVE
+✅ [PASS] R3-09-REQ-024: Blocked user reaction check passed
+✅ [PASS] R3-09-REQ-024: Blocked user poll vote rejected with code MEMBER_NOT_ACTIVE
+✅ [PASS] R3-09-REQ-024: Blocked user vote check passed
+[SOCKET] User disconnected: 6a992ebd8f2e349d19e7dc47 (Reason: client namespace disconnect)
+[SOCKET] User disconnected: 6a992ebd8f2e349d19e7dc4b (Reason: client namespace disconnect)
+
+================================================================================
+TOTAL PASSED: 55
+TOTAL FAILED: 0
+STATUS: ALL TESTS PASSED
+================================================================================
+
+
+--- [END OF TEST OUTPUT: test/reaction_reply_poll_tests.js] ---
+
+--- [START OF FAILED TEST OUTPUT: test_all_endpoints.js] ---
 [DNS] Configured node dns servers to Google DNS (8.8.8.8, 8.8.4.4) for Atlas SRV resolution.
 ====================================================
    RUBARU BACKEND ENDPOINTS INTEGRATION TEST SUITE   
 ====================================================
 
-MongoDB Connected: ac-4yhspek-shard-00-02.1meot8l.mongodb.net
+MongoDB Connected: ac-4yhspek-shard-00-01.1meot8l.mongodb.net
 [TEST SERVER] Started temporary test server on port 5099
 
-✅ [PASS] Health Check GET / (200) - 33ms
-[AUTH] Registered user_1788265582258@rubaru.app. Mock OTP is 1234
-✅ [PASS] Auth Register POST /api/auth/register-email (201) - 704ms
-✅ [PASS] Auth Verify OTP POST /api/auth/verify-otp (200) - 244ms
-✅ [PASS] Auth Login POST /api/auth/login (200) - 108ms
-✅ [PASS] Auth Profile Setup POST /api/auth/profile-setup (201) - 358ms
-✅ [PASS] Profiles GET /api/profiles/me (200) - 113ms
-✅ [PASS] Profiles Search GET /api/profiles/search?q=Aarav (200) - 254ms
-✅ [PASS] Profiles Nearby GET /api/profiles/discover/nearby (200) - 393ms
-✅ [PASS] Profiles All GET /api/profiles/all (200) - 110ms
-✅ [PASS] Reels GET /api/reels (200) - 101ms
-✅ [PASS] Calls Logs GET /api/calls/logs (200) - 85ms
-✅ [PASS] Notifications GET /api/notifications (200) - 110ms
-✅ [PASS] Chats GET /api/chats (200) - 67ms
+✅ [PASS] Health Check GET / (200) - 39ms
+[AUTH] Registered user_1788423881535@rubaru.app. Mock OTP is 1234
+✅ [PASS] Auth Register POST /api/auth/register-email (201) - 1158ms
+✅ [PASS] Auth Verify OTP POST /api/auth/verify-otp (200) - 109ms
+[AUTH LOGIN] Querying candidate users with: { email: 'user_1788423881535@rubaru.app' }
+[AUTH LOGIN] Successful login for: user_1788423881535@rubaru.app (ID: 6a992ecad9cb9fa47135df75)
+✅ [PASS] Auth Login POST /api/auth/login (200) - 145ms
+✅ [PASS] Auth Profile Setup POST /api/auth/profile-setup (201) - 366ms
+✅ [PASS] Profiles GET /api/profiles/me (200) - 116ms
+✅ [PASS] Profiles Search GET /api/profiles/search?q=Aarav (200) - 119ms
+✅ [PASS] Profiles Nearby GET /api/profiles/discover/nearby (200) - 648ms
+✅ [PASS] Reels GET /api/reels (200) - 123ms
+✅ [PASS] Calls Logs GET /api/calls/logs (200) - 82ms
+✅ [PASS] Notifications GET /api/notifications (200) - 146ms
+✅ [PASS] Chats GET /api/chats (200) - 79ms
 
 ====================================================
-RESULTS: 13 PASSED, 0 FAILED
+RESULTS: 12 PASSED, 1 FAILED
 ====================================================
 
 [TEST SUITE] Database disconnected & test server shutdown complete.
 
---- [END OF TEST OUTPUT: test_all_endpoints.js] ---
+❌ [FAIL] Profiles All GET /api/profiles/all (500) - 100ms - Message: Cannot read properties of null (reading '_id')
+
+Command failed: node test_all_endpoints.js
+❌ [FAIL] Profiles All GET /api/profiles/all (500) - 100ms - Message: Cannot read properties of null (reading '_id')
+
+--- [END OF FAILED TEST OUTPUT: test_all_endpoints.js] ---

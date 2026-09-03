@@ -114,21 +114,7 @@ async function acceptIncomingLike(recipientId, likeId, data = {}) {
     }
   }
 
-  // 5. Create or reuse Conversation
-  let chatDoc;
-  if (matchDoc && matchDoc.conversation) {
-    chatDoc = await Chat.findById(matchDoc.conversation);
-  }
-
-  if (!chatDoc) {
-    chatDoc = await Chat.create({
-      participants: [lowerId, higherId],
-      isGroup: false,
-      status: 'ACTIVE',
-    });
-  }
-
-  // 6. Create or update Match document
+  // 5. Create or update Match document
   if (!matchDoc) {
     try {
       matchDoc = await Match.create({
@@ -138,12 +124,8 @@ async function acceptIncomingLike(recipientId, likeId, data = {}) {
         users: [lowerId, higherId],
         status: 'ACTIVE',
         initiatorInteraction: likeDoc._id,
-        conversation: chatDoc._id,
         matchedAt: new Date(),
       });
-
-      chatDoc.match = matchDoc._id;
-      await chatDoc.save();
     } catch (createErr) {
       if (createErr.code === 11000) {
         matchDoc = await Match.findOne({ canonicalPair });
@@ -152,6 +134,13 @@ async function acceptIncomingLike(recipientId, likeId, data = {}) {
       }
     }
   }
+
+  // 6. Ensure authoritative direct match conversation & memberships exist
+  const { ensureDirectMatchConversation } = require('./conversationService');
+  const { conversation: chatDoc } = await ensureDirectMatchConversation({
+    actorUserId: recipientId,
+    matchId: matchDoc._id,
+  });
 
   // 7. Update Like status to ACCEPTED
   likeDoc.status = 'ACCEPTED';
@@ -217,14 +206,7 @@ async function createReciprocalMatch(userBId, userAId, newLikeDoc, existingLikeD
   const [lowerId, higherId] = [userBId.toString(), userAId.toString()].sort();
   const canonicalPair = `${lowerId}:${higherId}`;
 
-  // 1. Create or reuse Conversation
-  const chatDoc = await Chat.create({
-    participants: [lowerId, higherId],
-    isGroup: false,
-    status: 'ACTIVE',
-  });
-
-  // 2. Create Match
+  // 1. Create Match
   let matchDoc;
   try {
     matchDoc = await Match.create({
@@ -235,12 +217,8 @@ async function createReciprocalMatch(userBId, userAId, newLikeDoc, existingLikeD
       status: 'ACTIVE',
       initiatorInteraction: existingLikeDoc._id,
       acceptorInteraction: newLikeDoc._id,
-      conversation: chatDoc._id,
       matchedAt: new Date(),
     });
-
-    chatDoc.match = matchDoc._id;
-    await chatDoc.save();
   } catch (createErr) {
     if (createErr.code === 11000) {
       matchDoc = await Match.findOne({ canonicalPair });
@@ -248,6 +226,13 @@ async function createReciprocalMatch(userBId, userAId, newLikeDoc, existingLikeD
       throw createErr;
     }
   }
+
+  // 2. Ensure authoritative direct match conversation & memberships exist
+  const { ensureDirectMatchConversation } = require('./conversationService');
+  const { conversation: chatDoc } = await ensureDirectMatchConversation({
+    actorUserId: userBId,
+    matchId: matchDoc._id,
+  });
 
   // 3. Mark both interactions as ACCEPTED
   existingLikeDoc.status = 'ACCEPTED';

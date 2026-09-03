@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,137 +6,27 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import QuickActionAvatar from '../components/common/QuickActionAvatar';
 import GroupCard from '../components/common/GroupCard';
 import BottomTabBar from '../components/common/BottomTabBar';
 import GroupFilterModal from '../components/common/GroupFilterModal';
 import { useTheme } from '../theme';
 import { useLanguage } from '../localization/LanguageContext';
+import api from '../services/api';
 
-const groupsMockData = [
-  {
-    id: '1',
-    badgeLabel: 'Gaming Group',
-    imageUri: 'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?w=400',
-    name: 'Faster MJ',
-    statusColor: '#34C759',
-    adminName: 'RAHUL YADAV',
-    membersCount: '2.4k',
-  },
-  {
-    id: '2',
-    badgeLabel: 'Gossip Group',
-    imageUri: 'https://images.pexels.com/photos/1462637/pexels-photo-1462637.jpeg?w=400',
-    name: 'Gossip Master',
-    statusColor: '#E63956',
-    adminName: 'ANAMIKA SAINI',
-    membersCount: '1.8k',
-  },
-  {
-    id: '3',
-    badgeLabel: 'Gaming Group',
-    imageUri: 'https://images.pexels.com/photos/268533/pexels-photo-268533.jpeg?w=400',
-    name: 'Faster MJ',
-    statusColor: '#34C759',
-    adminName: 'RAHUL YADAV',
-    membersCount: '950',
-  },
-  {
-    id: '4',
-    badgeLabel: 'Gossip Group',
-    imageUri: 'https://images.pexels.com/photos/1580271/pexels-photo-1580271.jpeg?w=400',
-    name: 'Gossip Master',
-    statusColor: '#E63956',
-    adminName: 'ANAMIKA SAINI',
-    membersCount: '3.1k',
-  },
-  {
-    id: '5',
-    badgeLabel: 'Gaming Group',
-    imageUri: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?w=400',
-    name: 'Apex Predators',
-    statusColor: '#34C759',
-    adminName: 'VIKRAM SINGH',
-    membersCount: '4.2k',
-  },
-  {
-    id: '6',
-    badgeLabel: 'Gossip Group',
-    imageUri: 'https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg?w=400',
-    name: 'Bollywood Charcha',
-    statusColor: '#E63956',
-    adminName: 'PRIYA SHARMA',
-    membersCount: '5.6k',
-  },
-  {
-    id: '7',
-    badgeLabel: 'Gaming Group',
-    imageUri: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?w=400',
-    name: 'Valorant Club',
-    statusColor: '#34C759',
-    adminName: 'ADITYA ROY',
-    membersCount: '1.1k',
-  },
-  {
-    id: '8',
-    badgeLabel: 'Gossip Group',
-    imageUri: 'https://images.pexels.com/photos/91227/pexels-photo-91227.jpeg?w=400',
-    name: 'Coffee & Tea',
-    statusColor: '#E63956',
-    adminName: 'SNEHA GUPTA',
-    membersCount: '840',
-  },
-  {
-    id: '9',
-    badgeLabel: 'Gaming Group',
-    imageUri: 'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?w=400',
-    name: 'PUBG Warriors',
-    statusColor: '#34C759',
-    adminName: 'KARAN MALHOTRA',
-    membersCount: '3.8k',
-  },
-  {
-    id: '10',
-    badgeLabel: 'Gossip Group',
-    imageUri: 'https://images.pexels.com/photos/1462637/pexels-photo-1462637.jpeg?w=400',
-    name: 'Campus Confessions',
-    statusColor: '#E63956',
-    adminName: 'NEHA KAPOOR',
-    membersCount: '2.9k',
-  },
-  {
-    id: '11',
-    badgeLabel: 'Gaming Group',
-    imageUri: 'https://images.pexels.com/photos/268533/pexels-photo-268533.jpeg?w=400',
-    name: 'FIFA Elite',
-    statusColor: '#34C759',
-    adminName: 'ROHIT MEHTA',
-    membersCount: '1.7k',
-  },
-  {
-    id: '12',
-    badgeLabel: 'Gossip Group',
-    imageUri: 'https://images.pexels.com/photos/1580271/pexels-photo-1580271.jpeg?w=400',
-    name: 'Midnight Talks',
-    statusColor: '#E63956',
-    adminName: 'TANYA JOSHI',
-    membersCount: '4.5k',
-  },
-  {
-    id: '13',
-    badgeLabel: 'Gaming Group',
-    imageUri: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?w=400',
-    name: 'Speed Racers',
-    statusColor: '#34C759',
-    adminName: 'DEEPAK KUMAR',
-    membersCount: '1.2k',
-  },
-];
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || '';
+
+function getFullAvatarUrl(uri) {
+  if (!uri) return 'https://images.unsplash.com/photo-1543269865-cbf427effbad?w=400';
+  if (uri.startsWith('http') || uri.startsWith('file://')) return uri;
+  return `${BASE_URL}${uri}`;
+}
 
 export default function GroupsScreen({ isNestedInPager }) {
   const router = useRouter();
@@ -144,6 +34,9 @@ export default function GroupsScreen({ isNestedInPager }) {
   const { t } = useLanguage();
   const { isDarkMode } = useTheme();
 
+  const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [filterState, setFilterState] = useState({
     category: 'all',
@@ -152,21 +45,49 @@ export default function GroupsScreen({ isNestedInPager }) {
     groupSize: 'any',
   });
 
-  // Dynamically filter mock data based on category
-  const filteredGroups = groupsMockData.filter((item) => {
+  const fetchGroups = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+
+      const res = await api.get('/chats');
+      const allChats = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+
+      // Filter only real Group chats
+      const groupChats = allChats.filter((c) => c.isGroup || c.type === 'GROUP');
+
+      const mappedGroups = groupChats.map((g, idx) => ({
+        id: g.id || g._id || String(idx),
+        badgeLabel: g.category || 'Community',
+        imageUri: getFullAvatarUrl(g.groupAvatar || g.avatarUri),
+        name: g.groupName || g.name || 'Group Chat',
+        statusColor: '#34C759',
+        adminName: g.adminName || (g.members && g.members[0]?.displayName) || 'Admin',
+        membersCount: g.membersCount ? `${g.membersCount}` : (g.memberCount ? `${g.memberCount}` : '1'),
+      }));
+
+      setGroups(mappedGroups);
+    } catch (err) {
+      console.log('[GROUPS FETCH ERROR]', err.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchGroups(false);
+    }, [fetchGroups])
+  );
+
+  // Dynamically filter real groups based on category
+  const filteredGroups = groups.filter((item) => {
     if (filterState.category === 'all') return true;
     const cat = filterState.category.toLowerCase();
     const badge = (item.badgeLabel || '').toLowerCase();
     return badge.includes(cat);
   });
-
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.push('/explore');
-    }
-  };
 
   const renderListHeader = () => (
     <View style={styles.listHeaderContainer}>
@@ -174,19 +95,13 @@ export default function GroupsScreen({ isNestedInPager }) {
       <View style={styles.quickActionsRow}>
         <QuickActionAvatar
           label={t('addGroup', 'Add Group')}
-          imageUri="https://i.pravatar.cc/150?img=12"
+          imageUri="https://images.unsplash.com/photo-1543269865-cbf427effbad?w=400"
           showPlus={true}
           onPress={() => router.push('/create-group')}
         />
         <QuickActionAvatar
-          label={t('gamingGroup', 'Gaming Group')}
-          imageUri="https://i.pravatar.cc/150?img=33"
-          showPlus={false}
-          onPress={() => setFilterState((prev) => ({ ...prev, category: 'gaming' }))}
-        />
-        <QuickActionAvatar
           label={t('allGroups', 'All Groups')}
-          imageUri="https://i.pravatar.cc/150?img=33"
+          imageUri="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400"
           showPlus={false}
           onPress={() => setFilterState((prev) => ({ ...prev, category: 'all' }))}
         />
@@ -209,7 +124,7 @@ export default function GroupsScreen({ isNestedInPager }) {
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="dark-content" backgroundColor="#FFF0F3" />
 
-      {/* Main Soft Pink Gradient Background (Preserved) */}
+      {/* Main Soft Pink Gradient Background */}
       <LinearGradient colors={['#FFF0F3', '#FFE3E8', '#FFFFFF']} style={styles.gradientBackground}>
         {/* Scattered faint watermark hearts */}
         <View style={styles.watermarkContainer} pointerEvents="none">
@@ -241,16 +156,40 @@ export default function GroupsScreen({ isNestedInPager }) {
         </View>
 
         {/* 2-Column Scrollable Groups Grid */}
-        <FlatList
-          data={filteredGroups}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.gridColumnWrapper}
-          ListHeaderComponent={renderListHeader}
-          renderItem={({ item }) => <GroupCard item={item} />}
-          contentContainerStyle={styles.listContentContainer}
-          showsVerticalScrollIndicator={false}
-        />
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FF2E63" />
+          </View>
+        ) : (
+          <FlatList
+            data={filteredGroups}
+            keyExtractor={(item) => item.id}
+            numColumns={2}
+            columnWrapperStyle={filteredGroups.length > 0 ? styles.gridColumnWrapper : null}
+            ListHeaderComponent={renderListHeader}
+            renderItem={({ item }) => <GroupCard item={item} />}
+            contentContainerStyle={styles.listContentContainer}
+            showsVerticalScrollIndicator={false}
+            onRefresh={() => fetchGroups(true)}
+            refreshing={refreshing}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="people-outline" size={56} color="#9CA3AF" />
+                <Text style={styles.emptyTitle}>No groups yet</Text>
+                <Text style={styles.emptySubtitle}>
+                  Create your first community or join groups with shared interests.
+                </Text>
+                <TouchableOpacity
+                  style={styles.createGroupButton}
+                  onPress={() => router.push('/create-group')}
+                >
+                  <Ionicons name="add-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.createGroupButtonText}>Create Group</Text>
+                </TouchableOpacity>
+              </View>
+            }
+          />
+        )}
       </LinearGradient>
 
       {/* Filter Bottom Sheet Modal */}
@@ -309,41 +248,87 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   circularHeaderButtonDark: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#1E1E1E',
   },
   headerTitleText: {
+    fontFamily: 'Inter-Bold',
     fontSize: 24,
-    fontWeight: '800',
-    color: '#340E1B',
+    color: '#000000',
+    letterSpacing: -0.5,
   },
   listContentContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 90,
   },
   listHeaderContainer: {
-    paddingTop: 10,
+    marginBottom: 8,
   },
   quickActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    paddingVertical: 12,
   },
   sectionHeaderRow: {
-    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    marginBottom: 12,
   },
   sectionTitleText: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#4B182B',
+    fontFamily: 'Inter-Bold',
+    fontSize: 16,
+    color: '#000000',
   },
   sectionCountText: {
-    color: '#E63956',
-    fontWeight: '800',
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: '#666666',
   },
   sectionCountTextDark: {
-    color: '#000000',
+    color: '#999999',
   },
   gridColumnWrapper: {
     justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 48,
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 18,
+    color: '#111827',
+    marginTop: 12,
+  },
+  emptySubtitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 20,
+  },
+  createGroupButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF2E63',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
+  },
+  createGroupButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
   },
 });

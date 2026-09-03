@@ -27,16 +27,14 @@ export default function FeedCard({ item }) {
   const [toastMessage, setToastMessage] = useState(null);
 
   const postId = item.postId || item.id;
-  const category = item.category || 'Lifestyle';
-  const categoryEmoji = item.categoryEmoji || '✨';
   const imageUri =
     item.imageUri ||
     item.mediaItems?.[0]?.variants?.[0]?.url ||
     item.mediaItems?.[0]?.thumbnail?.url ||
-    'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?auto=compress&cs=tinysrgb&w=800';
+    'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800';
   const caption = item.caption || '';
   const userName = item.userName || item.author?.displayName || item.author?.username || 'Rubaru User';
-  const userAvatar = item.userAvatar || item.author?.avatarUri || 'https://i.pravatar.cc/150?img=32';
+  const userAvatar = item.userAvatar || item.author?.avatarUri || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
   const location = item.location || '';
 
   const showToast = (msg) => {
@@ -159,6 +157,7 @@ export default function FeedCard({ item }) {
           <Image source={{ uri: userAvatar }} style={styles.avatarImage} />
           <View style={styles.userMeta}>
             <Text style={styles.userNameText}>{userName}</Text>
+            
             <Text style={styles.locationText}>{location}</Text>
           </View>
         </TouchableOpacity>

@@ -10,6 +10,11 @@ const OutboxEvent = require('../models/OutboxEvent');
 const Block = require('../models/Block');
 const socialPolicyService = require('./socialPolicyService');
 const { serializeAuthorSummary, serializeContentForViewer } = require('../utils/contentSerializers');
+const {
+  dispatchSocialLikeUpdated,
+  dispatchSocialCommentAdded,
+  dispatchSocialCommentDeleted,
+} = require('./socketDispatchService');
 
 class InteractionService {
   /**
@@ -318,7 +323,12 @@ class InteractionService {
         }
       }
 
-      return { liked: true, likesCount: updatedContent?.likesCount || 1 };
+      const count = updatedContent?.likesCount || 1;
+      try {
+        dispatchSocialLikeUpdated({ contentId, likesCount: count, userId, isLiked: true });
+      } catch (dErr) {}
+
+      return { liked: true, likesCount: count };
     }
 
     const currentContent = await Content.findById(contentId);
@@ -367,7 +377,12 @@ class InteractionService {
       console.warn('[INTERACTION SERVICE] Outbox warning:', outboxErr.message);
     }
 
-    return { liked: false, likesCount: updatedContent?.likesCount || 0 };
+    const count = updatedContent?.likesCount || 0;
+    try {
+      dispatchSocialLikeUpdated({ contentId, likesCount: count, userId, isLiked: false });
+    } catch (dErr) {}
+
+    return { liked: false, likesCount: count };
   }
 
   /**
@@ -467,7 +482,11 @@ class InteractionService {
     });
 
     // Increment commentsCount on Content
-    await Content.findByIdAndUpdate(contentId, { $inc: { commentsCount: 1 } });
+    const updatedContent = await Content.findByIdAndUpdate(
+      contentId,
+      { $inc: { commentsCount: 1 } },
+      { new: true }
+    );
 
     // Emit Outbox Event
     try {
@@ -489,7 +508,17 @@ class InteractionService {
     }
 
     const authorProfile = await Profile.findOne({ user: userId });
-    return this._formatCommentProjection(comment, authorProfile);
+    const formattedComment = this._formatCommentProjection(comment, authorProfile);
+
+    try {
+      dispatchSocialCommentAdded({
+        contentId,
+        comment: formattedComment,
+        commentsCount: updatedContent?.commentsCount || 1,
+      });
+    } catch (dErr) {}
+
+    return formattedComment;
   }
 
   /**
@@ -671,9 +700,13 @@ class InteractionService {
     }
 
     // Decrement Content.commentsCount
-    await Content.findByIdAndUpdate(comment.contentId, [
-      { $set: { commentsCount: { $max: [0, { $subtract: ['$commentsCount', 1] }] } } },
-    ]);
+    const updatedContent = await Content.findByIdAndUpdate(
+      comment.contentId,
+      [
+        { $set: { commentsCount: { $max: [0, { $subtract: ['$commentsCount', 1] }] } } },
+      ],
+      { new: true }
+    );
 
     // If reply, decrement parent comment's repliesCount
     if (comment.parentCommentId) {
@@ -697,6 +730,14 @@ class InteractionService {
     } catch (outboxErr) {
       console.warn('[INTERACTION SERVICE] Outbox warning:', outboxErr.message);
     }
+
+    try {
+      dispatchSocialCommentDeleted({
+        contentId: comment.contentId,
+        commentId: comment._id,
+        commentsCount: updatedContent?.commentsCount || 0,
+      });
+    } catch (dErr) {}
 
     return { deleted: true, commentId };
   }

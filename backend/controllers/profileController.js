@@ -39,41 +39,66 @@ const editProfile = async (req, res) => {
   const { displayName, dateOfBirth, gender, interests, bio, locationName, latitude, longitude } = req.body;
 
   try {
-    const profile = await Profile.findOne({ user: req.user._id });
+    let profile = await Profile.findOne({ user: req.user._id });
     if (!profile) {
-      return res.status(404).json({ message: 'Profile not found' });
+      profile = new Profile({
+        user: req.user._id,
+        displayName: displayName ? displayName.trim() : 'Rubaru User',
+        dateOfBirth: new Date('2000-01-01'),
+        gender: gender || 'Other',
+        avatarUri: 'https://i.pravatar.cc/150?img=60',
+        photos: [],
+        interests: [],
+      });
     }
 
-    if (displayName) profile.displayName = displayName;
-    if (dateOfBirth) profile.dateOfBirth = new Date(dateOfBirth);
-    if (gender) profile.gender = gender;
-    if (bio !== undefined) profile.bio = bio;
-    if (locationName !== undefined) profile.locationName = locationName;
+    if (displayName && typeof displayName === 'string') {
+      profile.displayName = displayName.trim();
+    }
 
-    if (interests) {
-      profile.interests = typeof interests === 'string' ? JSON.parse(interests) : interests;
+    if (dateOfBirth && dateOfBirth !== 'null' && dateOfBirth !== 'undefined') {
+      const parsedDate = new Date(dateOfBirth);
+      if (!isNaN(parsedDate.getTime())) {
+        profile.dateOfBirth = parsedDate;
+      }
+    }
+
+    if (gender) profile.gender = gender;
+    if (bio !== undefined) profile.bio = String(bio);
+    if (locationName !== undefined) profile.locationName = String(locationName);
+
+    if (interests !== undefined) {
+      try {
+        profile.interests = typeof interests === 'string' ? JSON.parse(interests) : (Array.isArray(interests) ? interests : []);
+      } catch (e) {
+        profile.interests = Array.isArray(interests) ? interests : [interests];
+      }
     }
 
     // Handle single avatar upload or removal
     if (req.body.removeAvatar === 'true' || req.body.removeAvatar === true) {
       profile.avatarUri = 'https://i.pravatar.cc/150?img=60';
-    } else if (req.files && req.files.avatar) {
+    } else if (req.files && req.files.avatar && req.files.avatar.length > 0) {
       profile.avatarUri = `/uploads/images/${req.files.avatar[0].filename}`;
     }
 
     // Handle existing photos
-    if (req.body.existingPhotos) {
-      profile.photos = typeof req.body.existingPhotos === 'string' ? JSON.parse(req.body.existingPhotos) : req.body.existingPhotos;
+    if (req.body.existingPhotos !== undefined) {
+      try {
+        profile.photos = typeof req.body.existingPhotos === 'string' ? JSON.parse(req.body.existingPhotos) : (Array.isArray(req.body.existingPhotos) ? req.body.existingPhotos : []);
+      } catch (e) {
+        profile.photos = Array.isArray(req.body.existingPhotos) ? req.body.existingPhotos : [];
+      }
     }
 
     // Handle multiple photos upload
     if (req.files && req.files.photos) {
       const photoUrls = req.files.photos.map(file => `/uploads/images/${file.filename}`);
-      profile.photos = [...profile.photos, ...photoUrls];
+      profile.photos = [...(Array.isArray(profile.photos) ? profile.photos : []), ...photoUrls];
     }
 
     // Handle location updates
-    if (latitude && longitude) {
+    if (latitude && longitude && !isNaN(parseFloat(latitude)) && !isNaN(parseFloat(longitude))) {
       profile.location = {
         type: 'Point',
         coordinates: [parseFloat(longitude), parseFloat(latitude)],
@@ -81,10 +106,12 @@ const editProfile = async (req, res) => {
     }
 
     const updatedProfile = await profile.save();
+    await User.findByIdAndUpdate(req.user._id, { isProfileSetup: true });
+    console.log(`[EDIT PROFILE] Profile updated for user ${req.user._id}`);
     res.status(200).json(updatedProfile);
   } catch (error) {
     console.error('[EDIT PROFILE BACKEND ERROR]', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: error.message || 'Failed to update profile' });
   }
 };
 
@@ -213,14 +240,16 @@ const searchProfiles = async (req, res) => {
       .limit(20)
       .populate('user', '_id email');
 
-    const result = profiles.map((p) => ({
-      userId: p.user._id,
-      displayName: p.displayName || 'Rubaru User',
-      username: p.username || '',
-      avatarUri: p.avatarUri || '',
-      bio: p.bio || '',
-      locationName: p.locationName || '',
-    }));
+    const result = profiles
+      .filter((p) => p.user)
+      .map((p) => ({
+        userId: p.user._id || p.user,
+        displayName: p.displayName || 'Rubaru User',
+        username: p.username || '',
+        avatarUri: p.avatarUri || '',
+        bio: p.bio || '',
+        locationName: p.locationName || '',
+      }));
 
     res.status(200).json(result);
   } catch (error) {
@@ -237,14 +266,16 @@ const getAllProfiles = async (req, res) => {
       .limit(30)
       .populate('user', '_id email');
 
-    const result = profiles.map((p) => ({
-      userId: p.user._id,
-      displayName: p.displayName || 'Rubaru User',
-      username: p.username || '',
-      avatarUri: p.avatarUri || '',
-      bio: p.bio || '',
-      locationName: p.locationName || '',
-    }));
+    const result = profiles
+      .filter((p) => p.user)
+      .map((p) => ({
+        userId: p.user._id || p.user,
+        displayName: p.displayName || 'Rubaru User',
+        username: p.username || '',
+        avatarUri: p.avatarUri || '',
+        bio: p.bio || '',
+        locationName: p.locationName || '',
+      }));
 
     res.status(200).json(result);
   } catch (error) {

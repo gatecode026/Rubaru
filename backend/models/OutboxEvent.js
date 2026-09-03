@@ -11,7 +11,7 @@ const OutboxEventSchema = new mongoose.Schema(
     },
     aggregateType: {
       type: String,
-      enum: ['MATCH', 'LIKE', 'INTERACTION', 'IMPRESSION', 'USER', 'SAFETY', 'LOCATION', 'PREFERENCE', 'MEDIA_ASSET', 'CONTENT'],
+      enum: ['MATCH', 'LIKE', 'INTERACTION', 'IMPRESSION', 'USER', 'SAFETY', 'LOCATION', 'PREFERENCE', 'MEDIA_ASSET', 'CONTENT', 'CONVERSATION', 'MESSAGE', 'POLL'],
       required: true,
     },
     aggregateId: {

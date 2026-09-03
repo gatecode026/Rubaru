@@ -43,6 +43,34 @@ const MediaVariantSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const WaveformSchema = new mongoose.Schema(
+  {
+    version: {
+      type: Number,
+      default: 1,
+    },
+    samples: [
+      {
+        type: Number,
+      },
+    ],
+    peaks: [
+      {
+        type: Number,
+      },
+    ],
+    sampleCount: {
+      type: Number,
+      default: 0,
+    },
+    durationMs: {
+      type: Number,
+      default: 0,
+    },
+  },
+  { _id: false }
+);
+
 const MediaAssetSchema = new mongoose.Schema(
   {
     ownerId: {
@@ -66,6 +94,27 @@ const MediaAssetSchema = new mongoose.Schema(
       type: String,
       enum: ['IMAGE', 'VIDEO', 'AUDIO'],
       required: true,
+    },
+    attachmentCategory: {
+      type: String,
+      enum: ['IMAGE', 'VIDEO', 'AUDIO', 'VOICE_NOTE'],
+      default: 'IMAGE',
+    },
+    conversationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Conversation',
+      index: true,
+      default: null,
+    },
+    isConsumed: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    consumedByMessageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Message',
+      default: null,
     },
     originalObjectKey: {
       type: String,
@@ -99,6 +148,10 @@ const MediaAssetSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    waveform: {
+      type: WaveformSchema,
+      default: null,
+    },
     aspectRatio: {
       type: Number,
       default: 1.0,
@@ -106,6 +159,8 @@ const MediaAssetSchema = new mongoose.Schema(
     processingStatus: {
       type: String,
       enum: [
+        'INITIATED',
+        'AUTHORIZED',
         'PENDING_UPLOAD',
         'UPLOADED',
         'VERIFYING',
@@ -113,6 +168,12 @@ const MediaAssetSchema = new mongoose.Schema(
         'PROCESSING',
         'READY',
         'FAILED',
+        'FAILED_RETRYABLE',
+        'FAILED_PERMANENT',
+        'REJECTED',
+        'QUARANTINED',
+        'CANCELLED',
+        'ORPHANED',
         'DELETING',
         'DELETED',
       ],
@@ -121,7 +182,7 @@ const MediaAssetSchema = new mongoose.Schema(
     },
     moderationStatus: {
       type: String,
-      enum: ['NOT_STARTED', 'PENDING', 'APPROVED', 'REJECTED', 'ESCALATED'],
+      enum: ['NOT_STARTED', 'PENDING', 'APPROVED', 'REJECTED', 'ESCALATED', 'QUARANTINED'],
       default: 'NOT_STARTED',
       index: true,
     },
@@ -143,6 +204,23 @@ const MediaAssetSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    quarantineReason: {
+      type: String,
+      default: null,
+    },
+    safetyHold: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    retryCount: {
+      type: Number,
+      default: 0,
+    },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
     deletedAt: {
       type: Date,
       default: null,
@@ -156,5 +234,6 @@ const MediaAssetSchema = new mongoose.Schema(
 MediaAssetSchema.index({ ownerId: 1, createdAt: -1 });
 MediaAssetSchema.index({ processingStatus: 1, updatedAt: 1 });
 MediaAssetSchema.index({ purpose: 1, processingStatus: 1 });
+MediaAssetSchema.index({ conversationId: 1, processingStatus: 1 });
 
 module.exports = mongoose.model('MediaAsset', MediaAssetSchema);

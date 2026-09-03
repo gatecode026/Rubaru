@@ -174,6 +174,56 @@ const NotificationChannels = Object.freeze({
   PUSH: 'PUSH',
 });
 
+const ConversationTypes = Object.freeze({
+  DIRECT_MATCH: 'DIRECT_MATCH',
+  GROUP: 'GROUP',
+});
+
+const ConversationStatuses = Object.freeze({
+  ACTIVE: 'ACTIVE',
+  CLOSED_BY_UNMATCH: 'CLOSED_BY_UNMATCH',
+  CLOSED_BY_BLOCK: 'CLOSED_BY_BLOCK',
+  CLOSED_BY_SAFETY: 'CLOSED_BY_SAFETY',
+  CLOSED: 'CLOSED',
+  ARCHIVED: 'ARCHIVED',
+});
+
+const MemberRoles = Object.freeze({
+  OWNER: 'OWNER',
+  ADMIN: 'ADMIN',
+  MEMBER: 'MEMBER',
+});
+
+const MemberStates = Object.freeze({
+  ACTIVE: 'ACTIVE',
+  LEFT: 'LEFT',
+  REMOVED: 'REMOVED',
+  BLOCKED: 'BLOCKED',
+});
+
+const MemberNotificationPreferences = Object.freeze({
+  ALL: 'ALL',
+  MENTIONS_ONLY: 'MENTIONS_ONLY',
+  MUTED: 'MUTED',
+});
+
+const MessageReactions = Object.freeze({
+  LIKE: 'LIKE',
+  LOVE: 'LOVE',
+  LAUGH: 'LAUGH',
+  SURPRISED: 'SURPRISED',
+  SAD: 'SAD',
+  ANGRY: 'ANGRY',
+  FIRE: 'FIRE',
+  ONE_HUNDRED: '100',
+});
+
+const PollStatuses = Object.freeze({
+  OPEN: 'OPEN',
+  CLOSED: 'CLOSED',
+  EXPIRED: 'EXPIRED',
+});
+
 module.exports = {
   InteractionTypes,
   InteractionStatuses,
@@ -192,4 +242,11 @@ module.exports = {
   SocialNotificationTypes,
   NotificationCategories,
   NotificationChannels,
+  ConversationTypes,
+  ConversationStatuses,
+  MemberRoles,
+  MemberStates,
+  MemberNotificationPreferences,
+  MessageReactions,
+  PollStatuses,
 };

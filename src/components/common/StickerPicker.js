@@ -12,8 +12,8 @@ import {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Local array of emojis rendering as sticker cards
-const MOCK_STICKERS = [
+// Standard emoji sticker pack
+const STICKER_PACK = [
   '🐶', '🐱', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁',
   '🐸', '🐵', '🦄', '🐝', '🦖', '🐙', '🦈', '🦉',
   '🍎', '🍋', '🍔', '🍟', '🍕', '🍩', '🍪', '☕️',
@@ -38,7 +38,7 @@ export default function StickerPicker({ visible, onClose, onSelectSticker }) {
               <Text style={styles.sheetTitle}>Send Sticker</Text>
 
               <FlatList
-                data={MOCK_STICKERS}
+                data={STICKER_PACK}
                 keyExtractor={(item, index) => `${item}-${index}`}
                 numColumns={5}
                 renderItem={({ item }) => (

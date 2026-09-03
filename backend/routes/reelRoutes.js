@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/auth');
+const upload = require('../middleware/upload');
 const {
   createReel,
   getReelById,
@@ -13,8 +14,8 @@ const {
 } = require('../controllers/reelController');
 
 // Reel Creation & Feed
-router.post('/reels', protect, createReel);
-router.post('/', protect, createReel);
+router.post('/reels', protect, upload.single('video'), createReel);
+router.post('/', protect, upload.single('video'), createReel);
 router.get('/reels/feed', protect, getConnectedReelsFeed);
 router.get('/feed', protect, getConnectedReelsFeed);
 router.get('/reels', protect, getConnectedReelsFeed);
@@ -37,5 +38,9 @@ router.post('/:reelId([0-9a-fA-F]{24})/unarchive', protect, unarchiveReel);
 // User Reels List
 router.get('/users/:userId/reels', protect, getUserReels);
 router.get('/user/:userId', protect, getUserReels);
+router.get('/users/me/reels', protect, getUserReels);
+router.get('/user/me', protect, getUserReels);
+router.get('/reels/user/me', protect, getUserReels);
+router.get('/reels/user/:userId', protect, getUserReels);
 
 module.exports = router;

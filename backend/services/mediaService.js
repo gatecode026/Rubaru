@@ -27,6 +27,8 @@ class MediaService {
     const {
       purpose,
       mediaType,
+      attachmentCategory: rawCategory,
+      conversationId,
       mimeType,
       fileSize,
       checksum = '',
@@ -56,6 +58,29 @@ class MediaService {
       throw err;
     }
 
+    // Determine canonical attachmentCategory
+    let attachmentCategory = rawCategory || mediaType;
+    if (mediaType === 'AUDIO' && (rawCategory === 'VOICE_NOTE' || data.isVoiceNote)) {
+      attachmentCategory = 'VOICE_NOTE';
+    }
+
+    // Chat Attachment Conversation Authorization
+    if (purpose === 'CHAT_ATTACHMENT') {
+      if (!conversationId) {
+        const err = new Error('conversationId is required for CHAT_ATTACHMENT upload sessions.');
+        err.code = 'CONVERSATION_ID_REQUIRED';
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const { authorizeConversationAccess } = require('./conversationAuthorizationService');
+      await authorizeConversationAccess({
+        actorUserId: userId,
+        conversationId,
+        operation: 'SEND_MESSAGE',
+      });
+    }
+
     // 3. Validate MIME Type Allowlist
     const normalizedMime = mimeType.toLowerCase().trim();
     if (!mediaConfig.allowedMimeTypes[mediaType].includes(normalizedMime)) {
@@ -68,7 +93,11 @@ class MediaService {
     // 4. Validate File Size Limits
     let maxSizeAllowed = mediaConfig.limits.maxImageBytes;
     if (mediaType === 'VIDEO') maxSizeAllowed = mediaConfig.limits.maxVideoBytes;
-    if (mediaType === 'AUDIO') maxSizeAllowed = mediaConfig.limits.maxAudioBytes;
+    if (mediaType === 'AUDIO') {
+      maxSizeAllowed = attachmentCategory === 'VOICE_NOTE' 
+        ? mediaConfig.limits.maxVoiceNoteBytes 
+        : mediaConfig.limits.maxAudioBytes;
+    }
 
     if (fileSize > maxSizeAllowed || fileSize <= 0) {
       const err = new Error(`File size ${fileSize} exceeds maximum allowed of ${maxSizeAllowed} bytes.`);
@@ -97,6 +126,8 @@ class MediaService {
           mediaAssetId: existingSession.mediaAssetId ? existingSession.mediaAssetId.toString() : null,
           purpose: existingSession.purpose,
           mediaType: existingSession.mediaType,
+          attachmentCategory: existingSession.attachmentCategory,
+          conversationId: existingSession.conversationId ? existingSession.conversationId.toString() : null,
           status: existingSession.status,
           uploadTarget: authPayload,
           expiresAt: existingSession.expiresAt,
@@ -114,33 +145,68 @@ class MediaService {
     const expiresAt = new Date(Date.now() + mediaConfig.limits.uploadSessionTtlMinutes * 60 * 1000);
 
     // 7. Create UploadSession & Pending MediaAsset atomically
-    const session = await UploadSession.create({
-      ownerId: userId,
-      purpose,
-      mediaType,
-      declaredMimeType: normalizedMime,
-      declaredFileSize: fileSize,
-      declaredChecksum: checksum,
-      objectKey,
-      status: 'AUTHORIZED',
-      expiresAt,
-      mediaAssetId,
-      idempotencyKey,
-    });
+    let session;
+    try {
+      session = await UploadSession.create({
+        ownerId: userId,
+        purpose,
+        mediaType,
+        attachmentCategory,
+        conversationId: conversationId || null,
+        declaredMimeType: normalizedMime,
+        declaredFileSize: fileSize,
+        declaredChecksum: checksum,
+        objectKey,
+        status: 'AUTHORIZED',
+        expiresAt,
+        mediaAssetId,
+        idempotencyKey,
+      });
 
-    await MediaAsset.create({
-      _id: mediaAssetId,
-      ownerId: userId,
-      uploadSessionId: session._id,
-      purpose,
-      mediaType,
-      originalObjectKey: objectKey,
-      originalMimeType: normalizedMime,
-      fileSize,
-      checksum,
-      processingStatus: 'PENDING_UPLOAD',
-      moderationStatus: 'NOT_STARTED',
-    });
+      await MediaAsset.create({
+        _id: mediaAssetId,
+        ownerId: userId,
+        uploadSessionId: session._id,
+        purpose,
+        mediaType,
+        attachmentCategory,
+        conversationId: conversationId || null,
+        originalObjectKey: objectKey,
+        originalMimeType: normalizedMime,
+        fileSize,
+        checksum,
+        processingStatus: 'PENDING_UPLOAD',
+        moderationStatus: 'NOT_STARTED',
+      });
+    } catch (createErr) {
+      if (createErr.code === 11000 && (createErr.message.includes('idempotencyKey') || createErr.message.includes('ownerId_1_idempotencyKey_1'))) {
+        const raceSession = await UploadSession.findOne({ ownerId: userId, idempotencyKey });
+        if (raceSession) {
+          const authPayload = await storageProvider.createUploadAuthorization({
+            objectKey: raceSession.objectKey,
+            declaredMimeType: raceSession.declaredMimeType,
+            maxSizeBytes: raceSession.declaredFileSize,
+            expiresAt: raceSession.expiresAt,
+          });
+
+          return {
+            sessionId: raceSession._id.toString(),
+            mediaAssetId: raceSession.mediaAssetId ? raceSession.mediaAssetId.toString() : null,
+            purpose: raceSession.purpose,
+            mediaType: raceSession.mediaType,
+            attachmentCategory: raceSession.attachmentCategory,
+            conversationId: raceSession.conversationId ? raceSession.conversationId.toString() : null,
+            status: raceSession.status,
+            uploadTarget: authPayload,
+            expiresAt: raceSession.expiresAt,
+            limits: {
+              maxSizeBytes: maxSizeAllowed,
+            },
+          };
+        }
+      }
+      throw createErr;
+    }
 
     // 8. Generate Scoped Upload Authorization
     const uploadAuth = await storageProvider.createUploadAuthorization({
@@ -155,6 +221,8 @@ class MediaService {
       mediaAssetId: mediaAssetId.toString(),
       purpose,
       mediaType,
+      attachmentCategory,
+      conversationId: conversationId ? conversationId.toString() : null,
       status: 'AUTHORIZED',
       uploadTarget: uploadAuth,
       expiresAt,
@@ -402,6 +470,173 @@ class MediaService {
   }
 
   /**
+   * Get safe upload session status (Owner only, sanitizes internal object keys)
+   */
+  async getUploadSessionStatus(userId, sessionId) {
+    const session = await UploadSession.findById(sessionId);
+    if (!session) {
+      const err = new Error('Upload session not found.');
+      err.code = 'UPLOAD_SESSION_NOT_FOUND';
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (session.ownerId.toString() !== userId.toString()) {
+      const err = new Error('You do not have permission to view this upload session.');
+      err.code = 'MEDIA_ACCESS_DENIED';
+      err.statusCode = 403;
+      throw err;
+    }
+
+    const asset = session.mediaAssetId ? await MediaAsset.findById(session.mediaAssetId) : null;
+
+    return {
+      sessionId: session._id.toString(),
+      mediaAssetId: session.mediaAssetId ? session.mediaAssetId.toString() : null,
+      purpose: session.purpose,
+      mediaType: session.mediaType,
+      attachmentCategory: session.attachmentCategory,
+      conversationId: session.conversationId ? session.conversationId.toString() : null,
+      sessionStatus: session.status,
+      processingStatus: asset ? asset.processingStatus : 'UNKNOWN',
+      isUploaded: ['FINALIZING', 'FINALIZED'].includes(session.status),
+      isReady: asset ? asset.processingStatus === 'READY' : false,
+      canRetry: ['FAILED', 'FAILED_RETRYABLE', 'EXPIRED'].includes(asset?.processingStatus || session.status),
+      expiresAt: session.expiresAt,
+      failureCode: asset?.failureCode || session.failureCode || null,
+      failureMessageSafe: asset?.failureMessageSafe || null,
+    };
+  }
+
+  /**
+   * Retry an interrupted or failed upload session (Owner only)
+   */
+  async retryUploadSession(userId, sessionId) {
+    const session = await UploadSession.findById(sessionId);
+    if (!session) {
+      const err = new Error('Upload session not found.');
+      err.code = 'UPLOAD_SESSION_NOT_FOUND';
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (session.ownerId.toString() !== userId.toString()) {
+      const err = new Error('You do not have permission to retry this upload session.');
+      err.code = 'MEDIA_ACCESS_DENIED';
+      err.statusCode = 403;
+      throw err;
+    }
+
+    // Reauthorize if chat attachment
+    if (session.purpose === 'CHAT_ATTACHMENT' && session.conversationId) {
+      const { authorizeConversationAccess } = require('./conversationAuthorizationService');
+      await authorizeConversationAccess({
+        actorUserId: userId,
+        conversationId: session.conversationId,
+        operation: 'SEND_MESSAGE',
+      });
+    }
+
+    const asset = session.mediaAssetId ? await MediaAsset.findById(session.mediaAssetId) : null;
+    if (asset) {
+      if (asset.isConsumed) {
+        const err = new Error('Cannot retry an asset already attached to a message.');
+        err.code = 'MEDIA_ALREADY_BOUND';
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (['QUARANTINED', 'REJECTED', 'FAILED_PERMANENT'].includes(asset.processingStatus)) {
+        const err = new Error(`Retry not permitted for asset in status '${asset.processingStatus}'.`);
+        err.code = 'RETRY_NOT_PERMITTED';
+        err.statusCode = 400;
+        throw err;
+      }
+
+      asset.processingStatus = 'PENDING_UPLOAD';
+      asset.retryCount = (asset.retryCount || 0) + 1;
+      asset.failureCode = null;
+      asset.failureMessageSafe = null;
+      await asset.save();
+    }
+
+    // Extend session expiry
+    session.expiresAt = new Date(Date.now() + mediaConfig.limits.uploadSessionTtlMinutes * 60 * 1000);
+    session.status = 'AUTHORIZED';
+    session.failureCode = null;
+    await session.save();
+
+    const uploadTarget = await storageProvider.createUploadAuthorization({
+      objectKey: session.objectKey,
+      declaredMimeType: session.declaredMimeType,
+      maxSizeBytes: session.declaredFileSize,
+      expiresAt: session.expiresAt,
+    });
+
+    return {
+      sessionId: session._id.toString(),
+      mediaAssetId: session.mediaAssetId ? session.mediaAssetId.toString() : null,
+      purpose: session.purpose,
+      mediaType: session.mediaType,
+      attachmentCategory: session.attachmentCategory,
+      conversationId: session.conversationId ? session.conversationId.toString() : null,
+      status: session.status,
+      uploadTarget,
+      expiresAt: session.expiresAt,
+    };
+  }
+
+  /**
+   * Cancel an unattached upload session (Owner only)
+   */
+  async cancelUploadSession(userId, sessionId) {
+    const session = await UploadSession.findById(sessionId);
+    if (!session) {
+      const err = new Error('Upload session not found.');
+      err.code = 'UPLOAD_SESSION_NOT_FOUND';
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (session.ownerId.toString() !== userId.toString()) {
+      const err = new Error('You do not have permission to cancel this upload session.');
+      err.code = 'MEDIA_ACCESS_DENIED';
+      err.statusCode = 403;
+      throw err;
+    }
+
+    const asset = session.mediaAssetId ? await MediaAsset.findById(session.mediaAssetId) : null;
+    if (asset && asset.isConsumed) {
+      const err = new Error('Cannot cancel an asset that is already attached to a message.');
+      err.code = 'MEDIA_ALREADY_BOUND';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    session.status = 'CANCELLED';
+    await session.save();
+
+    if (asset && !asset.safetyHold) {
+      asset.processingStatus = 'CANCELLED';
+      asset.cancelledAt = new Date();
+      await asset.save();
+
+      // Clean storage object if exists
+      try {
+        await storageProvider.deleteObject(session.objectKey);
+      } catch (cleanErr) {
+        console.warn('[MEDIA SERVICE] Clean cancelled storage warning:', cleanErr.message);
+      }
+    }
+
+    return {
+      cancelled: true,
+      sessionId: session._id.toString(),
+      mediaAssetId: asset ? asset._id.toString() : null,
+    };
+  }
+
+  /**
    * Cleanup expired upload sessions and orphaned unfinalized objects
    */
   async cleanupExpiredUploadSessions() {
@@ -419,7 +654,11 @@ class MediaService {
       await s.save();
 
       // Clean storage if file was uploaded but never finalized
-      await storageProvider.deleteObject(s.objectKey);
+      try {
+        await storageProvider.deleteObject(s.objectKey);
+      } catch (cleanErr) {
+        console.warn('[MEDIA SERVICE] Storage deletion warning:', cleanErr.message);
+      }
       cleanedCount++;
     }
 
@@ -427,7 +666,41 @@ class MediaService {
   }
 
   /**
-   * Authorize media delivery variant access
+   * Cleanup orphaned unattached media assets and expired sessions
+   */
+  async cleanupOrphanedMediaAssets({ retentionHours = 24 } = {}) {
+    const cutoff = new Date(Date.now() - retentionHours * 60 * 60 * 1000);
+
+    const orphanedAssets = await MediaAsset.find({
+      purpose: 'CHAT_ATTACHMENT',
+      isConsumed: false,
+      safetyHold: false,
+      processingStatus: { $in: ['CANCELLED', 'ORPHANED', 'FAILED_PERMANENT', 'READY'] },
+      createdAt: { $lt: cutoff },
+    }).limit(100);
+
+    let cleanedCount = 0;
+    for (const asset of orphanedAssets) {
+      asset.processingStatus = 'DELETED';
+      asset.deletedAt = new Date();
+      await asset.save();
+
+      try {
+        await storageProvider.deleteObject(asset.originalObjectKey);
+        for (const v of asset.variants || []) {
+          if (v.objectKey) await storageProvider.deleteObject(v.objectKey);
+        }
+      } catch (e) {
+        console.warn('[MEDIA SERVICE] Orphan cleanup storage warning:', e.message);
+      }
+      cleanedCount++;
+    }
+
+    return { cleanedCount };
+  }
+
+  /**
+   * Authorize media delivery variant access with full safety & unsend checks
    */
   async getMediaDeliveryAccess(viewerId, mediaId, variantName = 'medium') {
     const asset = await MediaAsset.findById(mediaId);
@@ -438,28 +711,44 @@ class MediaService {
       throw err;
     }
 
-    const Content = require('../models/Content');
-    const boundContent = await Content.findOne({
-      'mediaItems.mediaAssetId': asset._id,
-      status: { $ne: 'DELETED' },
-    });
+    // Safety and quarantine gate
+    if (asset.processingStatus === 'QUARANTINED' || asset.processingStatus === 'REJECTED') {
+      const err = new Error('Media asset is not available.');
+      err.code = 'MEDIA_ACCESS_DENIED';
+      err.statusCode = 403;
+      throw err;
+    }
 
-    if (boundContent) {
-      const socialPolicyService = require('./socialPolicyService');
-      const authResult = await socialPolicyService.evaluateSocialContentAccess({
-        viewerId,
-        contentDoc: boundContent,
-        context: 'MEDIA_DELIVERY',
-      });
+    if (asset.purpose === 'CHAT_ATTACHMENT') {
+      if (asset.conversationId) {
+        // If attached to a message, verify message is not unsent/deleted
+        if (asset.consumedByMessageId) {
+          const Message = require('../models/Message');
+          const boundMsg = await Message.findById(asset.consumedByMessageId);
+          if (boundMsg && boundMsg.status === 'DELETED') {
+            const err = new Error('Message containing this attachment was unsent.');
+            err.code = 'MESSAGE_UNSENT';
+            err.statusCode = 404;
+            throw err;
+          }
+        }
 
-      if (!authResult.allowed) {
-        const err = new Error('You do not have permission to access this media.');
-        err.code = authResult.safeErrorCode || 'MEDIA_ACCESS_DENIED';
-        err.statusCode = authResult.safeErrorStatus || 404;
-        throw err;
+        const { authorizeConversationAccess } = require('./conversationAuthorizationService');
+        await authorizeConversationAccess({
+          actorUserId: viewerId,
+          conversationId: asset.conversationId,
+          operation: 'VIEW',
+        });
+      } else {
+        if (!viewerId || asset.ownerId.toString() !== viewerId.toString()) {
+          const err = new Error('You do not have permission to access this media.');
+          err.code = 'MEDIA_ACCESS_DENIED';
+          err.statusCode = 403;
+          throw err;
+        }
       }
     } else {
-      // Unbound asset is owner-only
+      // Unbound or social asset
       if (!viewerId || asset.ownerId.toString() !== viewerId.toString()) {
         const err = new Error('You do not have permission to access this media.');
         err.code = 'MEDIA_ACCESS_DENIED';

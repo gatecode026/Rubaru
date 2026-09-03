@@ -14,11 +14,15 @@ import {
   Animated,
   Platform,
   ActivityIndicator,
+  TextInput,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import BottomTabBar from '../components/common/BottomTabBar';
 import { useTheme } from '../theme';
 import { useLanguage } from '../localization/LanguageContext';
@@ -29,6 +33,7 @@ import PhotoThumbnail from '../components/common/PhotoThumbnail';
 import InterestPill from '../components/common/InterestPill';
 import api from '@services/api';
 import followService from '@services/followService';
+import reelService from '@services/reelService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { disconnectSocket } from '@services/socket';
 
@@ -63,8 +68,101 @@ export default function UserProfileScreen() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userReels, setUserReels] = useState([]);
+  const [showCreateReelPicker, setShowCreateReelPicker] = useState(false);
+  const [showUploadPreviewModal, setShowUploadPreviewModal] = useState(false);
+  const [selectedVideoAsset, setSelectedVideoAsset] = useState(null);
+  const [reelCaptionText, setReelCaptionText] = useState('');
+  const [isPublishingReel, setIsPublishingReel] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+  const [selectedPhotoPreview, setSelectedPhotoPreview] = useState(null);
 
   const scrollOffsetRef = useRef(0);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3200);
+  };
+
+  const handleOpenMediaItem = (item) => {
+    const isReel =
+      typeof item === 'object' &&
+      (item.videoUri ||
+        item.contentType === 'REEL' ||
+        item.mediaType === 'VIDEO' ||
+        item.mediaItems?.[0]?.mediaType === 'VIDEO' ||
+        item.mediaItems?.[0]?.variants?.[0]?.url);
+    if (isReel) {
+      const targetId = item.id || item.postId || item._id;
+      router.push({
+        pathname: '/reels',
+        params: { initialReelId: String(targetId) },
+      });
+    } else {
+      const url = typeof item === 'string' ? getFullUrl(item) : getFullUrl(item?.thumbnailUri || item?.url || item);
+      setSelectedPhotoPreview(url);
+    }
+  };
+
+  const handleOpenCreateOptions = () => {
+    setShowCreateReelPicker(true);
+  };
+
+  const handleRecordWithCamera = () => {
+    setShowCreateReelPicker(false);
+    router.push('/add-story');
+  };
+
+  const handlePickFromGallery = async () => {
+    setShowCreateReelPicker(false);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        alert('Permission to access photos and videos is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['videos'],
+        allowsEditing: true,
+        quality: 0.8,
+        videoMaxDuration: 90,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedVideoAsset(result.assets[0]);
+        setShowUploadPreviewModal(true);
+      }
+    } catch (err) {
+      console.log('[PICK VIDEO ERROR]', err.message);
+      alert('Could not pick video: ' + err.message);
+    }
+  };
+
+  const handlePublishSelectedReel = async () => {
+    if (!selectedVideoAsset?.uri) return;
+    try {
+      setIsPublishingReel(true);
+      const rawDur = selectedVideoAsset.duration || 15;
+      const durationMs = rawDur > 1000 ? Math.min(Math.round(rawDur), 90000) : Math.min(Math.round(rawDur * 1000), 90000);
+
+      await reelService.createReel({
+        videoUri: selectedVideoAsset.uri,
+        caption: reelCaptionText.trim() || 'My short video ✨',
+        durationMs,
+      });
+
+      setShowUploadPreviewModal(false);
+      setSelectedVideoAsset(null);
+      setReelCaptionText('');
+      showToast('🎉 Short video posted successfully!');
+      fetchProfileData();
+    } catch (err) {
+      console.log('[PUBLISH REEL ERROR]', err.message);
+      alert('Failed to post video: ' + (err.message || 'Please try again.'));
+    } finally {
+      setIsPublishingReel(false);
+    }
+  };
 
   const fetchProfileData = async () => {
     try {
@@ -94,9 +192,18 @@ export default function UserProfileScreen() {
           ? `/reels/user/${params.userId}`
           : '/reels/user/me';
         const reelRes = await api.get(reelEndpoint);
-        setUserReels(reelRes.data || []);
+        const raw = reelRes.data;
+        const list = Array.isArray(raw)
+          ? raw
+          : (Array.isArray(raw?.data)
+            ? raw.data
+            : (Array.isArray(raw?.items)
+              ? raw.items
+              : (Array.isArray(raw?.data?.items) ? raw.data.items : [])));
+        setUserReels(list);
       } catch (reelErr) {
         console.log('[FETCH USER REELS ERROR]', reelErr.message);
+        setUserReels([]);
       }
     } catch (error) {
       console.log('[FETCH PROFILE ERROR]', error.message || error);
@@ -366,127 +473,186 @@ export default function UserProfileScreen() {
               </View>
             </View>
 
-            {activeTab === 'top' ? (
-              /* Dynamic User Reels & Photos Grid */
-              <View style={{ paddingHorizontal: 4, marginTop: 12 }}>
-                {userReels.length === 0 && (!profile?.photos || profile.photos.length === 0) ? (
-                  /* Empty state */
-                  <Pressable
-                    onPress={() => !params.userId && router.push('/add-story')}
-                    style={styles.emptyInterestsContainer}
-                  >
-                    <Ionicons name="videocam-outline" size={20} color="#FF2E63" />
-                    <Text style={styles.emptyInterestsText}>
-                      {params.userId
-                        ? `${profile?.displayName?.split(' ')[0] || 'This user'} hasn't posted anything yet`
-                        : 'No posts yet — tap to add your first short video'}
-                    </Text>
-                  </Pressable>
-                ) : (
-                  /* 3-column masonry grid */
-                  <View style={styles.masonryGrid}>
-                    {/* Column 1 */}
-                    <View style={styles.masonryColumn}>
-                      {[...userReels, ...(profile?.photos || [])]
-                        .filter((_, i) => i % 3 === 0)
-                        .map((item, idx) => {
-                          const isReel = typeof item === 'object' && item.videoUri;
-                          const uri = isReel
-                            ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
-                            : getFullUrl(item);
-                          const cardHeight = idx % 2 === 0 ? 200 : 130;
-                          return (
-                            <Pressable
-                              key={`col1-${idx}`}
-                              onPress={() => isReel && router.push('/reels')}
-                              style={[styles.mediaCard, { height: cardHeight }]}
-                            >
-                              {uri ? (
-                                <Image source={{ uri }} style={styles.mediaImage} resizeMode="cover" />
-                              ) : (
-                                <View style={[styles.mediaImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
-                                  <Ionicons name="videocam-outline" size={28} color="#9CA3AF" />
-                                </View>
-                              )}
-                              {isReel && (
-                                <View style={styles.playButtonOverlayCenter}>
-                                  <Ionicons name="play" size={15} color="#111827" style={{ marginLeft: 2 }} />
-                                </View>
-                              )}
-                            </Pressable>
-                          );
-                        })}
-                    </View>
+            {activeTab === 'top' ? (() => {
+              const reelsArr = Array.isArray(userReels) ? userReels : [];
+              const photosArr = Array.isArray(profile?.photos) ? profile.photos : [];
+              const mediaItems = [...reelsArr, ...photosArr];
 
-                    {/* Column 2 */}
-                    <View style={styles.masonryColumn}>
-                      {[...userReels, ...(profile?.photos || [])]
-                        .filter((_, i) => i % 3 === 1)
-                        .map((item, idx) => {
-                          const isReel = typeof item === 'object' && item.videoUri;
-                          const uri = isReel
-                            ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
-                            : getFullUrl(item);
-                          const cardHeight = idx % 2 === 0 ? 130 : 170;
-                          return (
-                            <Pressable
-                              key={`col2-${idx}`}
-                              onPress={() => isReel && router.push('/reels')}
-                              style={[styles.mediaCard, { height: cardHeight }]}
-                            >
-                              {uri ? (
-                                <Image source={{ uri }} style={styles.mediaImage} resizeMode="cover" />
-                              ) : (
-                                <View style={[styles.mediaImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
-                                  <Ionicons name="videocam-outline" size={28} color="#9CA3AF" />
-                                </View>
-                              )}
-                              {isReel && (
-                                <View style={styles.playButtonOverlayCenter}>
-                                  <Ionicons name="play" size={15} color="#111827" style={{ marginLeft: 2 }} />
-                                </View>
-                              )}
-                            </Pressable>
-                          );
-                        })}
-                    </View>
+              return (
+                <View style={{ paddingHorizontal: 4, marginTop: 12 }}>
+                  {/* Instagram-style Creator Bar for Owner */}
+                  {!params.userId && (
+                    <View style={styles.topCreatorRow}>
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={handleOpenCreateOptions}
+                        style={styles.topCreateReelPill}
+                      >
+                        <LinearGradient
+                          colors={['#FF2E63', '#FF4E79']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.topCreateReelGradient}
+                        >
+                          <Ionicons name="videocam" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                          <Text style={styles.topCreateReelText}>+ Upload Short Video</Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
 
-                    {/* Column 3 */}
-                    <View style={styles.masonryColumn}>
-                      {[...userReels, ...(profile?.photos || [])]
-                        .filter((_, i) => i % 3 === 2)
-                        .map((item, idx) => {
-                          const isReel = typeof item === 'object' && item.videoUri;
-                          const uri = isReel
-                            ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
-                            : getFullUrl(item);
-                          const cardHeight = idx % 2 === 0 ? 150 : 120;
-                          return (
-                            <Pressable
-                              key={`col3-${idx}`}
-                              onPress={() => isReel && router.push('/reels')}
-                              style={[styles.mediaCard, { height: cardHeight }]}
-                            >
-                              {uri ? (
-                                <Image source={{ uri }} style={styles.mediaImage} resizeMode="cover" />
-                              ) : (
-                                <View style={[styles.mediaImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
-                                  <Ionicons name="videocam-outline" size={28} color="#9CA3AF" />
-                                </View>
-                              )}
-                              {isReel && (
-                                <View style={styles.playButtonOverlayBottom}>
-                                  <Ionicons name="play" size={15} color="#111827" style={{ marginLeft: 2 }} />
-                                </View>
-                              )}
-                            </Pressable>
-                          );
-                        })}
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => router.push('/edit-profile')}
+                        style={styles.topAddPhotoPill}
+                      >
+                        <Ionicons name="images-outline" size={16} color="#111827" style={{ marginRight: 5 }} />
+                        <Text style={styles.topAddPhotoText}>Add Photos</Text>
+                      </TouchableOpacity>
                     </View>
-                  </View>
-                )}
-              </View>
-            ) : (
+                  )}
+
+                  {mediaItems.length === 0 ? (
+                    /* Empty state */
+                    <Pressable
+                      onPress={() => !params.userId && handleOpenCreateOptions()}
+                      style={styles.emptyInterestsContainer}
+                    >
+                      <Ionicons name="videocam-outline" size={22} color="#FF2E63" />
+                      <Text style={styles.emptyInterestsText}>
+                        {params.userId
+                          ? `${profile?.displayName?.split(' ')[0] || 'This user'} hasn't posted anything yet`
+                          : 'No posts yet — tap to upload your first short video'}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    /* 3-column masonry grid */
+                    <View style={styles.masonryGrid}>
+                      {/* Column 1 */}
+                      <View style={styles.masonryColumn}>
+                        {mediaItems
+                          .filter((_, i) => i % 3 === 0)
+                          .map((item, idx) => {
+                            const isReel = typeof item === 'object' && (item.videoUri || item.contentType === 'REEL');
+                            const uri = isReel
+                              ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
+                              : getFullUrl(item);
+                            const cardHeight = idx % 2 === 0 ? 200 : 130;
+                            return (
+                              <Pressable
+                                key={`col1-${idx}`}
+                                onPress={() => handleOpenMediaItem(item)}
+                                style={[styles.mediaCard, { height: cardHeight }]}
+                              >
+                                {uri ? (
+                                  <Image source={{ uri }} style={styles.mediaImage} resizeMode="cover" />
+                                ) : (
+                                  <View style={[styles.mediaImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                                    <Ionicons name="videocam-outline" size={28} color="#9CA3AF" />
+                                  </View>
+                                )}
+                                {isReel && (
+                                  <LinearGradient
+                                    colors={['transparent', 'rgba(0,0,0,0.65)']}
+                                    style={styles.mediaCardGradientOverlay}
+                                  >
+                                    <View style={styles.reelCardStatsRow}>
+                                      <Ionicons name="play" size={12} color="#FFFFFF" style={{ marginRight: 3 }} />
+                                      <Text style={styles.reelCardPlayText}>
+                                        {item.viewsCount ? (item.viewsCount > 999 ? `${(item.viewsCount/1000).toFixed(1)}k` : item.viewsCount) : '0'}
+                                      </Text>
+                                    </View>
+                                  </LinearGradient>
+                                )}
+                              </Pressable>
+                            );
+                          })}
+                      </View>
+
+                      {/* Column 2 */}
+                      <View style={styles.masonryColumn}>
+                        {mediaItems
+                          .filter((_, i) => i % 3 === 1)
+                          .map((item, idx) => {
+                            const isReel = typeof item === 'object' && (item.videoUri || item.contentType === 'REEL');
+                            const uri = isReel
+                              ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
+                              : getFullUrl(item);
+                            const cardHeight = idx % 2 === 0 ? 130 : 170;
+                            return (
+                              <Pressable
+                                key={`col2-${idx}`}
+                                onPress={() => handleOpenMediaItem(item)}
+                                style={[styles.mediaCard, { height: cardHeight }]}
+                              >
+                                {uri ? (
+                                  <Image source={{ uri }} style={styles.mediaImage} resizeMode="cover" />
+                                ) : (
+                                  <View style={[styles.mediaImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                                    <Ionicons name="videocam-outline" size={28} color="#9CA3AF" />
+                                  </View>
+                                )}
+                                {isReel && (
+                                  <LinearGradient
+                                    colors={['transparent', 'rgba(0,0,0,0.65)']}
+                                    style={styles.mediaCardGradientOverlay}
+                                  >
+                                    <View style={styles.reelCardStatsRow}>
+                                      <Ionicons name="play" size={12} color="#FFFFFF" style={{ marginRight: 3 }} />
+                                      <Text style={styles.reelCardPlayText}>
+                                        {item.viewsCount ? (item.viewsCount > 999 ? `${(item.viewsCount/1000).toFixed(1)}k` : item.viewsCount) : '0'}
+                                      </Text>
+                                    </View>
+                                  </LinearGradient>
+                                )}
+                              </Pressable>
+                            );
+                          })}
+                      </View>
+
+                      {/* Column 3 */}
+                      <View style={styles.masonryColumn}>
+                        {mediaItems
+                          .filter((_, i) => i % 3 === 2)
+                          .map((item, idx) => {
+                            const isReel = typeof item === 'object' && (item.videoUri || item.contentType === 'REEL');
+                            const uri = isReel
+                              ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
+                              : getFullUrl(item);
+                            const cardHeight = idx % 2 === 0 ? 150 : 120;
+                            return (
+                              <Pressable
+                                key={`col3-${idx}`}
+                                onPress={() => handleOpenMediaItem(item)}
+                                style={[styles.mediaCard, { height: cardHeight }]}
+                              >
+                                {uri ? (
+                                  <Image source={{ uri }} style={styles.mediaImage} resizeMode="cover" />
+                                ) : (
+                                  <View style={[styles.mediaImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                                    <Ionicons name="videocam-outline" size={28} color="#9CA3AF" />
+                                  </View>
+                                )}
+                                {isReel && (
+                                  <LinearGradient
+                                    colors={['transparent', 'rgba(0,0,0,0.65)']}
+                                    style={styles.mediaCardGradientOverlay}
+                                  >
+                                    <View style={styles.reelCardStatsRow}>
+                                      <Ionicons name="play" size={12} color="#FFFFFF" style={{ marginRight: 3 }} />
+                                      <Text style={styles.reelCardPlayText}>
+                                        {item.viewsCount ? (item.viewsCount > 999 ? `${(item.viewsCount/1000).toFixed(1)}k` : item.viewsCount) : '0'}
+                                      </Text>
+                                    </View>
+                                  </LinearGradient>
+                                )}
+                              </Pressable>
+                            );
+                          })}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            })() : (
               /* Inline About Me Content */
               <View style={styles.aboutMeInlineContainer}>
                 {/* 2. Bio Quote Card */}
@@ -518,10 +684,124 @@ export default function UserProfileScreen() {
                     <InfoPill icon="location-outline" label={profile?.locationName || 'India'} />
                     <InfoPill icon="call-outline" label={profile?.user?.phone || 'N/A'}  />
                   </View>
-                  {/* <InfoPill icon="mail-outline" label={profile?.user?.email || 'N/A'} fullWidth /> */}
                 </View>
 
-                {/* 5. Captured Moments Section */}
+                {/* 5. Short Videos & Reels Section (Instagram Reference) */}
+                <View style={styles.aboutSectionContainer}>
+                  <View style={styles.momentsHeaderRow}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Ionicons name="videocam" size={20} color="#FF2E63" style={{ marginRight: 8 }} />
+                      <Text style={styles.aboutSerifTitle}>Short Videos & Reels</Text>
+                      {userReels.length > 0 && (
+                        <View style={styles.reelsCountBadge}>
+                          <Text style={styles.reelsCountBadgeText}>{userReels.length}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {!params.userId && (
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={handleOpenCreateOptions}
+                        style={styles.createReelSmallBtn}
+                      >
+                        <Ionicons name="add" size={15} color="#FFFFFF" style={{ marginRight: 2 }} />
+                        <Text style={styles.createReelSmallText}>Create</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {userReels.length > 0 ? (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.reelsHorizontalScrollContent}
+                    >
+                      {!params.userId && (
+                        /* Instagram Add Reel Card */
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={handleOpenCreateOptions}
+                          style={styles.addReelInlineCard}
+                        >
+                          <LinearGradient
+                            colors={['rgba(255, 46, 99, 0.08)', 'rgba(255, 46, 99, 0.15)']}
+                            style={styles.addReelInlineGradient}
+                          >
+                            <View style={styles.addReelPlusCircle}>
+                              <Ionicons name="add" size={26} color="#FF2E63" />
+                            </View>
+                            <Text style={styles.addReelInlineTitle}>New Reel</Text>
+                          </LinearGradient>
+                        </TouchableOpacity>
+                      )}
+
+                      {userReels.map((reel, index) => {
+                        const thumbUri = reel.thumbnailUri ? getFullUrl(reel.thumbnailUri) : null;
+                        return (
+                          <TouchableOpacity
+                            key={reel.id || reel.postId || index}
+                            activeOpacity={0.88}
+                            onPress={() => handleOpenMediaItem(reel)}
+                            style={styles.reelStoryCard}
+                          >
+                            {thumbUri ? (
+                              <Image source={{ uri: thumbUri }} style={styles.reelStoryImage} resizeMode="cover" />
+                            ) : (
+                              <View style={[styles.reelStoryImage, styles.reelPlaceholderBg]}>
+                                <Ionicons name="videocam-outline" size={30} color="#9CA3AF" />
+                              </View>
+                            )}
+                            <LinearGradient
+                              colors={['transparent', 'rgba(0,0,0,0.8)']}
+                              style={styles.reelStoryGradient}
+                            >
+                              <View style={styles.reelPlayRow}>
+                                <Ionicons name="play" size={12} color="#FFFFFF" style={{ marginRight: 3 }} />
+                                <Text style={styles.reelPlayText}>
+                                  {reel.viewsCount ? (reel.viewsCount > 999 ? `${(reel.viewsCount/1000).toFixed(1)}k` : reel.viewsCount) : '0'}
+                                </Text>
+                              </View>
+                              {reel.caption ? (
+                                <Text style={styles.reelCaptionSmall} numberOfLines={1}>
+                                  {reel.caption}
+                                </Text>
+                              ) : null}
+                            </LinearGradient>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  ) : (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => !params.userId && handleOpenCreateOptions()}
+                      style={styles.emptyReelBanner}
+                    >
+                      <View style={styles.emptyReelIconCircle}>
+                        <Ionicons name="film-outline" size={24} color="#FF2E63" />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={styles.emptyReelBannerTitle}>
+                          {params.userId
+                            ? 'No short videos posted yet'
+                            : 'Upload your first short video'}
+                        </Text>
+                        <Text style={styles.emptyReelBannerSubtitle}>
+                          {params.userId
+                            ? 'Check back later for new reels'
+                            : 'Share short video clips to showcase on your profile'}
+                        </Text>
+                      </View>
+                      {!params.userId && (
+                        <View style={styles.addReelPillSmall}>
+                          <Text style={styles.addReelPillSmallText}>+ Add</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* 6. Captured Moments Section */}
                 <View style={styles.aboutSectionContainer}>
                   <View style={styles.momentsHeaderRow}>
                     <Text style={styles.aboutSerifTitle}>{t('capturedMoments', 'Captured Moments')}</Text>
@@ -539,7 +819,7 @@ export default function UserProfileScreen() {
                           key={index}
                           uri={getFullUrl(photo)}
                           fallback={require('@assets/images/onboarding2.jpg')}
-                          onPress={() => { }}
+                          onPress={() => handleOpenMediaItem(photo)}
                         />
                       ))}
                     </ScrollView>
@@ -558,7 +838,7 @@ export default function UserProfileScreen() {
                   )}
                 </View>
 
-                {/* 6. Things I Love Section */}
+                {/* 7. Things I Love Section */}
                 <View style={styles.aboutSectionContainer}>
                   <Text style={[styles.aboutSerifTitle, { marginBottom: 14 }]}>{t('thingsILove', 'Things I Love')}</Text>
                   {profile?.interests && profile.interests.length > 0 ? (
@@ -1014,6 +1294,221 @@ export default function UserProfileScreen() {
 
           </Pressable>
         </Pressable>
+      </Modal>
+
+      {/* 1. Instagram-Style Create Reel Source Picker Modal */}
+      <Modal
+        visible={showCreateReelPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateReelPicker(false)}
+      >
+        <Pressable
+          style={styles.reelPickerModalOverlay}
+          onPress={() => setShowCreateReelPicker(false)}
+        >
+          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFillObject} pointerEvents="none" />
+          <Pressable style={styles.reelPickerSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.sheetHandleBar} />
+            <Text style={styles.reelPickerTitle}>Create Short Video</Text>
+            <Text style={styles.reelPickerSubtitle}>Share authentic moments with your community</Text>
+
+            {/* Option A: Camera */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.reelOptionCard}
+              onPress={handleRecordWithCamera}
+            >
+              <LinearGradient
+                colors={['#FF2E63', '#FF4E79']}
+                style={styles.reelOptionIconCircle}
+              >
+                <Ionicons name="camera" size={24} color="#FFFFFF" />
+              </LinearGradient>
+              <View style={{ flex: 1, marginLeft: 14 }}>
+                <Text style={styles.reelOptionTitle}>Record with Camera</Text>
+                <Text style={styles.reelOptionDesc}>Record video clips up to 90s with filters</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            {/* Option B: Gallery */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.reelOptionCard}
+              onPress={handlePickFromGallery}
+            >
+              <LinearGradient
+                colors={['#8B5CF6', '#EC4899']}
+                style={styles.reelOptionIconCircle}
+              >
+                <Ionicons name="images" size={24} color="#FFFFFF" />
+              </LinearGradient>
+              <View style={{ flex: 1, marginLeft: 14 }}>
+                <Text style={styles.reelOptionTitle}>Upload from Gallery</Text>
+                <Text style={styles.reelOptionDesc}>Choose an existing video from your device</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            {/* Cancel */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.reelPickerCancelBtn}
+              onPress={() => setShowCreateReelPicker(false)}
+            >
+              <Text style={styles.reelPickerCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* 2. Instagram-Style Reel Caption & Publish Modal */}
+      <Modal
+        visible={showUploadPreviewModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !isPublishingReel && setShowUploadPreviewModal(false)}
+      >
+        <View style={styles.uploadModalOverlay}>
+          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFillObject} pointerEvents="none" />
+          <View style={[styles.uploadModalContent, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
+            <View style={styles.uploadModalHeader}>
+              <Text style={styles.uploadModalTitle}>New Short Video</Text>
+              <TouchableOpacity
+                disabled={isPublishingReel}
+                onPress={() => setShowUploadPreviewModal(false)}
+                style={styles.uploadModalCloseBtn}
+              >
+                <Ionicons name="close" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Video preview summary card */}
+            <View style={styles.uploadVideoPreviewBox}>
+              <View style={styles.uploadVideoPreviewThumb}>
+                <Ionicons name="videocam" size={28} color="#FF2E63" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.uploadVideoPreviewText} numberOfLines={1}>
+                  {selectedVideoAsset?.fileName || 'Selected Video Clip'}
+                </Text>
+                <Text style={styles.uploadVideoDurationText}>
+                  {selectedVideoAsset?.duration ? `${Math.round(selectedVideoAsset.duration)}s • Ready to publish` : 'Video Ready to publish'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Caption Input */}
+            <Text style={styles.uploadInputLabel}>Caption</Text>
+            <TextInput
+              style={styles.uploadCaptionInput}
+              placeholder="Write a catchy caption, #hashtags, or mentions..."
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={4}
+              maxLength={300}
+              value={reelCaptionText}
+              onChangeText={setReelCaptionText}
+              editable={!isPublishingReel}
+            />
+            <Text style={styles.uploadCharCountText}>{reelCaptionText.length}/300</Text>
+
+            {/* Action buttons */}
+            <TouchableOpacity
+              activeOpacity={0.88}
+              disabled={isPublishingReel}
+              onPress={handlePublishSelectedReel}
+              style={styles.uploadPublishBtn}
+            >
+              <LinearGradient
+                colors={['#FF2E63', '#FF4E79']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.uploadPublishGradient}
+              >
+                {isPublishingReel ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="paper-plane-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.uploadPublishBtnText}>Share Reel</Text>
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 3. Floating Toast Banner */}
+      {toastMessage && (
+        <View style={[styles.toastContainer, { top: insets.top + 16 }]}>
+          <Ionicons name="checkmark-circle" size={18} color="#10B981" style={{ marginRight: 8 }} />
+          <Text style={styles.toastText}>{toastMessage}</Text>
+        </View>
+      )}
+
+      {/* 4. Instagram-Style Full-Screen Photo Viewer Modal */}
+      <Modal
+        visible={Boolean(selectedPhotoPreview)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedPhotoPreview(null)}
+      >
+        <View style={styles.photoViewerOverlay}>
+          <BlurView intensity={85} tint="dark" style={StyleSheet.absoluteFillObject} pointerEvents="none" />
+
+          {/* Top Bar */}
+          <View style={[styles.photoViewerTopBar, { paddingTop: Math.max(insets.top + 8, 20) }]}>
+            <View style={styles.photoViewerUserRow}>
+              <Image
+                source={{ uri: profile?.avatarUri ? getFullUrl(profile.avatarUri) : 'https://i.pravatar.cc/150?img=60' }}
+                style={styles.photoViewerAvatar}
+              />
+              <View style={{ marginLeft: 10 }}>
+                <Text style={styles.photoViewerUserName}>{profile?.displayName || 'Rubaru User'}</Text>
+                <Text style={styles.photoViewerSubtitle}>{profile?.locationName || 'Moments'}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setSelectedPhotoPreview(null)}
+              style={styles.photoViewerCloseBtn}
+            >
+              <Ionicons name="close" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Center Image Area */}
+          <Pressable
+            style={styles.photoViewerCenterArea}
+            onPress={() => setSelectedPhotoPreview(null)}
+          >
+            {selectedPhotoPreview ? (
+              <Image
+                source={{ uri: selectedPhotoPreview }}
+                style={styles.photoViewerMainImage}
+                resizeMode="contain"
+              />
+            ) : null}
+          </Pressable>
+
+          {/* Bottom Actions Row */}
+          <View style={[styles.photoViewerBottomBar, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
+            <View style={styles.photoViewerActionsRow}>
+              <TouchableOpacity activeOpacity={0.8} style={styles.photoViewerActionIcon}>
+                <Ionicons name="heart-outline" size={26} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.8} style={styles.photoViewerActionIcon}>
+                <Ionicons name="chatbubble-outline" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.8} style={styles.photoViewerActionIcon}>
+                <Ionicons name="paper-plane-outline" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1867,5 +2362,505 @@ const styles = StyleSheet.create({
     color: '#FF2E63',
     fontWeight: '600',
     marginLeft: 8,
+  },
+  // --- Instagram-Style Reels & Short Videos ---
+  topCreatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    gap: 10,
+  },
+  topCreateReelPill: {
+    flex: 1,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  topCreateReelGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  topCreateReelText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  topAddPhotoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  topAddPhotoText: {
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  mediaCardGradientOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 48,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 8,
+    paddingBottom: 6,
+  },
+  reelCardStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reelCardPlayText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  reelsCountBadge: {
+    backgroundColor: 'rgba(255, 46, 99, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  reelsCountBadgeText: {
+    color: '#FF2E63',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  createReelSmallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF2E63',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  createReelSmallText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  reelsHorizontalScrollContent: {
+    paddingRight: 12,
+    gap: 12,
+  },
+  addReelInlineCard: {
+    width: 105,
+    height: 165,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 46, 99, 0.3)',
+    borderStyle: 'dashed',
+  },
+  addReelInlineGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 10,
+  },
+  addReelPlusCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 2,
+    marginBottom: 8,
+  },
+  addReelInlineTitle: {
+    color: '#FF2E63',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  reelStoryCard: {
+    width: 105,
+    height: 165,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#111827',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  reelStoryImage: {
+    width: '100%',
+    height: '100%',
+  },
+  reelPlaceholderBg: {
+    backgroundColor: '#374151',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reelStoryGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    justifyContent: 'flex-end',
+    padding: 8,
+  },
+  reelPlayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  reelPlayText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  reelCaptionSmall: {
+    color: '#F3F4F6',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  emptyReelBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  emptyReelIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255, 46, 99, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyReelBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  emptyReelBannerSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 16,
+  },
+  addReelPillSmall: {
+    backgroundColor: '#FF2E63',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  addReelPillSmallText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  // --- Modals Styles ---
+  reelPickerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  reelPickerSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 34,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  sheetHandleBar: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  reelPickerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  reelPickerSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  reelOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#F9FAFB',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  reelOptionIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reelOptionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  reelOptionDesc: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  reelPickerCancelBtn: {
+    marginTop: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reelPickerCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  uploadModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  uploadModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 18,
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  uploadModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  uploadModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  uploadModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadVideoPreviewBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 16,
+  },
+  uploadVideoPreviewThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 46, 99, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadVideoPreviewText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  uploadVideoDurationText: {
+    fontSize: 12,
+    color: '#10B981',
+    fontWeight: '600',
+  },
+  uploadInputLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  uploadCaptionInput: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 12,
+    fontSize: 14,
+    color: '#111827',
+    textAlignVertical: 'top',
+    minHeight: 85,
+  },
+  uploadCharCountText: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textAlign: 'right',
+    marginTop: 4,
+    marginBottom: 18,
+  },
+  uploadPublishBtn: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  uploadPublishGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+  },
+  uploadPublishBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  toastContainer: {
+    position: 'absolute',
+    alignSelf: 'center',
+    backgroundColor: '#111827',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+    zIndex: 9999,
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  // --- Full-Screen Instagram Photo Viewer ---
+  photoViewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'space-between',
+  },
+  photoViewerTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    zIndex: 10,
+  },
+  photoViewerUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  photoViewerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#FF2E63',
+  },
+  photoViewerUserName: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  photoViewerSubtitle: {
+    color: '#9CA3AF',
+    fontSize: 11,
+  },
+  photoViewerCloseBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoViewerCenterArea: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  photoViewerMainImage: {
+    width: SCREEN_WIDTH - 16,
+    height: SCREEN_WIDTH * 1.25,
+    maxHeight: '85%',
+    borderRadius: 12,
+  },
+  photoViewerBottomBar: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+  },
+  photoViewerActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+  },
+  photoViewerActionIcon: {
+    padding: 6,
   },
 });
