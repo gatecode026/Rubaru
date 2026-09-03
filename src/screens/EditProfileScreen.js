@@ -12,13 +12,17 @@ import {
   TextInput,
   ActivityIndicator,
   Platform,
+  Modal,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../theme';
 import api from '@services/api';
+import { reelService } from '@services/reelService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -60,6 +64,14 @@ export default function EditProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Short Videos & Reels State
+  const [userReels, setUserReels] = useState([]);
+  const [loadingReels, setLoadingReels] = useState(false);
+  const [showUploadReelModal, setShowUploadReelModal] = useState(false);
+  const [selectedVideoAsset, setSelectedVideoAsset] = useState(null);
+  const [reelCaptionText, setReelCaptionText] = useState('');
+  const [isPublishingReel, setIsPublishingReel] = useState(false);
+
   useEffect(() => {
     const onBackPress = () => {
       router.push('/user-profile?openSettings=true');
@@ -68,6 +80,19 @@ export default function EditProfileScreen() {
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
   }, [router]);
+
+  const fetchUserReels = async () => {
+    try {
+      setLoadingReels(true);
+      const res = await api.get('/reels/user/me');
+      const items = res.data?.items || res.data?.data?.items || res.data?.data || res.data || [];
+      setUserReels(Array.isArray(items) ? items : []);
+    } catch (err) {
+      console.log('[EDIT PROFILE FETCH REELS ERROR]', err.message);
+    } finally {
+      setLoadingReels(false);
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -98,6 +123,8 @@ export default function EditProfileScreen() {
           ).filter(Boolean);
           setSelectedInterests(matchedIds);
         }
+        
+        await fetchUserReels();
         setLoading(false);
       } catch (error) {
         console.log('[EDIT PROFILE FETCH ERROR]', error.message || error);
@@ -117,17 +144,16 @@ export default function EditProfileScreen() {
       return;
     }
 
-    const pickerResult = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
     });
 
-    if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
-      const selected = pickerResult.assets[0];
-      setAvatarAsset(selected);
-      setAvatarUri(selected.uri);
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setAvatarAsset(result.assets[0]);
+      setAvatarUri(result.assets[0].uri);
       setRemoveAvatar(false);
     }
   };
@@ -139,21 +165,27 @@ export default function EditProfileScreen() {
   };
 
   const handlePickPhoto = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      alert("Permission to access camera roll is required!");
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      alert('Permission to access photos is required!');
       return;
     }
 
-    const pickerResult = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    const maxCanSelect = 6 - (existingPhotos.length + newPhotos.length);
+    if (maxCanSelect <= 0) {
+      alert('You can upload a maximum of 6 photos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
       allowsMultipleSelection: true,
       selectionLimit: 9,
       quality: 0.8,
     });
 
-    if (!pickerResult.canceled && pickerResult.assets) {
-      setNewPhotos([...newPhotos, ...pickerResult.assets]);
+    if (!result.canceled && result.assets) {
+      setNewPhotos([...newPhotos, ...result.assets]);
     }
   };
 
@@ -163,6 +195,68 @@ export default function EditProfileScreen() {
 
   const handleRemoveNewPhoto = (indexToRemove) => {
     setNewPhotos(newPhotos.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  // Short Video / Reel Handlers
+  const handlePickReel = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        alert('Permission to access videos is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['videos'],
+        allowsEditing: true,
+        quality: 0.8,
+        videoMaxDuration: 90,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedVideoAsset(result.assets[0]);
+        setShowUploadReelModal(true);
+      }
+    } catch (err) {
+      console.log('[PICK REEL ERROR]', err.message);
+      alert('Could not pick video: ' + err.message);
+    }
+  };
+
+  const handlePublishReel = async () => {
+    if (!selectedVideoAsset?.uri) return;
+    try {
+      setIsPublishingReel(true);
+      const rawDur = selectedVideoAsset.duration || 15;
+      const durationMs = rawDur > 1000 ? Math.min(Math.round(rawDur), 90000) : Math.min(Math.round(rawDur * 1000), 90000);
+
+      await reelService.createReel({
+        videoUri: selectedVideoAsset.uri,
+        caption: reelCaptionText.trim() || 'My short video ✨',
+        durationMs,
+      });
+
+      setShowUploadReelModal(false);
+      setSelectedVideoAsset(null);
+      setReelCaptionText('');
+      await fetchUserReels();
+      alert('Short video posted successfully!');
+    } catch (err) {
+      console.log('[PUBLISH REEL ERROR]', err.message);
+      alert('Failed to post short video: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setIsPublishingReel(false);
+    }
+  };
+
+  const handleDeleteReel = async (reelId) => {
+    try {
+      await api.delete(`/reels/${reelId}`);
+      setUserReels((prev) => prev.filter((r) => (r.id || r.postId || r._id) !== reelId));
+    } catch (err) {
+      console.log('[DELETE REEL ERROR]', err.message);
+      alert('Could not delete reel: ' + err.message);
+    }
   };
 
   const handleSave = async () => {
@@ -231,14 +325,6 @@ export default function EditProfileScreen() {
         await api.put('/profiles/edit', formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
-          },
-          transformRequest: (data, headers) => {
-            if (headers && headers.delete) {
-              headers.delete('Content-Type');
-            } else if (headers) {
-              delete headers['Content-Type'];
-            }
-            return data;
           },
         });
       }
@@ -316,8 +402,15 @@ export default function EditProfileScreen() {
 
             <Text style={styles.headerTitle}>Edit Profile</Text>
             
-            {/* Empty placeholder for flex alignment */}
-            <View style={{ width: 40 }} />
+            {/* Close / Cross button */}
+            <Pressable
+              onPress={() => router.push('/user-profile')}
+              style={({ pressed }) => [styles.backButton, pressed && styles.buttonPressed]}
+              hitSlop={12}
+              accessibilityLabel="Close edit profile"
+            >
+              <Ionicons name="close" size={24} color="#111827" />
+            </Pressable>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -467,6 +560,115 @@ export default function EditProfileScreen() {
               </View>
             </View>
 
+            {/* Short Videos & Reels Section Header */}
+            <View style={styles.interestsSectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.interestsMainTitle}>Short Videos & Reels</Text>
+                  {userReels.length > 0 && (
+                    <View style={styles.reelsCountBadge}>
+                      <Text style={styles.reelsCountBadgeText}>{userReels.length}</Text>
+                    </View>
+                  )}
+                </View>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={handlePickReel}
+                  style={styles.addReelHeaderBtn}
+                >
+                  <Ionicons name="add" size={16} color="#FF2E63" style={{ marginRight: 4 }} />
+                  <Text style={styles.addReelHeaderBtnText}>Upload Reel</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <Text style={styles.interestsSubtitle}>
+                Manage or upload short video reels shown on your profile and reels feed.
+              </Text>
+              
+              {/* Reels horizontal list */}
+              {userReels.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reelsScrollContent}>
+                  {userReels.map((reel, index) => {
+                    const reelId = reel.id || reel.postId || reel._id;
+                    const thumb = reel.thumbnailUri ? getFullUrl(reel.thumbnailUri) : (reel.videoUri || null);
+                    return (
+                      <View key={reelId || index} style={styles.reelEditCard}>
+                        {thumb ? (
+                          <Image source={{ uri: thumb }} style={styles.reelEditThumbnail} resizeMode="cover" />
+                        ) : (
+                          <View style={[styles.reelEditThumbnail, { backgroundColor: '#261622', justifyContent: 'center', alignItems: 'center' }]}>
+                            <Ionicons name="videocam-outline" size={28} color="#9CA3AF" />
+                          </View>
+                        )}
+                        <LinearGradient
+                          colors={['transparent', 'rgba(0,0,0,0.8)']}
+                          style={styles.reelEditGradient}
+                        >
+                          <View style={styles.reelEditPlayRow}>
+                            <Ionicons name="play" size={12} color="#FFFFFF" style={{ marginRight: 3 }} />
+                            <Text style={styles.reelEditPlayText}>
+                              {reel.viewsCount ? (reel.viewsCount > 999 ? `${(reel.viewsCount/1000).toFixed(1)}k` : reel.viewsCount) : '0'}
+                            </Text>
+                          </View>
+                          {reel.caption ? (
+                            <Text style={styles.reelEditCaption} numberOfLines={1}>
+                              {reel.caption}
+                            </Text>
+                          ) : null}
+                        </LinearGradient>
+
+                        {/* Cross (✖) Button to easily remove uploaded reel */}
+                        <Pressable 
+                          style={styles.deleteReelBadge} 
+                          onPress={() => handleDeleteReel(reelId)}
+                          hitSlop={10}
+                          accessibilityLabel="Remove uploaded reel"
+                        >
+                          <Ionicons name="close" size={16} color="#FFFFFF" />
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+
+                  {/* Add New Reel Inline Card */}
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={handlePickReel}
+                    style={styles.addReelInlineCard}
+                  >
+                    <LinearGradient
+                      colors={['rgba(255,46,99,0.12)', 'rgba(255,46,99,0.04)']}
+                      style={styles.addReelInlineGradient}
+                    >
+                      <View style={styles.addReelPlusCircle}>
+                        <Ionicons name="film-outline" size={24} color="#FF2E63" />
+                      </View>
+                      <Text style={styles.addReelInlineText}>+ New Reel</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </ScrollView>
+              ) : (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={handlePickReel}
+                  style={styles.emptyReelBanner}
+                >
+                  <View style={styles.emptyReelIconCircle}>
+                    <Ionicons name="film-outline" size={24} color="#FF2E63" />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.emptyReelBannerTitle}>No reels uploaded yet</Text>
+                    <Text style={styles.emptyReelBannerSubtitle}>
+                      Tap here to upload your first short video reel
+                    </Text>
+                  </View>
+                  <View style={styles.addReelPillSmall}>
+                    <Text style={styles.addReelPillSmallText}>+ Upload</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
+
             {/* Your Interests Section Header */}
             <View style={styles.interestsSectionHeader}>
               <Text style={styles.interestsMainTitle}>Your interests</Text>
@@ -535,6 +737,79 @@ export default function EditProfileScreen() {
           </ScrollView>
         </View>
       </ImageBackground>
+
+      {/* Upload Reel Modal */}
+      <Modal
+        visible={showUploadReelModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !isPublishingReel && setShowUploadReelModal(false)}
+      >
+        <View style={styles.uploadModalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => !isPublishingReel && setShowUploadReelModal(false)}
+          />
+          <View style={styles.uploadModalCard}>
+            <View style={styles.uploadModalHeader}>
+              <Text style={styles.uploadModalTitle}>Share Short Video Reel</Text>
+              <TouchableOpacity
+                onPress={() => !isPublishingReel && setShowUploadReelModal(false)}
+                disabled={isPublishingReel}
+                hitSlop={10}
+              >
+                <Ionicons name="close" size={24} color="#374151" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Video preview summary pill */}
+            <View style={styles.uploadPreviewPill}>
+              <Ionicons name="videocam" size={18} color="#FF2E63" style={{ marginRight: 8 }} />
+              <Text style={styles.uploadPreviewPillText} numberOfLines={1}>
+                {selectedVideoAsset?.fileName || 'Video selected (Ready to upload)'}
+              </Text>
+            </View>
+
+            {/* Caption Input */}
+            <TextInput
+              style={styles.uploadCaptionInput}
+              placeholder="Write an engaging caption, hashtags #rubaru..."
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={3}
+              maxLength={300}
+              value={reelCaptionText}
+              onChangeText={setReelCaptionText}
+              editable={!isPublishingReel}
+            />
+            <Text style={styles.uploadCharCountText}>{reelCaptionText.length}/300</Text>
+
+            {/* Action button */}
+            <TouchableOpacity
+              activeOpacity={0.88}
+              disabled={isPublishingReel}
+              onPress={handlePublishReel}
+              style={styles.uploadPublishBtn}
+            >
+              <LinearGradient
+                colors={['#FF2E63', '#FF4E79']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.uploadPublishGradient}
+              >
+                {isPublishingReel ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="paper-plane-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.uploadPublishBtnText}>Post Short Video</Text>
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -837,5 +1112,268 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#EF4444',
+  },
+  // --- Reels Section Styles ---
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  reelsCountBadge: {
+    backgroundColor: '#FFE4E6',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 8,
+  },
+  reelsCountBadgeText: {
+    color: '#FF2E63',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  addReelHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF0F3',
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  addReelHeaderBtnText: {
+    color: '#FF2E63',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  reelsScrollContent: {
+    paddingVertical: 8,
+    paddingRight: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  reelEditCard: {
+    width: 110,
+    height: 175,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#1E1B2E',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  reelEditThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  reelEditGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 70,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+  },
+  reelEditPlayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  reelEditPlayText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  reelEditCaption: {
+    color: '#E5E7EB',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  deleteReelBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  addReelInlineCard: {
+    width: 110,
+    height: 175,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#FF2E63',
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+  },
+  addReelInlineGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 10,
+  },
+  addReelPlusCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addReelInlineText: {
+    color: '#FF2E63',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  emptyReelBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  emptyReelIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF1F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyReelBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  emptyReelBannerSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  addReelPillSmall: {
+    backgroundColor: '#FF2E63',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  addReelPillSmallText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  /* ── Reel Upload Modal ── */
+  uploadModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  uploadModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 18,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 26,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  uploadModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  uploadModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  uploadPreviewPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF1F2',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+  },
+  uploadPreviewPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    flex: 1,
+  },
+  uploadCaptionInput: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#111827',
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  uploadCharCountText: {
+    textAlign: 'right',
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  uploadPublishBtn: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  uploadPublishGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+  },
+  uploadPublishBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });

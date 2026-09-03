@@ -21,10 +21,27 @@ export const interactionService = {
   },
 
   /**
+   * Toggle like/unlike
+   */
+  toggleLike: async (contentId, isCurrentlyLiked = false) => {
+    if (isCurrentlyLiked) {
+      const res = await api.delete(`/v1/content/${contentId}/like`);
+      return res.data;
+    } else {
+      const res = await api.post(`/v1/content/${contentId}/like`);
+      return res.data;
+    }
+  },
+
+  /**
    * Create a comment or 1-level reply
    */
-  createComment: async (contentId, commentPayload) => {
-    const res = await api.post(`/v1/content/${contentId}/comments`, commentPayload);
+  createComment: async (contentId, payloadOrText, parentCommentId = null) => {
+    const data =
+      typeof payloadOrText === 'string'
+        ? { text: payloadOrText, parentCommentId: parentCommentId || undefined }
+        : payloadOrText;
+    const res = await api.post(`/v1/content/${contentId}/comments`, data);
     return res.data;
   },
 

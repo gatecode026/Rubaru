@@ -21,39 +21,6 @@ import feedService from '../services/feedService';
 import storyService from '../services/storyService';
 import impressionTracker from '../services/impressionTracker';
 
-const fallbackStories = [
-  { id: '1', name: 'Sapna_Singh', imageUrl: 'https://i.pravatar.cc/150?img=32', isFirst: true },
-  { id: '2', name: 'Deepika_Sharma', imageUrl: 'https://i.pravatar.cc/150?img=47' },
-  { id: '3', name: 'Mahi_Rajput', imageUrl: 'https://i.pravatar.cc/150?img=38' },
-  { id: '4', name: 'Sonali_Thakur', imageUrl: 'https://i.pravatar.cc/150?img=49' },
-  { id: '5', name: 'Pooja_Rana', imageUrl: 'https://i.pravatar.cc/150?img=45' },
-];
-
-const fallbackFeedCards = [
-  {
-    id: 'feed-1',
-    category: 'Travel',
-    categoryEmoji: '🌴',
-    imageUri: 'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?auto=compress&cs=tinysrgb&w=800',
-    caption: 'If you could live anywhere in the world, where would you pick?',
-    userName: 'Anjana_Kumawat',
-    userAvatar: 'https://i.pravatar.cc/150?img=44',
-    location: 'JAIPUR, RAJASTHAN',
-    isLiked: false,
-  },
-  {
-    id: 'feed-2',
-    category: 'Football',
-    categoryEmoji: '⚽',
-    imageUri: 'https://images.pexels.com/photos/1462637/pexels-photo-1462637.jpeg?auto=compress&cs=tinysrgb&w=800',
-    caption: 'Who is your favorite football player of all time?',
-    userName: 'Pooja_Singh',
-    userAvatar: 'https://i.pravatar.cc/150?img=32',
-    location: 'DELHI, INDIA',
-    isLiked: true,
-  },
-];
-
 export default function HomeScreen({ isNestedInPager }) {
   const router = useRouter();
   const flatListRef = React.useRef(null);

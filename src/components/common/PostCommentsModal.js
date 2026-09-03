@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,95 +17,24 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import interactionService from '../../services/interactionService';
+import { getSocket } from '../../services/socket';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const QUICK_EMOJIS = ['❤️', '🔥', '😍', '🙌', '👏', '😂', '✨', '💯'];
 
-const INITIAL_COMMENTS = [
-  {
-    id: 'c1',
-    user: 'rohit_sharma',
-    name: 'Rohit Sharma',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-    isVerified: true,
-    text: 'This looks absolutely breathtaking! Where exactly is this spot? 😍🌴',
-    time: '2h ago',
-    likesCount: 14,
-    isLiked: false,
-    replies: [
-      {
-        id: 'r1',
-        user: 'travel_junkie',
-        name: 'Alex Rivera',
-        avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80',
-        text: '@rohit_sharma It looks like Palolem Beach in South Goa! Truly magical during sunsets.',
-        time: '1h ago',
-        likesCount: 4,
-        isLiked: true,
-      },
-    ],
-  },
-  {
-    id: 'c2',
-    user: 'ananya_vibe',
-    name: 'Ananya Verma',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-    isVerified: false,
-    text: 'Vibes are immaculate ✨ Definitely adding this to my weekend bucket list!',
-    time: '1h ago',
-    likesCount: 8,
-    isLiked: true,
-    replies: [],
-  },
-  {
-    id: 'c3',
-    user: 'kabir_travels',
-    name: 'Kabir Mehta',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    isVerified: true,
-    text: 'Great composition on this photo! What camera or phone did you use? 📷🙌',
-    time: '45m ago',
-    likesCount: 5,
-    isLiked: false,
-    replies: [],
-  },
-  {
-    id: 'c4',
-    user: 'meera_singh',
-    name: 'Meera Singh',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    isVerified: false,
-    text: 'Such positive energy in this picture! Hope you had the most amazing time ❤️',
-    time: '20m ago',
-    likesCount: 3,
-    isLiked: false,
-    replies: [],
-  },
-  {
-    id: 'c5',
-    user: 'aarav_fitness',
-    name: 'Aarav Patel',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-    isVerified: false,
-    text: 'Incredible shot brother! Keep sharing more of these 🔥',
-    time: '5m ago',
-    likesCount: 1,
-    isLiked: false,
-    replies: [],
-  },
-];
+const INITIAL_COMMENTS = [];
 
 export default function PostCommentsModal({
   visible,
   onClose,
   postId,
-  postAuthor = 'Priya Sharma',
-  postAuthorAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  postCaption = 'What is your favorite travel destination?',
+  postAuthor = 'Rubaru User',
+  postAuthorAvatar = 'https://i.pravatar.cc/150?img=60',
+  postCaption = '',
   postImageUri,
 }) {
-  const [comments, setComments] = useState(INITIAL_COMMENTS);
+  const [comments, setComments] = useState([]);
   const [inputText, setInputText] = useState('');
   const [replyingTo, setReplyingTo] = useState(null); // { id, user }
   const [expandedReplies, setExpandedReplies] = useState({});
@@ -122,8 +51,8 @@ export default function PostCommentsModal({
             setComments(
               items.map((c) => ({
                 id: c._id || c.id,
-                user: c.author?.username || 'user',
-                name: c.author?.displayName || 'User',
+                user: c.author?.username || c.author?.displayName || 'user',
+                name: c.author?.displayName || c.author?.username || 'User',
                 avatar: c.author?.avatarUri || 'https://i.pravatar.cc/150?img=33',
                 isVerified: Boolean(c.author?.isVerified),
                 text: c.text,
@@ -134,8 +63,8 @@ export default function PostCommentsModal({
                 isLiked: Boolean(c.viewerInteractions?.isLiked),
                 replies: (c.replies || []).map((r) => ({
                   id: r._id || r.id,
-                  user: r.author?.username || 'user',
-                  name: r.author?.displayName || 'User',
+                  user: r.author?.username || r.author?.displayName || 'user',
+                  name: r.author?.displayName || r.author?.username || 'User',
                   avatar: r.author?.avatarUri || 'https://i.pravatar.cc/150?img=33',
                   text: r.text,
                   time: r.createdAt
@@ -146,14 +75,88 @@ export default function PostCommentsModal({
                 })),
               }))
             );
+          } else {
+            setComments([]);
           }
         } catch (err) {
           console.log('[FETCH COMMENTS ERROR]:', err.message);
+          setComments([]);
         }
       };
       fetchComments();
+    } else if (!visible) {
+      setComments([]);
     }
   }, [visible, postId]);
+
+  // Real-time socket comment updates
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || !postId) return;
+
+    const handleCommentAdded = (data) => {
+      if (data && (String(data.reelId) === String(postId) || String(data.contentId) === String(postId))) {
+        const c = data.comment;
+        if (c && (c.id || c._id)) {
+          const newCommentObj = {
+            id: c.id || c._id,
+            user: c.author?.username || c.author?.displayName || 'user',
+            name: c.author?.displayName || c.author?.username || 'User',
+            avatar: c.author?.avatarUri || 'https://i.pravatar.cc/150?img=33',
+            isVerified: Boolean(c.author?.isVerified),
+            text: c.text,
+            time: 'Just now',
+            likesCount: c.likesCount || 0,
+            isLiked: false,
+            replies: [],
+          };
+
+          setComments((prev) => {
+            if (prev.some((item) => String(item.id) === String(newCommentObj.id))) {
+              return prev;
+            }
+            // Replace matching optimistic temporary comment if present
+            const tempIdx = prev.findIndex(
+              (item) => String(item.id).startsWith('c_') && item.text === newCommentObj.text
+            );
+            if (tempIdx >= 0) {
+              const copy = [...prev];
+              copy[tempIdx] = newCommentObj;
+              return copy;
+            }
+            return [newCommentObj, ...prev];
+          });
+
+          setTimeout(() => {
+            try {
+              scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+            } catch (e) {}
+          }, 100);
+        }
+      }
+    };
+
+    const handleCommentDeleted = (data) => {
+      if (data && (String(data.reelId) === String(postId) || String(data.contentId) === String(postId))) {
+        const delId = data.commentId;
+        if (delId) {
+          setComments((prev) => prev.filter((c) => String(c.id) !== String(delId)));
+        }
+      }
+    };
+
+    socket.on('reel_comment_added', handleCommentAdded);
+    socket.on('post_comment_added', handleCommentAdded);
+    socket.on('reel_comment_deleted', handleCommentDeleted);
+    socket.on('post_comment_deleted', handleCommentDeleted);
+
+    return () => {
+      socket.off('reel_comment_added', handleCommentAdded);
+      socket.off('post_comment_added', handleCommentAdded);
+      socket.off('reel_comment_deleted', handleCommentDeleted);
+      socket.off('post_comment_deleted', handleCommentDeleted);
+    };
+  }, [postId]);
 
   // Swipe-down-to-dismiss PanResponder
   const panResponder = useRef(
@@ -280,7 +283,10 @@ export default function PostCommentsModal({
 
     if (postId) {
       try {
-        await interactionService.createComment(postId, textToSend, targetParentId);
+        await interactionService.createComment(postId, {
+          text: textToSend,
+          parentCommentId: targetParentId || undefined,
+        });
       } catch (err) {
         console.log('[CREATE COMMENT API ERROR]:', err.message);
       }

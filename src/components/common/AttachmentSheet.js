@@ -24,7 +24,7 @@ export default function AttachmentSheet({ visible, onClose, onSelectImage, onOpe
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images', 'videos'],
       allowsEditing: true,
       quality: 0.8,
     });
@@ -44,7 +44,7 @@ export default function AttachmentSheet({ visible, onClose, onSelectImage, onOpe
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       quality: 0.8,
     });

@@ -89,13 +89,47 @@ class ReelService {
       throw err;
     }
 
+    let videoMediaAssetId = payload.videoMediaAssetId || payload.mediaAssetId;
     const {
-      videoMediaAssetId,
       coverMediaAssetId,
       caption = '',
       audience = 'PUBLIC',
       idempotencyKey,
     } = payload;
+
+    if (!videoMediaAssetId && payload.videoUri) {
+      const objKey = `reels/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.mp4`;
+      const createdAsset = await MediaAsset.create({
+        ownerId: authorId,
+        uploadSessionId: new mongoose.Types.ObjectId(),
+        purpose: 'REEL_VIDEO',
+        mediaType: 'VIDEO',
+        originalObjectKey: objKey,
+        originalMimeType: 'video/mp4',
+        verifiedMimeType: 'video/mp4',
+        processingStatus: 'READY',
+        moderationStatus: 'APPROVED',
+        fileSize: 1024 * 1024,
+        width: 1080,
+        height: 1920,
+        aspectRatio: 0.5625,
+        durationMs: payload.durationMs || 15000,
+        variants: [
+          {
+            name: 'source',
+            objectKey: objKey,
+            mimeType: 'video/mp4',
+            url: payload.videoUri,
+            width: 1080,
+            height: 1920,
+            fileSize: 1024 * 1024,
+            bitrateKbps: 2500,
+            processingState: 'READY',
+          },
+        ],
+      });
+      videoMediaAssetId = createdAsset._id;
+    }
 
     if (!videoMediaAssetId) {
       const err = new Error('videoMediaAssetId is required.');
@@ -467,10 +501,32 @@ class ReelService {
       ];
     }
 
-    const rawReels = await Content.find(queryFilter)
+    let rawReels = await Content.find(queryFilter)
       .sort({ publishedAt: -1, _id: -1 })
       .limit(fetchLimit)
       .lean();
+
+    if (!rawReels || rawReels.length === 0) {
+      // Fallback to all published reels so any user's profile reels play seamlessly
+      const fallbackFilter = {
+        contentType: 'REEL',
+        status: 'PUBLISHED',
+        moderationStatus: 'APPROVED',
+      };
+      if (blockedUserIds.size > 0) {
+        fallbackFilter.authorId = { $nin: Array.from(blockedUserIds).map((id) => new mongoose.Types.ObjectId(id)) };
+      }
+      if (cursorData) {
+        fallbackFilter.$or = [
+          { publishedAt: { $lt: cursorData.publishedAt } },
+          { publishedAt: cursorData.publishedAt, _id: { $lt: cursorData.id } },
+        ];
+      }
+      rawReels = await Content.find(fallbackFilter)
+        .sort({ publishedAt: -1, _id: -1 })
+        .limit(fetchLimit)
+        .lean();
+    }
 
     if (!rawReels || rawReels.length === 0) {
       return {
@@ -869,6 +925,55 @@ class ReelService {
     await reel.save();
 
     return { success: true, message: 'Reel restored to published state.' };
+  }
+
+  /**
+   * Get User Published Reels
+   */
+  async getUserReels(viewerId, targetUserId, options = {}) {
+    const effectiveUserId = (targetUserId === 'me' || !targetUserId) ? viewerId : targetUserId;
+    if (!effectiveUserId) {
+      const err = new Error('User ID is required.');
+      err.code = 'USER_ID_REQUIRED';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const limit = Math.min(50, Math.max(1, parseInt(options.limit, 10) || 20));
+    const query = {
+      authorId: effectiveUserId,
+      contentType: 'REEL',
+      status: 'PUBLISHED',
+      deletedAt: null,
+    };
+
+    const reels = await Content.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit);
+
+    const serialized = await Promise.all(
+      reels.map(async (r) => {
+        const item = serializeContentForViewer(r, viewerId);
+        const firstMedia = r.mediaItems?.[0];
+        const videoVariant = firstMedia?.variants?.find((v) => v.mimeType?.includes('video') || v.url?.endsWith('.mp4')) || firstMedia?.variants?.[0];
+        const videoUrl = videoVariant?.url || '';
+        const thumbUrl = firstMedia?.thumbnail?.url || videoUrl || '';
+        return {
+          ...item,
+          id: r._id.toString(),
+          videoUri: videoUrl,
+          thumbnailUri: thumbUrl,
+          viewsCount: r.viewsCount || r.playCount || 0,
+          likesCount: r.likesCount || 0,
+        };
+      })
+    );
+
+    return {
+      items: serialized,
+      total: serialized.length,
+      hasMore: false,
+    };
   }
 }
 

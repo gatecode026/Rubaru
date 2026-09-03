@@ -76,7 +76,7 @@ export default function MainTabsPager() {
           <ConnectionScreen isNestedInPager={true} />
         </View>
         <View key="2" style={styles.page}>
-          <ReelsScreen isNestedInPager={true} />
+          <ReelsScreen isNestedInPager={true} isTabFocused={activeIndex === 2} />
         </View>
         <View key="3" style={styles.page}>
           <NotificationScreen isNestedInPager={true} />

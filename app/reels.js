@@ -5,7 +5,7 @@ export default function ReelsRoute() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ReelsScreen />
+      <ReelsScreen isNestedInPager={false} isTabFocused={true} />
     </>
   );
 }

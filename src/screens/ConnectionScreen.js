@@ -13,56 +13,22 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import NewUserCard from '../components/common/NewUserCard';
 import InterestChip from '../components/common/InterestChip';
 import BottomTabBar from '../components/common/BottomTabBar';
 import DiscoverFiltersModal, { DEFAULT_FILTERS } from '../components/common/DiscoverFiltersModal';
 import { useLanguage } from '../localization/LanguageContext';
 import { useTheme } from '../theme';
+import api from '../services/api';
 
-const newUsersData = [
-  {
-    id: '1',
-    name: 'Rani',
-    age: 19,
-    city: 'JAIPUR',
-    distance: '16 km away',
-    imageUri: 'https://images.pexels.com/photos/1382731/pexels-photo-1382731.jpeg?auto=compress&cs=tinysrgb&w=800',
-    isNew: true,
-    isOnline: true,
-  },
-  {
-    id: '2',
-    name: 'Vandana',
-    age: 18,
-    city: 'MUMBAI',
-    distance: '4.8 km away',
-    imageUri: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=800',
-    isNew: true,
-    isOnline: false,
-  },
-  {
-    id: '3',
-    name: 'Keshav',
-    age: 20,
-    city: 'DELHI',
-    distance: '2.2 km away',
-    imageUri: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=800',
-    isNew: true,
-    isOnline: true,
-  },
-  {
-    id: '4',
-    name: 'Meera',
-    age: 21,
-    city: 'PUNE',
-    distance: '1.2 km away',
-    imageUri: 'https://images.pexels.com/photos/1462637/pexels-photo-1462637.jpeg?auto=compress&cs=tinysrgb&w=800',
-    isNew: true,
-    isOnline: true,
-  },
-];
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || '';
+
+function getAvatarUrl(uri) {
+  if (!uri) return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
+  if (uri.startsWith('http') || uri.startsWith('file://')) return uri;
+  return `${BASE_URL}${uri}`;
+}
 
 const interestsList = [
   { id: '1', label: 'Football', emoji: '⚽' },
@@ -78,10 +44,36 @@ export default function ConnectionScreen({ isNestedInPager }) {
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
   const { isDarkMode } = useTheme();
+  const [discoverUsers, setDiscoverUsers] = useState([]);
   const [selectedInterest, setSelectedInterest] = useState('Music');
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState(DEFAULT_FILTERS);
   const [toastMessage, setToastMessage] = useState(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      async function loadDiscoverUsers() {
+        try {
+          const res = await api.get('/profiles/all');
+          const profiles = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+          const mapped = profiles.map((p, idx) => ({
+            id: p.user?._id || p._id || String(idx),
+            name: p.displayName || 'Rubaru User',
+            age: p.age || (p.dateOfBirth ? Math.floor((Date.now() - new Date(p.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 22),
+            city: p.locationName || 'Nearby',
+            distance: p.distance ? `${p.distance} km away` : 'Nearby',
+            imageUri: getAvatarUrl(p.avatarUri || (p.photos && p.photos[0])),
+            isNew: true,
+            isOnline: true,
+          }));
+          setDiscoverUsers(mapped);
+        } catch (e) {
+          console.log('[DISCOVER USERS FETCH ERROR]', e.message);
+        }
+      }
+      loadDiscoverUsers();
+    }, [])
+  );
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -192,11 +184,18 @@ export default function ConnectionScreen({ isNestedInPager }) {
           <FlatList
             horizontal
             showsHorizontalScrollIndicator={false}
-            data={newUsersData}
+            data={discoverUsers}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => <NewUserCard item={item} />}
             contentContainerStyle={styles.carouselContentContainer}
             style={styles.carouselContainer}
+            ListEmptyComponent={
+              <View style={{ paddingHorizontal: 20, paddingVertical: 16 }}>
+                <Text style={{ fontFamily: 'Inter-Regular', fontSize: 13, color: '#9CA3AF' }}>
+                  No new users in this area yet
+                </Text>
+              </View>
+            }
           />
 
           {/* "Interest" Section */}
@@ -275,30 +274,50 @@ export default function ConnectionScreen({ isNestedInPager }) {
                 </View>
 
                 {/* Scattered Nearby People Avatars */}
-                <View style={[styles.mapAvatarMarker, { bottom: 95, right: 90 }]}>
-                  <Image source={{ uri: 'https://i.pravatar.cc/150?img=60' }} style={styles.mapAvatarImg} />
-                </View>
-
-                <View style={[styles.mapAvatarMarker, { bottom: 10, left: 110 }]}>
-                  <Image source={{ uri: 'https://i.pravatar.cc/150?img=47' }} style={styles.mapAvatarImg} />
-                </View>
-
-                {/* Main Central Avatar Marker (Rakhi) with Connect Tooltip Bubble */}
-                <View style={styles.centerMarkerWrapper}>
-                  {/* Floating Tooltip Bubble */}
-                  <View style={styles.tooltipBubble}>
-                    <Ionicons name="pulse" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.tooltipText}>
-                      {t('connectWith', 'Connect with')} <Text style={styles.tooltipBold}>Rakhi 👋</Text>
-                    </Text>
+                {discoverUsers[1] && (
+                  <View style={[styles.mapAvatarMarker, { bottom: 95, right: 90 }]}>
+                    <Image source={{ uri: discoverUsers[1].imageUri }} style={styles.mapAvatarImg} />
                   </View>
-                  <View style={styles.tooltipDot} />
+                )}
 
-                  {/* Main Avatar Circle */}
-                  <View style={[styles.mainRakhiAvatarRing, isDarkMode && { borderColor: '#000000' }]}>
-                    <Image source={{ uri: 'https://i.pravatar.cc/150?img=32' }} style={styles.mainRakhiAvatarImg} />
+                {discoverUsers[2] && (
+                  <View style={[styles.mapAvatarMarker, { bottom: 10, left: 110 }]}>
+                    <Image source={{ uri: discoverUsers[2].imageUri }} style={styles.mapAvatarImg} />
                   </View>
-                </View>
+                )}
+
+                {/* Main Central Avatar Marker with Connect Tooltip Bubble */}
+                {discoverUsers[0] ? (
+                  <TouchableOpacity
+                    style={styles.centerMarkerWrapper}
+                    activeOpacity={0.8}
+                    onPress={() => router.push({
+                      pathname: '/user-profile',
+                      params: { userId: discoverUsers[0].id }
+                    })}
+                  >
+                    {/* Floating Tooltip Bubble */}
+                    <View style={styles.tooltipBubble}>
+                      <Ionicons name="pulse" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.tooltipText}>
+                        {t('connectWith', 'Connect with')} <Text style={styles.tooltipBold}>{discoverUsers[0].name.split(' ')[0]} 👋</Text>
+                      </Text>
+                    </View>
+                    <View style={styles.tooltipDot} />
+
+                    {/* Main Avatar Circle */}
+                    <View style={[styles.mainRakhiAvatarRing, isDarkMode && { borderColor: '#000000' }]}>
+                      <Image source={{ uri: discoverUsers[0].imageUri }} style={styles.mainRakhiAvatarImg} />
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.centerMarkerWrapper}>
+                    <View style={styles.tooltipBubble}>
+                      <Ionicons name="compass-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.tooltipText}>Explore your area</Text>
+                    </View>
+                  </View>
+                )}
               </View>
             </View>
           </View>

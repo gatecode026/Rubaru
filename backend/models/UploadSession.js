@@ -18,6 +18,17 @@ const UploadSessionSchema = new mongoose.Schema(
       enum: ['IMAGE', 'VIDEO', 'AUDIO'],
       required: true,
     },
+    attachmentCategory: {
+      type: String,
+      enum: ['IMAGE', 'VIDEO', 'AUDIO', 'VOICE_NOTE'],
+      default: 'IMAGE',
+    },
+    conversationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Conversation',
+      index: true,
+      default: null,
+    },
     declaredMimeType: {
       type: String,
       required: true,
@@ -90,5 +101,6 @@ const UploadSessionSchema = new mongoose.Schema(
 UploadSessionSchema.index({ ownerId: 1, idempotencyKey: 1 }, { unique: true });
 UploadSessionSchema.index({ ownerId: 1, createdAt: -1 });
 UploadSessionSchema.index({ status: 1, expiresAt: 1 });
+UploadSessionSchema.index({ conversationId: 1, status: 1 });
 
 module.exports = mongoose.model('UploadSession', UploadSessionSchema);

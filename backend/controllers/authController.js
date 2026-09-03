@@ -148,6 +148,12 @@ const verifyOtp = async (req, res) => {
   }
 };
 
+function normalizePhone(p) {
+  if (!p) return '';
+  const digits = p.replace(/[^0-9]/g, '');
+  return digits.slice(-10);
+}
+
 // @desc    Authenticate User & Login
 // @route   POST /api/auth/login
 // @access  Public
@@ -160,12 +166,30 @@ const login = async (req, res) => {
 
   try {
     let query = {};
-    if (email) query.email = email;
-    else if (phone) query.phone = phone;
+    if (email) {
+      query.email = email.trim().toLowerCase();
+    } else if (phone) {
+      const clean = normalizePhone(phone);
+      query.$or = [
+        { phone: phone.trim() },
+        { phone: clean },
+        { phone: `+91${clean}` },
+        { phone: new RegExp(`${clean}$`) },
+      ];
+    }
 
-    const user = await User.findOne(query);
+    console.log('[AUTH LOGIN] Querying candidate users with:', query);
+    const candidateUsers = await User.find(query);
 
-    if (user && (await bcrypt.compare(password, user.password))) {
+    let user = null;
+    for (const candidate of candidateUsers) {
+      if (candidate.password && (await bcrypt.compare(password, candidate.password))) {
+        user = candidate;
+        break;
+      }
+    }
+
+    if (user) {
       if (!user.isActive) {
         // Send a new OTP
         const otpCode = '1234';
@@ -174,13 +198,15 @@ const login = async (req, res) => {
           expiresAt: new Date(Date.now() + 5 * 60 * 1000),
         };
         await user.save();
+        console.log(`[AUTH LOGIN] User unverified: ${user.email || user.phone}`);
         return res.status(403).json({
           message: 'Account is not verified. A new OTP has been sent.',
           unverified: true,
         });
       }
 
-      res.status(200).json({
+      console.log(`[AUTH LOGIN] Successful login for: ${user.email || user.phone} (ID: ${user._id})`);
+      return res.status(200).json({
         _id: user._id,
         email: user.email,
         phone: user.phone,
@@ -189,10 +215,12 @@ const login = async (req, res) => {
         token: generateToken(user._id),
       });
     } else {
-      res.status(401).json({ message: 'Invalid email/phone or password' });
+      console.log(`[AUTH LOGIN] Failed login attempt. Candidates found: ${candidateUsers.length}`);
+      return res.status(401).json({ message: 'Invalid email/phone or password' });
     }
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('[AUTH LOGIN ERROR]', error);
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -223,17 +251,29 @@ const profileSetup = async (req, res) => {
       avatarUri = `/uploads/images/${req.file.filename}`;
     }
 
-    // Create profile
-    const profile = await Profile.create({
-      user: req.user._id,
-      displayName,
-      dateOfBirth: new Date(dateOfBirth),
-      gender,
-      interests: parsedInterests,
-      bio: bio || '',
-      avatarUri,
-      locationName: locationName || '',
-    });
+    // Upsert profile
+    let profile = await Profile.findOne({ user: req.user._id });
+    if (profile) {
+      profile.displayName = displayName;
+      if (dateOfBirth) profile.dateOfBirth = new Date(dateOfBirth);
+      if (gender) profile.gender = gender;
+      if (parsedInterests) profile.interests = parsedInterests;
+      if (bio !== undefined) profile.bio = bio;
+      if (avatarUri) profile.avatarUri = avatarUri;
+      if (locationName) profile.locationName = locationName;
+      await profile.save();
+    } else {
+      profile = await Profile.create({
+        user: req.user._id,
+        displayName,
+        dateOfBirth: new Date(dateOfBirth),
+        gender,
+        interests: parsedInterests,
+        bio: bio || '',
+        avatarUri,
+        locationName: locationName || '',
+      });
+    }
 
     user.isProfileSetup = true;
     await user.save();
@@ -243,6 +283,7 @@ const profileSetup = async (req, res) => {
       profile,
     });
   } catch (error) {
+    console.error('[PROFILE SETUP ERROR]', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -314,7 +355,7 @@ const setPassword = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: 'User not found' }); 
     }
 
     const salt = await bcrypt.genSalt(10);

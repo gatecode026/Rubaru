@@ -6,10 +6,23 @@ const reelService = require('../services/reelService');
 const createReel = async (req, res) => {
   try {
     const authorId = req.user._id;
-    const result = await reelService.createReel(authorId, req.body);
+    let videoUri = req.body.videoUri;
+
+    // If video file was uploaded via FormData (multipart)
+    if (req.file) {
+      videoUri = `/uploads/videos/${req.file.filename}`;
+    }
+
+    const payload = {
+      ...req.body,
+      videoUri,
+    };
+
+    const result = await reelService.createReel(authorId, payload);
     return res.status(201).json({
       success: true,
       data: result,
+      reel: result,
     });
   } catch (error) {
     const statusCode = error.statusCode || 500;
@@ -32,6 +45,7 @@ const getReelById = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: result,
+      reel: result.reel || result,
     });
   } catch (error) {
     const statusCode = error.statusCode || 500;
@@ -49,12 +63,18 @@ const getReelById = async (req, res) => {
 const getUserReels = async (req, res) => {
   try {
     const viewerId = req.user?._id;
-    const { userId } = req.params;
+    let { userId } = req.params;
+    if (!userId || userId === 'me') {
+      userId = viewerId;
+    }
     const { cursor, limit } = req.query;
     const result = await reelService.getUserReels(viewerId, userId, { cursor, limit });
     return res.status(200).json({
       success: true,
       data: result,
+      items: result?.items || [],
+      nextCursor: result?.nextCursor,
+      hasMore: result?.hasMore,
     });
   } catch (error) {
     const statusCode = error.statusCode || 500;

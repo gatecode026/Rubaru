@@ -29,11 +29,18 @@ const testFiles = [
   'test/social_safety_moderation_tests.js',
   'test/social_notification_tests.js',
   'test/frontend_social_integration_tests.js',
+  'test/conversation_foundation_tests.js',
+  'test/socket_messaging_tests.js',
+  'test/chat_media_tests.js',
+  'test/watermark_receipt_tests.js',
+  'test/offline_sync_tests.js',
+  'test/presence_typing_tests.js',
+  'test/reaction_reply_poll_tests.js',
   'test_all_endpoints.js',
 ];
 
 console.log('================================================================================');
-console.log('       RUBARU COMPLETE RESEARCH 1 & RESEARCH 2 MASTER TEST RUNNER & AUDIT       ');
+console.log('   RUBARU COMPLETE RESEARCH 1, RESEARCH 2 & RESEARCH 3 MASTER TEST RUNNER      ');
 console.log('================================================================================\n');
 
 let grandTotalPassed = 0;

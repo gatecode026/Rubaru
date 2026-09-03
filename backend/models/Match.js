@@ -46,9 +46,9 @@ const MatchSchema = new mongoose.Schema(
     },
     conversation: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Chat',
-      required: true,
+      ref: 'Conversation',
       index: true,
+      sparse: true,
     },
     matchedAt: {
       type: Date,

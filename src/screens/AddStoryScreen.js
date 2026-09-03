@@ -176,8 +176,8 @@ export default function AddStoryScreen() {
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
+        mediaTypes: ['images', 'videos'],
+        allowsEditing: true,
         quality: 0.85,
       });
 
@@ -226,17 +226,12 @@ export default function AddStoryScreen() {
           setCapturedImage(photo.uri);
         }
       } catch (err) {
-        console.warn('Error taking native photo, using mock fallback:', err);
-        fallbackCapture();
+        console.warn('Error taking photo:', err);
+        Alert.alert('Camera Error', 'Could not capture photo. Please check permissions or select an image from gallery.');
       }
     } else {
-      fallbackCapture();
+      Alert.alert('Camera Not Ready', 'Please ensure camera permissions are granted or select from gallery.');
     }
-  };
-
-  const fallbackCapture = () => {
-    const mockCaptureUri = `https://picsum.photos/1080/1920?random=${Math.floor(Math.random() * 100)}`;
-    setCapturedImage(mockCaptureUri);
   };
 
   const handleShare = async () => {

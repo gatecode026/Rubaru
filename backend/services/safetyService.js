@@ -58,7 +58,25 @@ async function unmatchUser(userId, matchId, data = {}) {
 
   // Close Conversation for future writes
   if (match.conversation) {
-    await Chat.findByIdAndUpdate(match.conversation, { status: 'CLOSED' });
+    const { closeConversationForUnmatch } = require('./conversationService');
+    await closeConversationForUnmatch({
+      conversationId: match.conversation,
+      matchId: match._id,
+      actorUserId: userId,
+      reason: data.reason || 'USER_UNMATCHED',
+    });
+    try {
+      const { clearConversationTyping } = require('./typingService');
+      await clearConversationTyping(match.conversation);
+    } catch (tErr) {
+      // Safe typing cleanup
+    }
+    try {
+      const { dispatchConversationRevoked } = require('./socketDispatchService');
+      await dispatchConversationRevoked({ conversationId: match.conversation, reason: 'UNMATCHED' });
+    } catch (sockErr) {
+      console.warn('[SAFETY SERVICE] Socket revocation warning:', sockErr.message);
+    }
   }
 
   // Invalidate any residual pending interactions between this pair
@@ -140,7 +158,26 @@ async function blockUser(userId, targetUserId, data = {}) {
     await match.save();
 
     if (match.conversation) {
-      await Chat.findByIdAndUpdate(match.conversation, { status: 'BLOCKED' });
+      const { closeConversationForBlock } = require('./conversationService');
+      await closeConversationForBlock({
+        conversationId: match.conversation,
+        matchId: match._id,
+        blockerId: userId,
+        blockedId: targetUserId,
+        reason: 'USER_BLOCKED',
+      });
+      try {
+        const { clearConversationTyping } = require('./typingService');
+        await clearConversationTyping(match.conversation);
+      } catch (tErr) {
+        // Safe typing cleanup
+      }
+      try {
+        const { dispatchConversationRevoked } = require('./socketDispatchService');
+        await dispatchConversationRevoked({ conversationId: match.conversation, reason: 'CONVERSATION_UNAVAILABLE' });
+      } catch (sockErr) {
+        console.warn('[SAFETY SERVICE] Socket revocation warning:', sockErr.message);
+      }
     }
   }
 

@@ -1,11 +1,12 @@
 // Centralized Media Configuration for Rubaru Social & Content Media Engine
 
 module.exports = {
-  configVersion: 'v1.0-media-foundation',
+  configVersion: 'v1.1-chat-attachments',
 
   // Feature Flag
   featureFlags: {
     socialMediaUploadEnabled: process.env.SOCIAL_MEDIA_UPLOAD_ENABLED !== 'false',
+    chatMediaUploadEnabled: process.env.CHAT_MEDIA_UPLOAD_ENABLED !== 'false',
   },
 
   // Storage Configuration
@@ -31,6 +32,9 @@ module.exports = {
   // Allowed Media Types
   allowedMediaTypes: ['IMAGE', 'VIDEO', 'AUDIO'],
 
+  // Allowed Attachment Categories
+  allowedAttachmentCategories: ['IMAGE', 'VIDEO', 'AUDIO', 'VOICE_NOTE'],
+
   // MIME Allowlist
   allowedMimeTypes: {
     IMAGE: [
@@ -53,6 +57,7 @@ module.exports = {
       'audio/aac',
       'audio/wav',
       'audio/ogg',
+      'audio/opus',
     ],
   },
 
@@ -60,21 +65,27 @@ module.exports = {
   allowedExtensions: {
     IMAGE: ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'],
     VIDEO: ['.mp4', '.mov', '.webm'],
-    AUDIO: ['.mp3', '.m4a', '.aac', '.wav', '.ogg'],
+    AUDIO: ['.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus'],
   },
 
-  // Size Limits (Bytes)
+  // Size and Duration Limits
   limits: {
-    maxImageBytes: 15 * 1024 * 1024,   // 15MB
-    maxVideoBytes: 150 * 1024 * 1024,  // 150MB
-    maxAudioBytes: 25 * 1024 * 1024,   // 25MB
-    maxVideoDurationMs: 90 * 1000,     // 90 seconds (Reels max)
-    maxStoryDurationMs: 15 * 1000,     // 15 seconds (Story segment max)
-    maxImageDimensionPx: 4096,         // 4K max dimension
-    maxVideoDimensionPx: 2160,         // 1080x1920 portrait HD
+    maxImageBytes: 15 * 1024 * 1024,      // 15MB
+    maxVideoBytes: 100 * 1024 * 1024,     // 100MB
+    maxAudioBytes: 25 * 1024 * 1024,      // 25MB
+    maxVoiceNoteBytes: 10 * 1024 * 1024,  // 10MB
+    maxVideoDurationMs: 120 * 1000,       // 120s
+    maxAudioDurationMs: 600 * 1000,       // 600s
+    maxVoiceNoteDurationMs: 300 * 1000,   // 300s
+    maxStoryDurationMs: 15 * 1000,        // 15s
+    maxImageDimensionPx: 4096,            // 4K max dimension
+    maxVideoDimensionPx: 2160,            // 1080x1920 portrait HD
+    maxAttachmentsPerMessage: 5,
+    maxWaveformSamples: 100,
+    minWaveformSamples: 30,
     uploadSessionTtlMinutes: 15,
-    processingTimeoutMs: 60 * 1000,    // 60s processing timeout
-    orphanCleanupHours: 24,            // Unfinalized uploads older than 24h cleaned up
+    processingTimeoutMs: 60 * 1000,       // 60s processing timeout
+    orphanCleanupHours: 24,               // Unfinalized uploads older than 24h cleaned up
     maxConcurrentUploadsPerUser: 10,
   },
 

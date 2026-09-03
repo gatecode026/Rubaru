@@ -115,9 +115,23 @@ app.use('/api/v1/devices', notifRoutes);
 app.use('/v1/users/me/notification-preferences', notifRoutes);
 app.use('/api/v1/users/me/notification-preferences', notifRoutes);
 
-// Root route
-app.get('/', (req, res) => {
-  res.send('Rubaru API Server is running...');
+// Mount Messaging Foundation Routes (v1)
+const conversationRoutes = require('./routes/conversationRoutes');
+app.use('/v1/conversations', conversationRoutes);
+app.use('/api/v1/conversations', conversationRoutes);
+
+// Mount Messaging Offline Synchronization Routes (v1)
+const syncRoutes = require('./routes/syncRoutes');
+app.use('/v1/messaging', syncRoutes);
+app.use('/api/v1/messaging', syncRoutes);
+
+// Health check routes
+app.get(['/', '/health', '/api/health'], (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Rubaru API Server is running smoothly',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Error handling middleware

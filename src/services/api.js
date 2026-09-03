@@ -30,13 +30,17 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response && error.response.status === 401) {
-      console.log('[API] 401 Unauthorized. Clearing token and redirecting to sign-in...');
-      try {
-        await AsyncStorage.removeItem('userToken');
-        const { router } = require('expo-router');
-        router.replace('/sign-in');
-      } catch (e) {
-        console.log('Error clearing session on 401:', e.message);
+      const requestUrl = error.config?.url || '';
+      const isAuthEndpoint = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register') || requestUrl.includes('/auth/verify');
+      if (!isAuthEndpoint) {
+        console.log('[API] 401 Unauthorized. Clearing token and redirecting to sign-in...');
+        try {
+          await AsyncStorage.removeItem('userToken');
+          const { router } = require('expo-router');
+          router.replace('/sign-in');
+        } catch (e) {
+          console.log('Error clearing session on 401:', e.message);
+        }
       }
     }
     return Promise.reject(error);
