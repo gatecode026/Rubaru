@@ -26,16 +26,35 @@ export default function FeedCard({ item }) {
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
+  const getFullUrl = (uri) => {
+    if (!uri) return 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800';
+    let target = uri;
+    if (typeof target === 'object') {
+      target = target.url || target.thumbnailUri || target.originalUrl || target.uri || '';
+    }
+    if (typeof target !== 'string' || !target) return 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800';
+    if (target.startsWith('http') || target.startsWith('file://') || target.startsWith('content://')) return target;
+    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.70:5000/api';
+    const host = apiBase.replace('/api', '');
+    return `${host}${target.startsWith('/') ? '' : '/'}${target}`;
+  };
+
   const postId = item.postId || item.id;
-  const imageUri =
+  const rawImage =
     item.imageUri ||
+    item.mediaItems?.[0]?.originalUrl ||
     item.mediaItems?.[0]?.variants?.[0]?.url ||
     item.mediaItems?.[0]?.thumbnail?.url ||
-    'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800';
+    item.thumbnailUri;
+  const imageUri = getFullUrl(rawImage);
+
   const caption = item.caption || '';
   const userName = item.userName || item.author?.displayName || item.author?.username || 'Rubaru User';
-  const userAvatar = item.userAvatar || item.author?.avatarUri || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
+  const rawAvatar = item.userAvatar || item.author?.avatarUri;
+  const userAvatar = rawAvatar ? getFullUrl(rawAvatar) : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
   const location = item.location || '';
+  const category = item.category || 'Moments';
+  const categoryEmoji = item.categoryEmoji || '✨';
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -79,13 +98,28 @@ export default function FeedCard({ item }) {
     router.push('/report-violations');
   };
 
+  const targetUserId = item.author?.userId || item.authorId || item.userId || item.author?._id;
+
+  const handleOpenPersonProfile = () => {
+    if (targetUserId) {
+      router.push({
+        pathname: '/user-profile',
+        params: { userId: String(targetUserId) },
+      });
+    } else {
+      router.push('/user-profile');
+    }
+  };
+
   return (
     <View style={styles.cardContainer}>
-      {/* Background Image */}
-      <Image source={{ uri: imageUri }} style={styles.cardImage} resizeMode="cover" />
+      {/* Background Image - Clickable to open author profile */}
+      <Pressable onPress={handleOpenPersonProfile} style={StyleSheet.absoluteFill}>
+        <Image source={{ uri: imageUri }} style={styles.cardImage} resizeMode="cover" />
+      </Pressable>
 
       {/* Category Pill Badge (Top Left Overlay) */}
-      <View style={styles.categoryBadge}>
+      <View style={styles.categoryBadge} pointerEvents="none">
         <Text style={styles.categoryEmoji}>{categoryEmoji || '🌴'}</Text>
         <Text style={styles.categoryText}>{category}</Text>
       </View>
@@ -148,10 +182,10 @@ export default function FeedCard({ item }) {
         {/* Caption Question */}
         <Text style={styles.captionText}>{caption}</Text>
 
-        {/* User Info Row */}
+        {/* User Info Row - Clicking redirects to person profile */}
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => router.push('/user-profile')}
+          onPress={handleOpenPersonProfile}
           style={styles.userRow}
         >
           <Image source={{ uri: userAvatar }} style={styles.avatarImage} />

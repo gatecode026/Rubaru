@@ -130,11 +130,11 @@ class FeedService {
     const blockedUserIds = new Set(
       blocks.map((b) => (b.blocker.toString() === viewerStr ? b.blocked.toString() : b.blocker.toString()))
     );
+    // Explicit requirement: do not show self moments on the home page
+    blockedUserIds.add(viewerStr);
 
-    // Build candidate author set (Followed + Viewer, minus Blocked)
+    // Build candidate author set (Followed users, minus Blocked and Viewer)
     const candidateAuthorIdSet = new Set();
-    candidateAuthorIdSet.add(viewerStr); // Viewer's own posts
-
     for (const f of follows) {
       const followingStr = f.followingId.toString();
       if (!blockedUserIds.has(followingStr)) {
@@ -143,25 +143,7 @@ class FeedService {
     }
 
     const candidateAuthorIds = Array.from(candidateAuthorIdSet).map((id) => new mongoose.Types.ObjectId(id));
-
-    // If no candidate authors exist
-    if (candidateAuthorIds.length === 0) {
-      return {
-        items: [],
-        pageInfo: {
-          nextCursor: null,
-          hasMore: false,
-        },
-        feed: {
-          batchId: null,
-          surface: 'HOME_CONNECTED',
-          source: 'CONNECTED',
-          orderingVersion: ORDERING_VERSION,
-          generatedAt: new Date().toISOString(),
-          reason: 'NO_CONNECTED_CONTENT',
-        },
-      };
-    }
+    const blockedObjectIds = Array.from(blockedUserIds).map((id) => new mongoose.Types.ObjectId(id));
 
     // 2. Query Candidate Posts (Bounded Over-fetching to avoid underfilled pages)
     const fetchLimit = Math.min(Math.ceil(limit * 1.5), 60);
@@ -169,9 +151,13 @@ class FeedService {
     const queryFilter = {
       contentType: 'POST',
       status: 'PUBLISHED',
-      moderationStatus: 'APPROVED',
-      authorId: { $in: candidateAuthorIds },
+      moderationStatus: { $ne: 'REJECTED' },
+      authorId: { $ne: viewerId, $nin: blockedObjectIds },
     };
+
+    if (candidateAuthorIds.length > 0) {
+      queryFilter.authorId = { $in: candidateAuthorIds, $ne: viewerId };
+    }
 
     if (cursorData) {
       queryFilter.$or = [
@@ -180,10 +166,35 @@ class FeedService {
       ];
     }
 
-    const rawCandidates = await Content.find(queryFilter)
+    let rawCandidates = await Content.find(queryFilter)
       .sort({ publishedAt: -1, _id: -1 })
       .limit(fetchLimit)
       .lean();
+
+    // Fallback: If followed authors haven't posted enough, backfill with public moments from other users (never self)
+    if (!rawCandidates || rawCandidates.length < limit) {
+      const existingIds = (rawCandidates || []).map((c) => c._id);
+      const backfillLimit = limit - (rawCandidates ? rawCandidates.length : 0);
+      const backfillQuery = {
+        contentType: 'POST',
+        status: 'PUBLISHED',
+        moderationStatus: { $ne: 'REJECTED' },
+        authorId: { $ne: viewerId, $nin: blockedObjectIds },
+        _id: { $nin: existingIds },
+      };
+      if (cursorData) {
+        backfillQuery.$or = [
+          { publishedAt: { $lt: cursorData.publishedAt } },
+          { publishedAt: cursorData.publishedAt, _id: { $lt: cursorData.id } },
+        ];
+      }
+      const backfillCandidates = await Content.find(backfillQuery)
+        .sort({ publishedAt: -1, _id: -1 })
+        .limit(backfillLimit)
+        .lean();
+
+      rawCandidates = [...(rawCandidates || []), ...(backfillCandidates || [])];
+    }
 
     if (!rawCandidates || rawCandidates.length === 0) {
       return {
@@ -254,6 +265,7 @@ class FeedService {
         authorProfile: profile,
         isLiked: likedSet.has(post._id.toString()),
         isSaved: savedSet.has(post._id.toString()),
+        viewerId,
       });
       serialized.feedPosition = index;
       return serialized;

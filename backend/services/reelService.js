@@ -953,7 +953,7 @@ class ReelService {
 
     const serialized = await Promise.all(
       reels.map(async (r) => {
-        const item = serializeContentForViewer(r, viewerId);
+        const item = serializeContentForViewer(r, { viewerId });
         const firstMedia = r.mediaItems?.[0];
         const videoVariant = firstMedia?.variants?.find((v) => v.mimeType?.includes('video') || v.url?.endsWith('.mp4')) || firstMedia?.variants?.[0];
         const videoUrl = videoVariant?.url || '';

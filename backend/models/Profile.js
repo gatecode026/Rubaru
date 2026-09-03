@@ -61,6 +61,18 @@ const ProfileSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    likesCount: {
+      type: Number,
+      default: 0,
+    },
+    connectionsCount: {
+      type: Number,
+      default: 0,
+    },
+    profileViews: {
+      type: Number,
+      default: 0,
+    },
     socialAccountVisibility: {
       type: String,
       enum: ['PUBLIC', 'PRIVATE'],

@@ -28,3 +28,6 @@ Rubaru/
 
 # package-lock.json (if remote ignores it)
 package-lock.json
+
+# Local uploads
+backend/uploads/

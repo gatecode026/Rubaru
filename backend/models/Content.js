@@ -5,23 +5,27 @@ const ContentMediaItemSchema = new mongoose.Schema(
     mediaAssetId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'MediaAsset',
-      required: true,
+      default: () => new mongoose.Types.ObjectId(),
     },
     position: {
       type: Number,
-      required: true,
+      default: 0,
       min: 0,
     },
     mediaType: {
       type: String,
       enum: ['IMAGE', 'VIDEO'],
-      required: true,
+      default: 'IMAGE',
+    },
+    originalUrl: {
+      type: String,
+      default: '',
     },
     variants: [
       {
-        name: { type: String, required: true },
-        objectKey: { type: String, required: true },
-        mimeType: { type: String, required: true },
+        name: { type: String, default: 'original' },
+        objectKey: { type: String, default: '' },
+        mimeType: { type: String, default: 'image/jpeg' },
         width: { type: Number, default: 0 },
         height: { type: Number, default: 0 },
         fileSize: { type: Number, default: 0 },

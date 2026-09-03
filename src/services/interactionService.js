@@ -5,6 +5,14 @@ import api from './api';
  */
 export const interactionService = {
   /**
+   * Resolve or auto-create Content document for a photo URL
+   */
+  resolvePhoto: async ({ photoUrl, authorId }) => {
+    const res = await api.post('/v1/content/resolve-photo', { photoUrl, authorId });
+    return res.data?.data || res.data;
+  },
+
+  /**
    * Like a post
    */
   likeContent: async (contentId) => {
