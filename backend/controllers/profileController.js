@@ -1,6 +1,121 @@
+const mongoose = require('mongoose');
 const Profile = require('../models/Profile');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const Content = require('../models/Content');
+const Match = require('../models/Match');
+const FollowRelationship = require('../models/FollowRelationship');
+
+/**
+ * Enrich profile with live dynamic stats:
+ * 1. likesCount: Total likes across published content (posts & reels) + profile likes
+ * 2. connectionsCount: Active matches and accepted follow relationships
+ * 3. profileViews: Total profile view count
+ */
+async function enrichProfileStats(profileDoc) {
+  if (!profileDoc) return profileDoc;
+  const targetUserId = profileDoc.user?._id || profileDoc.user;
+
+  try {
+    const userObjectId = new mongoose.Types.ObjectId(targetUserId.toString());
+    const [contentLikesAgg, matchesCount, followsCount] = await Promise.all([
+      Content.aggregate([
+        {
+          $match: {
+            authorId: userObjectId,
+            status: 'PUBLISHED',
+          },
+        },
+        { $group: { _id: null, totalLikes: { $sum: '$likesCount' } } },
+      ]),
+      Match.countDocuments({
+        users: userObjectId,
+        status: 'ACTIVE',
+      }),
+      FollowRelationship.countDocuments({
+        $or: [
+          { followerId: userObjectId },
+          { followingId: userObjectId },
+        ],
+        status: 'ACCEPTED',
+      }),
+    ]);
+
+    const totalContentLikes = contentLikesAgg[0]?.totalLikes || 0;
+    const dynamicLikes = Math.max(Number(profileDoc.likesCount) || 0, totalContentLikes);
+    const dynamicConnections = Math.max(
+      matchesCount,
+      followsCount,
+      Number(profileDoc.connectionsCount) || 0,
+      Number(profileDoc.followersCount) || 0
+    );
+    const dynamicViews = Number(profileDoc.profileViews) || 0;
+
+    const obj = profileDoc.toObject ? profileDoc.toObject() : { ...profileDoc };
+    obj.likesCount = dynamicLikes;
+    obj.connectionsCount = dynamicConnections;
+    obj.profileViews = dynamicViews;
+
+    // Enrich photos with Content document IDs, likesCount, commentsCount
+    const photoUrls = Array.isArray(profileDoc.photos) ? profileDoc.photos : [];
+    if (photoUrls.length > 0) {
+      try {
+        const photosDetailed = await Promise.all(
+          photoUrls.map(async (url) => {
+            let contentDoc = await Content.findOne({
+              authorId: userObjectId,
+              $or: [
+                { 'mediaItems.originalUrl': url },
+                { 'mediaItems.thumbnail.url': url },
+                { 'mediaItems.variants.url': url },
+              ],
+              status: { $ne: 'DELETED' },
+            });
+
+            if (!contentDoc) {
+              try {
+                contentDoc = await Content.create({
+                  authorId: userObjectId,
+                  contentType: 'POST',
+                  mediaItems: [{
+                    mediaType: 'IMAGE',
+                    originalUrl: url,
+                    thumbnail: { url },
+                    variants: [{ url, mimeType: 'image/jpeg' }],
+                  }],
+                  status: 'PUBLISHED',
+                  audience: 'PUBLIC',
+                });
+              } catch (e) {}
+            }
+
+            return {
+              id: contentDoc?._id?.toString() || url,
+              _id: contentDoc?._id?.toString() || url,
+              url,
+              thumbnailUri: url,
+              likesCount: contentDoc?.likesCount || 0,
+              commentsCount: contentDoc?.commentsCount || 0,
+              isLiked: false,
+            };
+          })
+        );
+        obj.photosDetailed = photosDetailed;
+      } catch (pErr) {
+        console.warn('[ENRICH PHOTOS ERROR]', pErr.message);
+      }
+    }
+
+    return obj;
+  } catch (err) {
+    console.warn('[ENRICH PROFILE STATS ERROR]', err.message);
+    const obj = profileDoc.toObject ? profileDoc.toObject() : { ...profileDoc };
+    obj.likesCount = Number(profileDoc.likesCount) || 0;
+    obj.connectionsCount = Number(profileDoc.connectionsCount) || Number(profileDoc.followersCount) || 0;
+    obj.profileViews = Number(profileDoc.profileViews) || 0;
+    return obj;
+  }
+}
 
 // @desc    Get current user profile
 // @route   GET /api/profiles/me
@@ -11,7 +126,8 @@ const getMe = async (req, res) => {
     if (!profile) {
       return res.status(404).json({ message: 'Profile not found' });
     }
-    res.status(200).json(profile);
+    const enriched = await enrichProfileStats(profile);
+    res.status(200).json(enriched);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -26,7 +142,15 @@ const getProfile = async (req, res) => {
     if (!profile) {
       return res.status(404).json({ message: 'Profile not found' });
     }
-    res.status(200).json(profile);
+
+    // Increment profile views in real-time when viewed by another user
+    if (req.user && req.user._id && req.user._id.toString() !== profile.user._id.toString()) {
+      await Profile.updateOne({ _id: profile._id }, { $inc: { profileViews: 1 } });
+      profile.profileViews = (profile.profileViews || 0) + 1;
+    }
+
+    const enriched = await enrichProfileStats(profile);
+    res.status(200).json(enriched);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

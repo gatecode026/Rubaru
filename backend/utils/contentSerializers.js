@@ -14,26 +14,36 @@ function serializeAuthorSummary(authorProfile, authorUser = null) {
 }
 
 function serializeMediaItem(item, safeProjectionLevel = 'PUBLIC') {
+  const primaryUrl = item.originalUrl || item.thumbnail?.url || item.variants?.[0]?.url || item.url || '';
   return {
     mediaAssetId: item.mediaAssetId ? item.mediaAssetId.toString() : undefined,
-    position: item.position,
-    mediaType: item.mediaType,
-    width: item.width,
-    height: item.height,
-    aspectRatio: item.aspectRatio,
+    position: item.position !== undefined ? item.position : 0,
+    mediaType: item.mediaType || 'IMAGE',
+    originalUrl: primaryUrl,
+    width: item.width || 1080,
+    height: item.height || 1350,
+    aspectRatio: item.aspectRatio || 0.8,
     thumbnail: {
-      url: item.thumbnail?.url || '',
+      url: item.thumbnail?.url || primaryUrl,
       width: item.thumbnail?.width || 0,
       height: item.thumbnail?.height || 0,
     },
-    variants: (item.variants || []).map((v) => ({
-      name: v.name,
-      mimeType: v.mimeType,
-      width: v.width,
-      height: v.height,
-      url: v.url || '',
-      processingState: v.processingState,
-    })),
+    variants: (item.variants && item.variants.length > 0)
+      ? item.variants.map((v) => ({
+          name: v.name || 'original',
+          mimeType: v.mimeType || 'image/jpeg',
+          width: v.width || 0,
+          height: v.height || 0,
+          url: v.url || primaryUrl,
+          processingState: v.processingState,
+        }))
+      : [{
+          name: 'original',
+          mimeType: 'image/jpeg',
+          width: 0,
+          height: 0,
+          url: primaryUrl,
+        }],
     accessibilityDescription: item.accessibilityDescription || '',
   };
 }
@@ -60,12 +70,29 @@ function serializeContentForViewer(contentDoc, authorProfile = null, safeProject
     isSaved = Boolean(extraOptions.isSaved);
   }
 
+  const viewerId =
+    (authorProfile && typeof authorProfile === 'object' && authorProfile.viewerId) ||
+    (extraOptions && typeof extraOptions === 'object' && extraOptions.viewerId) ||
+    null;
+
+  const isOwner = Boolean(
+    viewerId && contentDoc.authorId && String(viewerId) === String(contentDoc.authorId)
+  );
+
+  const primaryImage =
+    contentDoc.mediaItems?.[0]?.originalUrl ||
+    contentDoc.mediaItems?.[0]?.variants?.[0]?.url ||
+    contentDoc.mediaItems?.[0]?.thumbnail?.url ||
+    '';
+
   const serialized = {
     postId: contentDoc._id.toString(),
     authorId: contentDoc.authorId ? contentDoc.authorId.toString() : '',
     author: serializeAuthorSummary(profile),
+    isOwner,
     contentType: contentDoc.contentType,
     caption: contentDoc.caption || '',
+    imageUri: primaryImage,
     mediaItems: (contentDoc.mediaItems || []).map((m) => serializeMediaItem(m, level)),
     audience: contentDoc.audience,
     status: contentDoc.status,

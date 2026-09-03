@@ -1,26 +1,57 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 
-function StatColumn({ icon, value, label, showDivider }) {
+function formatStatValue(val) {
+  if (val === undefined || val === null) return '0';
+  if (typeof val === 'string') return val;
+  const n = Number(val);
+  if (isNaN(n) || n <= 0) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(n);
+}
+
+function StatColumn({ icon, value, label, showDivider, onPress }) {
+  const content = (
+    <View style={styles.columnContent}>
+      <View style={styles.iconWrapper}>
+        <Ionicons name={icon} size={24} color="#FFFFFF" />
+      </View>
+      <Text style={styles.valueText}>{formatStatValue(value)}</Text>
+      <Text style={styles.labelText}>{label}</Text>
+    </View>
+  );
+
   return (
     <View style={styles.columnContainer}>
-      <View style={styles.columnContent}>
-        <View style={styles.iconWrapper}>
-          <Ionicons name={icon} size={24} color="#FFFFFF" />
-        </View>
-        <Text style={styles.valueText}>{value}</Text>
-        <Text style={styles.labelText}>{label}</Text>
-      </View>
+      {onPress ? (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={onPress}
+          style={{ flex: 1 }}
+        >
+          {content}
+        </TouchableOpacity>
+      ) : (
+        content
+      )}
       {showDivider && <View style={styles.verticalDivider} />}
     </View>
   );
 }
 
-export default function StatsBar({ likes, connections, views }) {
+export default function StatsBar({
+  likes = 0,
+  connections = 0,
+  views = 0,
+  onLikesPress,
+  onConnectionsPress,
+  onViewsPress,
+}) {
   return (
     <LinearGradient
       colors={['#FFD9E0', '#FFB8C6']}
@@ -33,18 +64,21 @@ export default function StatsBar({ likes, connections, views }) {
         value={likes}
         label="Likes"
         showDivider={true}
+        onPress={onLikesPress}
       />
       <StatColumn
         icon="people-outline"
         value={connections}
         label="Connections"
         showDivider={true}
+        onPress={onConnectionsPress}
       />
       <StatColumn
         icon="eye-outline"
         value={views}
         label="Profile Views"
         showDivider={false}
+        onPress={onViewsPress}
       />
     </LinearGradient>
   );

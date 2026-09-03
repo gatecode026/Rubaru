@@ -254,16 +254,73 @@ class InteractionService {
   }
 
   /**
+   * Resolve content by ObjectId, photo URL, or auto-create for photo interactions
+   */
+  async _resolveOrCreateContent(userId, contentId) {
+    if (!contentId) return null;
+    let content = null;
+    const mongoose = require('mongoose');
+
+    if (mongoose.Types.ObjectId.isValid(contentId)) {
+      content = await Content.findById(contentId);
+    }
+
+    if (!content && typeof contentId === 'string') {
+      const normalizedUrl = contentId.includes('/uploads/')
+        ? ('/uploads/' + contentId.split('/uploads/')[1])
+        : contentId;
+
+      content = await Content.findOne({
+        $or: [
+          { 'mediaItems.originalUrl': contentId },
+          { 'mediaItems.originalUrl': normalizedUrl },
+          { 'mediaItems.thumbnail.url': contentId },
+          { 'mediaItems.thumbnail.url': normalizedUrl },
+          { 'mediaItems.variants.url': contentId },
+          { 'mediaItems.variants.url': normalizedUrl },
+        ],
+        status: { $ne: 'DELETED' },
+      });
+
+      if (!content && (contentId.startsWith('/uploads/') || contentId.startsWith('http') || contentId.includes('photo'))) {
+        try {
+          content = await Content.create({
+            authorId: userId || new mongoose.Types.ObjectId(),
+            contentType: 'POST',
+            mediaItems: [{
+              mediaType: 'IMAGE',
+              originalUrl: normalizedUrl,
+              thumbnail: { url: normalizedUrl },
+              variants: [{
+                name: 'original',
+                objectKey: normalizedUrl,
+                mimeType: 'image/jpeg',
+                url: normalizedUrl,
+              }],
+            }],
+            status: 'PUBLISHED',
+            audience: 'PUBLIC',
+          });
+        } catch (e) {
+          console.warn('[INTERACTION SERVICE] Auto-create content for photo warning:', e.message);
+        }
+      }
+    }
+    return content;
+  }
+
+  /**
    * Like a post
    */
   async likeContent(userId, contentId) {
-    const content = await Content.findById(contentId);
+    const content = await this._resolveOrCreateContent(userId, contentId);
     if (!content || content.status === 'DELETED') {
       const err = new Error('Content not found.');
       err.code = 'CONTENT_NOT_FOUND';
       err.statusCode = 404;
       throw err;
     }
+    contentId = content._id;
 
     // Authorize interaction through central policy
     const policy = await socialPolicyService.evaluateSocialContentAccess({
@@ -339,6 +396,11 @@ class InteractionService {
    * Unlike a post
    */
   async unlikeContent(userId, contentId) {
+    const content = await this._resolveOrCreateContent(userId, contentId);
+    if (content) {
+      contentId = content._id;
+    }
+
     const existingLike = await ContentLike.findOne({ userId, contentId, reactionType: 'LIKE' });
     if (!existingLike || existingLike.status === 'REMOVED') {
       const currentContent = await Content.findById(contentId);
@@ -415,13 +477,14 @@ class InteractionService {
       }
     }
 
-    const content = await Content.findById(contentId);
+    const content = await this._resolveOrCreateContent(userId, contentId);
     if (!content || content.status === 'DELETED') {
       const err = new Error('Content not found.');
       err.code = 'CONTENT_NOT_FOUND';
       err.statusCode = 404;
       throw err;
     }
+    contentId = content._id;
 
     const policy = await socialPolicyService.evaluateSocialContentAccess({
       viewerId: userId,
@@ -525,13 +588,14 @@ class InteractionService {
    * Get top-level comments for a post with cursor pagination
    */
   async getComments(viewerId, contentId, { cursor, limit = 20 } = {}) {
-    const content = await Content.findById(contentId);
+    const content = await this._resolveOrCreateContent(viewerId, contentId);
     if (!content || content.status === 'DELETED') {
       const err = new Error('Content not found.');
       err.code = 'CONTENT_NOT_FOUND';
       err.statusCode = 404;
       throw err;
     }
+    contentId = content._id;
 
     const policy = await socialPolicyService.evaluateSocialContentAccess({
       viewerId,

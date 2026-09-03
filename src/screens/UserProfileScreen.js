@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   TextInput,
   TouchableOpacity,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -31,11 +32,13 @@ import StatsBar from '../components/common/StatsBar';
 import InfoPill from '../components/common/InfoPill';
 import PhotoThumbnail from '../components/common/PhotoThumbnail';
 import InterestPill from '../components/common/InterestPill';
+import PostCommentsModal from '../components/common/PostCommentsModal';
 import api from '@services/api';
 import followService from '@services/followService';
 import reelService from '@services/reelService';
+import interactionService from '@services/interactionService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { disconnectSocket } from '@services/socket';
+import { getSocket, disconnectSocket } from '@services/socket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_WIDTH = (SCREEN_WIDTH - 60) / 3;
@@ -75,6 +78,52 @@ export default function UserProfileScreen() {
   const [isPublishingReel, setIsPublishingReel] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [selectedPhotoPreview, setSelectedPhotoPreview] = useState(null);
+  const [selectedPhotoItem, setSelectedPhotoItem] = useState(null);
+  const [photoLiked, setPhotoLiked] = useState(false);
+  const [photoLikeCount, setPhotoLikeCount] = useState(0);
+  const [photoCommentCount, setPhotoCommentCount] = useState(0);
+  const [photoCommentsVisible, setPhotoCommentsVisible] = useState(false);
+  const [showHeartAnimation, setShowHeartAnimation] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  const selectedPhotoItemRef = useRef(null);
+  const lastTapRef = useRef(0);
+
+  useEffect(() => {
+    selectedPhotoItemRef.current = selectedPhotoItem;
+  }, [selectedPhotoItem]);
+
+  useEffect(() => {
+    async function loadCurrentUserId() {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        if (!token) return;
+        const parts = token.split('.');
+        if (parts.length >= 2) {
+          const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+          let decodedStr = '';
+          if (typeof atob === 'function') {
+            decodedStr = atob(base64);
+          } else if (typeof Buffer !== 'undefined') {
+            decodedStr = Buffer.from(base64, 'base64').toString('utf8');
+          }
+          if (decodedStr) {
+            const data = JSON.parse(decodedStr);
+            if (data.id || data.userId) {
+              setCurrentUserId(String(data.id || data.userId));
+            }
+          }
+        }
+      } catch (e) {}
+    }
+    loadCurrentUserId();
+  }, []);
+
+  const isOwnProfile = Boolean(
+    !params.userId ||
+    (currentUserId && String(params.userId) === String(currentUserId)) ||
+    (currentUserId && profile?.user?._id && String(profile.user._id) === String(currentUserId))
+  );
 
   const scrollOffsetRef = useRef(0);
 
@@ -99,7 +148,45 @@ export default function UserProfileScreen() {
       });
     } else {
       const url = typeof item === 'string' ? getFullUrl(item) : getFullUrl(item?.thumbnailUri || item?.url || item);
+      const rawUrl = typeof item === 'string' ? item : (item?.url || item?.thumbnailUri || url);
+      let photoId = typeof item === 'object' ? (item.id || item._id || item.postId) : null;
+      if (photoId && !/^[0-9a-fA-F]{24}$/.test(String(photoId))) {
+        photoId = null;
+      }
+
+      const isLiked = typeof item === 'object' ? Boolean(item.isLiked) : false;
+      const likesCount = typeof item === 'object' ? Number(item.likesCount) || 0 : 0;
+      const commentsCount = typeof item === 'object' ? Number(item.commentsCount) || 0 : 0;
+
+      const photoObj = {
+        uri: url,
+        rawUrl,
+        id: photoId,
+        likesCount,
+        commentsCount,
+        isLiked,
+      };
+
+      setSelectedPhotoItem(photoObj);
+      setPhotoLiked(isLiked);
+      setPhotoLikeCount(likesCount);
+      setPhotoCommentCount(commentsCount);
       setSelectedPhotoPreview(url);
+
+      // Asynchronously resolve or auto-create Content ObjectId for photo
+      const authorId = profile?.user?._id || profile?.user || params.userId;
+      interactionService.resolvePhoto({ photoUrl: rawUrl, authorId })
+        .then((res) => {
+          if (res?.contentId) {
+            setSelectedPhotoItem((prev) => (prev ? { ...prev, id: res.contentId } : prev));
+            if (res.likesCount !== undefined) setPhotoLikeCount(res.likesCount);
+            if (res.commentsCount !== undefined) setPhotoCommentCount(res.commentsCount);
+            if (res.isLiked !== undefined) setPhotoLiked(res.isLiked);
+          }
+        })
+        .catch((err) => {
+          console.log('[RESOLVE PHOTO WARNING]', err.message);
+        });
     }
   };
 
@@ -166,8 +253,27 @@ export default function UserProfileScreen() {
 
   const fetchProfileData = async () => {
     try {
+      let myId = currentUserId;
+      if (!myId) {
+        try {
+          const token = await AsyncStorage.getItem('userToken');
+          if (token) {
+            const parts = token.split('.');
+            if (parts.length >= 2) {
+              const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+              const dec = typeof atob === 'function' ? atob(b64) : Buffer.from(b64, 'base64').toString('utf8');
+              const d = JSON.parse(dec);
+              myId = d.id || d.userId;
+              if (myId) setCurrentUserId(String(myId));
+            }
+          }
+        } catch (e) {}
+      }
+
+      const isTargetingOther = Boolean(params.userId && myId && String(params.userId) !== String(myId));
+
       let response;
-      if (params.userId) {
+      if (isTargetingOther) {
         response = await api.get(`/profiles/${params.userId}`);
       } else {
         response = await api.get('/profiles/me');
@@ -176,7 +282,7 @@ export default function UserProfileScreen() {
       setLoading(false);
 
       // Check follow status if viewing someone else
-      if (params.userId) {
+      if (isTargetingOther) {
         try {
           const followStatusRes = await followService.getFollowStatus(params.userId);
           const status = followStatusRes.status || followStatusRes.data?.status;
@@ -184,11 +290,13 @@ export default function UserProfileScreen() {
         } catch (fErr) {
           console.log('[FETCH FOLLOW STATUS ERROR]', fErr.message);
         }
+      } else {
+        setIsFollowing(false);
       }
 
       // Also fetch user's reels / short videos
       try {
-        const reelEndpoint = params.userId
+        const reelEndpoint = isTargetingOther
           ? `/reels/user/${params.userId}`
           : '/reels/user/me';
         const reelRes = await api.get(reelEndpoint);
@@ -212,7 +320,7 @@ export default function UserProfileScreen() {
   };
 
   const handleFollowToggle = async () => {
-    if (!params.userId) return;
+    if (!params.userId || isOwnProfile) return;
     const prev = isFollowing;
     setIsFollowing(!prev);
     try {
@@ -233,12 +341,160 @@ export default function UserProfileScreen() {
     }, [params.userId])
   );
 
+  // Real-time socket sync for profile stats and active photo preview
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleSocialLike = (data) => {
+      if (data && data.likesCount !== undefined) {
+        setProfile((prev) => {
+          if (!prev) return prev;
+          const currentLikes = Number(prev.likesCount) || 0;
+          return {
+            ...prev,
+            likesCount: data.isLiked ? currentLikes + 1 : Math.max(0, currentLikes - 1),
+          };
+        });
+
+        // Sync live photo likes if viewing this photo
+        const activePhoto = selectedPhotoItemRef.current;
+        if (activePhoto && (String(data.contentId) === String(activePhoto.id) || String(data.reelId) === String(activePhoto.id))) {
+          setPhotoLikeCount(Number(data.likesCount) || 0);
+        }
+      }
+    };
+
+    const handleSocialComment = (data) => {
+      if (data && data.commentsCount !== undefined) {
+        const activePhoto = selectedPhotoItemRef.current;
+        if (activePhoto && (String(data.contentId) === String(activePhoto.id) || String(data.reelId) === String(activePhoto.id))) {
+          setPhotoCommentCount(Number(data.commentsCount) || 0);
+        }
+      }
+    };
+
+    socket.on('reel_like_updated', handleSocialLike);
+    socket.on('content_like_updated', handleSocialLike);
+    socket.on('reel_comment_added', handleSocialComment);
+    socket.on('post_comment_added', handleSocialComment);
+    socket.on('reel_comment_deleted', handleSocialComment);
+    socket.on('post_comment_deleted', handleSocialComment);
+
+    return () => {
+      socket.off('reel_like_updated', handleSocialLike);
+      socket.off('content_like_updated', handleSocialLike);
+      socket.off('reel_comment_added', handleSocialComment);
+      socket.off('post_comment_added', handleSocialComment);
+      socket.off('reel_comment_deleted', handleSocialComment);
+      socket.off('post_comment_deleted', handleSocialComment);
+    };
+  }, []);
+
+  const handlePhotoLikeToggle = async () => {
+    if (!selectedPhotoItem || isOwnProfile) return;
+
+    let contentId = selectedPhotoItem.id;
+    if (!contentId || !/^[0-9a-fA-F]{24}$/.test(String(contentId))) {
+      try {
+        const rawUrl = selectedPhotoItem.rawUrl || selectedPhotoItem.uri;
+        const authorId = profile?.user?._id || profile?.user || params.userId;
+        const res = await interactionService.resolvePhoto({ photoUrl: rawUrl, authorId });
+        if (res?.contentId) {
+          contentId = res.contentId;
+          setSelectedPhotoItem((prev) => (prev ? { ...prev, id: contentId } : prev));
+        }
+      } catch (err) {
+        console.log('[RESOLVE PHOTO BEFORE LIKE ERROR]', err.message);
+      }
+    }
+
+    if (!contentId || !/^[0-9a-fA-F]{24}$/.test(String(contentId))) {
+      return;
+    }
+
+    const nextLiked = !photoLiked;
+    setPhotoLiked(nextLiked);
+    setPhotoLikeCount((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
+
+    try {
+      if (nextLiked) {
+        const res = await interactionService.likeContent(contentId);
+        if (res?.data?.likesCount !== undefined) {
+          setPhotoLikeCount(res.data.likesCount);
+        }
+      } else {
+        const res = await interactionService.unlikeContent(contentId);
+        if (res?.data?.likesCount !== undefined) {
+          setPhotoLikeCount(res.data.likesCount);
+        }
+      }
+    } catch (err) {
+      console.log('[PHOTO LIKE ERROR]', err.message);
+      setPhotoLiked(!nextLiked);
+      setPhotoLikeCount((prev) => (!nextLiked ? prev + 1 : Math.max(0, prev - 1)));
+    }
+  };
+
+  const handleOpenPhotoComments = async () => {
+    if (!selectedPhotoItem) return;
+
+    let contentId = selectedPhotoItem.id;
+    if (!contentId || !/^[0-9a-fA-F]{24}$/.test(String(contentId))) {
+      try {
+        const rawUrl = selectedPhotoItem.rawUrl || selectedPhotoItem.uri;
+        const authorId = profile?.user?._id || profile?.user || params.userId;
+        const res = await interactionService.resolvePhoto({ photoUrl: rawUrl, authorId });
+        if (res?.contentId) {
+          contentId = res.contentId;
+          setSelectedPhotoItem((prev) => (prev ? { ...prev, id: contentId } : prev));
+          if (res.commentsCount !== undefined) setPhotoCommentCount(res.commentsCount);
+          if (res.likesCount !== undefined) setPhotoLikeCount(res.likesCount);
+          if (res.isLiked !== undefined) setPhotoLiked(res.isLiked);
+        }
+      } catch (err) {
+        console.log('[RESOLVE PHOTO BEFORE COMMENTS ERROR]', err.message);
+      }
+    }
+
+    setPhotoCommentsVisible(true);
+  };
+
+  const handlePhotoShare = async () => {
+    if (!selectedPhotoItem) return;
+    try {
+      await Share.share({
+        message: `Check out this photo by ${profile?.displayName || 'User'} on Rubaru! ✨ ${selectedPhotoItem.uri}`,
+        title: 'Rubaru Photo',
+      });
+    } catch (e) {}
+  };
+
+  const handleImageTap = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 320;
+    if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+      // Instagram double-tap heart animation and like
+      if (!isOwnProfile && !photoLiked) {
+        handlePhotoLikeToggle();
+      }
+      setShowHeartAnimation(true);
+      setTimeout(() => setShowHeartAnimation(false), 900);
+    }
+    lastTapRef.current = now;
+  };
+
   const getFullUrl = (uri) => {
     if (!uri) return 'https://i.pravatar.cc/150?img=60';
-    if (uri.startsWith('http') || uri.startsWith('file://') || uri.startsWith('content://')) return uri;
+    let target = uri;
+    if (typeof target === 'object') {
+      target = target.url || target.thumbnailUri || target.originalUrl || target.uri || '';
+    }
+    if (typeof target !== 'string' || !target) return 'https://i.pravatar.cc/150?img=60';
+    if (target.startsWith('http') || target.startsWith('file://') || target.startsWith('content://')) return target;
     const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.70:5000/api';
     const host = apiBase.replace('/api', '');
-    return `${host}${uri}`;
+    return `${host}${target.startsWith('/') ? '' : '/'}${target}`;
   };
 
   const getAge = (dobString) => {
@@ -377,8 +633,39 @@ export default function UserProfileScreen() {
               </Text>
             </View>
 
-            {/* Action Buttons Row (Follow, Message, Call) - Hidden for Own Profile */}
-            {params.userId ? (
+            {/* Action Buttons Row - Instagram Reference: Edit/Share for Own Profile, Follow/Message/Call for Other Profile */}
+            {isOwnProfile ? (
+              <View style={styles.actionRow}>
+                <Pressable
+                  onPress={() => router.push('/edit-profile')}
+                  style={({ pressed }) => [
+                    styles.ownProfilePill,
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <Ionicons name="create-outline" size={16} color="#111827" style={{ marginRight: 6 }} />
+                  <Text style={styles.actionPillText}>{t('editProfile', 'Edit Profile')}</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={async () => {
+                    try {
+                      await Share.share({
+                        message: `Check out ${profile?.displayName || 'my'} profile on Rubaru! ✨`,
+                        title: 'Rubaru Profile',
+                      });
+                    } catch (e) {}
+                  }}
+                  style={({ pressed }) => [
+                    styles.ownProfilePill,
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <Ionicons name="share-social-outline" size={16} color="#111827" style={{ marginRight: 6 }} />
+                  <Text style={styles.actionPillText}>{t('shareProfile', 'Share Profile')}</Text>
+                </Pressable>
+              </View>
+            ) : (
               <View style={styles.actionRow}>
                 <Pressable
                   onPress={handleFollowToggle}
@@ -426,7 +713,7 @@ export default function UserProfileScreen() {
                   <Text style={styles.actionPillText}>{t('call', 'Call')}</Text>
                 </Pressable>
               </View>
-            ) : null}
+            )}
 
             {/* Tabs Filter Bar Header (Top & About Me options) */}
             <View style={styles.tabsHeaderContainer}>
@@ -475,7 +762,9 @@ export default function UserProfileScreen() {
 
             {activeTab === 'top' ? (() => {
               const reelsArr = Array.isArray(userReels) ? userReels : [];
-              const photosArr = Array.isArray(profile?.photos) ? profile.photos : [];
+              const photosArr = Array.isArray(profile?.photosDetailed) && profile.photosDetailed.length > 0
+                ? profile.photosDetailed
+                : (Array.isArray(profile?.photos) ? profile.photos : []);
               const mediaItems = [...reelsArr, ...photosArr];
 
               return (
@@ -532,9 +821,10 @@ export default function UserProfileScreen() {
                           .filter((_, i) => i % 3 === 0)
                           .map((item, idx) => {
                             const isReel = typeof item === 'object' && (item.videoUri || item.contentType === 'REEL');
-                            const uri = isReel
-                              ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
-                              : getFullUrl(item);
+                            const rawUri = isReel
+                              ? item.thumbnailUri
+                              : (typeof item === 'object' ? (item.url || item.thumbnailUri || item.uri) : item);
+                            const uri = rawUri ? getFullUrl(rawUri) : null;
                             const cardHeight = idx % 2 === 0 ? 200 : 130;
                             return (
                               <Pressable
@@ -573,9 +863,10 @@ export default function UserProfileScreen() {
                           .filter((_, i) => i % 3 === 1)
                           .map((item, idx) => {
                             const isReel = typeof item === 'object' && (item.videoUri || item.contentType === 'REEL');
-                            const uri = isReel
-                              ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
-                              : getFullUrl(item);
+                            const rawUri = isReel
+                              ? item.thumbnailUri
+                              : (typeof item === 'object' ? (item.url || item.thumbnailUri || item.uri) : item);
+                            const uri = rawUri ? getFullUrl(rawUri) : null;
                             const cardHeight = idx % 2 === 0 ? 130 : 170;
                             return (
                               <Pressable
@@ -614,9 +905,10 @@ export default function UserProfileScreen() {
                           .filter((_, i) => i % 3 === 2)
                           .map((item, idx) => {
                             const isReel = typeof item === 'object' && (item.videoUri || item.contentType === 'REEL');
-                            const uri = isReel
-                              ? (item.thumbnailUri ? getFullUrl(item.thumbnailUri) : null)
-                              : getFullUrl(item);
+                            const rawUri = isReel
+                              ? item.thumbnailUri
+                              : (typeof item === 'object' ? (item.url || item.thumbnailUri || item.uri) : item);
+                            const uri = rawUri ? getFullUrl(rawUri) : null;
                             const cardHeight = idx % 2 === 0 ? 150 : 120;
                             return (
                               <Pressable
@@ -662,11 +954,20 @@ export default function UserProfileScreen() {
                   width={SCREEN_WIDTH - 36}
                 />
 
-                {/* 3. Stats Bar */}
+                {/* 3. Stats Bar - Dynamic Likes, Connections, and Profile Views */}
                 <StatsBar
-                  likes={profile?.followersCount !== undefined ? String(profile.followersCount) : '0'}
-                  connections={profile?.followingCount !== undefined ? String(profile.followingCount) : '0'}
-                  views="0"
+                  likes={profile?.likesCount !== undefined ? profile.likesCount : (profile?.followersCount || 0)}
+                  connections={profile?.connectionsCount !== undefined ? profile.connectionsCount : (profile?.followingCount || 0)}
+                  views={profile?.profileViews !== undefined ? profile.profileViews : 0}
+                  onLikesPress={() => {
+                    showToast(`❤️ ${profile?.likesCount || 0} Total Likes received`);
+                  }}
+                  onConnectionsPress={() => {
+                    showToast(`👥 ${profile?.connectionsCount || 0} Active Connections`);
+                  }}
+                  onViewsPress={() => {
+                    showToast(`👀 ${profile?.profileViews || 0} Total Profile Views`);
+                  }}
                 />
 
                 {/* 4. About Section */}
@@ -812,12 +1113,12 @@ export default function UserProfileScreen() {
                       </Pressable>
                     )}
                   </View>
-                  {profile?.photos && profile.photos.length > 0 ? (
+                  {((profile?.photosDetailed && profile.photosDetailed.length > 0) || (profile?.photos && profile.photos.length > 0)) ? (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.momentsScrollContent}>
-                      {profile.photos.map((photo, index) => (
+                      {(profile?.photosDetailed && profile.photosDetailed.length > 0 ? profile.photosDetailed : profile.photos).map((photo, index) => (
                         <PhotoThumbnail
                           key={index}
-                          uri={getFullUrl(photo)}
+                          uri={getFullUrl(typeof photo === 'object' ? (photo.url || photo.thumbnailUri) : photo)}
                           fallback={require('@assets/images/onboarding2.jpg')}
                           onPress={() => handleOpenMediaItem(photo)}
                         />
@@ -1480,36 +1781,83 @@ export default function UserProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Center Image Area */}
+          {/* Center Image Area with Instagram Double-Tap to Like */}
           <Pressable
             style={styles.photoViewerCenterArea}
-            onPress={() => setSelectedPhotoPreview(null)}
+            onPress={handleImageTap}
           >
             {selectedPhotoPreview ? (
-              <Image
-                source={{ uri: selectedPhotoPreview }}
-                style={styles.photoViewerMainImage}
-                resizeMode="contain"
-              />
+              <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+                <Image
+                  source={{ uri: selectedPhotoPreview }}
+                  style={styles.photoViewerMainImage}
+                  resizeMode="contain"
+                />
+                {showHeartAnimation && (
+                  <View style={styles.photoViewerHeartAnim} pointerEvents="none">
+                    <Ionicons name="heart" size={100} color="#FF2E63" />
+                  </View>
+                )}
+              </View>
             ) : null}
           </Pressable>
 
-          {/* Bottom Actions Row */}
-          <View style={[styles.photoViewerBottomBar, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
-            <View style={styles.photoViewerActionsRow}>
-              <TouchableOpacity activeOpacity={0.8} style={styles.photoViewerActionIcon}>
-                <Ionicons name="heart-outline" size={26} color="#FFFFFF" />
-              </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.8} style={styles.photoViewerActionIcon}>
-                <Ionicons name="chatbubble-outline" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.8} style={styles.photoViewerActionIcon}>
-                <Ionicons name="paper-plane-outline" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
+          {/* Bottom Actions Row - Removed for owner, only visible to other users (Instagram behavior) */}
+          {!isOwnProfile && (
+            <View style={[styles.photoViewerBottomBar, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
+              <View style={styles.photoViewerActionsRow}>
+                {/* Like Button */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.photoViewerActionItem}
+                  onPress={handlePhotoLikeToggle}
+                >
+                  <Ionicons
+                    name={photoLiked ? 'heart' : 'heart-outline'}
+                    size={28}
+                    color={photoLiked ? '#FF2E63' : '#FFFFFF'}
+                  />
+                  <Text style={[styles.photoViewerCountText, photoLiked && { color: '#FF2E63' }]}>
+                    {photoLikeCount}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Comment Button */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.photoViewerActionItem}
+                  onPress={handleOpenPhotoComments}
+                >
+                  <Ionicons name="chatbubble-outline" size={26} color="#FFFFFF" />
+                  <Text style={styles.photoViewerCountText}>{photoCommentCount}</Text>
+                </TouchableOpacity>
+
+                {/* Share Button */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.photoViewerActionItem}
+                  onPress={handlePhotoShare}
+                >
+                  <Ionicons name="paper-plane-outline" size={26} color="#FFFFFF" />
+                  <Text style={styles.photoViewerActionLabel}>Share</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
         </View>
       </Modal>
+
+      {/* 5. Photo Comments Bottom Sheet Modal */}
+      {selectedPhotoItem && selectedPhotoItem.id && /^[0-9a-fA-F]{24}$/.test(String(selectedPhotoItem.id)) && (
+        <PostCommentsModal
+          visible={photoCommentsVisible}
+          onClose={() => setPhotoCommentsVisible(false)}
+          postId={selectedPhotoItem.id}
+          postAuthor={profile?.displayName || 'Rubaru User'}
+          postAuthorAvatar={profile?.avatarUri ? getFullUrl(profile.avatarUri) : undefined}
+          postImageUri={selectedPhotoItem.uri}
+        />
+      )}
     </View>
   );
 }
@@ -1613,6 +1961,17 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 1,
     borderColor: 'rgba(229, 231, 235, 0.8)',
+  },
+  ownProfilePill: {
+    width: (SCREEN_WIDTH - 60) / 2,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   actionPillActive: {
     backgroundColor: '#111827',
@@ -2858,7 +3217,37 @@ const styles = StyleSheet.create({
   photoViewerActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20,
+    gap: 16,
+  },
+  photoViewerActionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  photoViewerCountText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  photoViewerActionLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  photoViewerHeartAnim: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
   },
   photoViewerActionIcon: {
     padding: 6,

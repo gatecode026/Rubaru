@@ -321,6 +321,89 @@ const unmarkNotInterested = async (req, res) => {
   }
 };
 
+// @desc    Resolve or create a Content document for a photo URL or ID
+// @route   POST /v1/content/resolve-photo
+// @access  Private
+const resolvePhotoContent = async (req, res) => {
+  try {
+    const { photoUrl, authorId } = req.body;
+    if (!photoUrl) {
+      return res.status(400).json({ success: false, message: 'photoUrl is required' });
+    }
+
+    const mongoose = require('mongoose');
+    const Content = require('../models/Content');
+    const ContentLike = require('../models/ContentLike');
+
+    const targetAuthorId = authorId && mongoose.Types.ObjectId.isValid(authorId)
+      ? new mongoose.Types.ObjectId(authorId)
+      : req.user._id;
+
+    let contentDoc = null;
+
+    const normalizedUrl = photoUrl.includes('/uploads/')
+      ? ('/uploads/' + photoUrl.split('/uploads/')[1])
+      : photoUrl;
+
+    if (mongoose.Types.ObjectId.isValid(photoUrl)) {
+      contentDoc = await Content.findById(photoUrl);
+    }
+
+    if (!contentDoc) {
+      contentDoc = await Content.findOne({
+        $or: [
+          { 'mediaItems.originalUrl': photoUrl },
+          { 'mediaItems.originalUrl': normalizedUrl },
+          { 'mediaItems.thumbnail.url': photoUrl },
+          { 'mediaItems.thumbnail.url': normalizedUrl },
+          { 'mediaItems.variants.url': photoUrl },
+          { 'mediaItems.variants.url': normalizedUrl },
+        ],
+        status: { $ne: 'DELETED' },
+      });
+    }
+
+    if (!contentDoc) {
+      contentDoc = await Content.create({
+        authorId: targetAuthorId,
+        contentType: 'POST',
+        mediaItems: [{
+          mediaType: 'IMAGE',
+          originalUrl: normalizedUrl,
+          thumbnail: { url: normalizedUrl },
+          variants: [{
+            name: 'original',
+            objectKey: normalizedUrl,
+            mimeType: 'image/jpeg',
+            url: normalizedUrl,
+          }],
+        }],
+        status: 'PUBLISHED',
+        audience: 'PUBLIC',
+      });
+    }
+
+    const isLiked = await ContentLike.exists({
+      userId: req.user._id,
+      contentId: contentDoc._id,
+      reactionType: 'LIKE',
+      status: 'ACTIVE',
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        contentId: contentDoc._id.toString(),
+        likesCount: contentDoc.likesCount || 0,
+        commentsCount: contentDoc.commentsCount || 0,
+        isLiked: Boolean(isLiked),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   passCandidate,
   removeCandidate,
@@ -339,4 +422,5 @@ module.exports = {
   recordShare,
   markNotInterested,
   unmarkNotInterested,
+  resolvePhotoContent,
 };

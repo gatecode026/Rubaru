@@ -42,7 +42,7 @@ export default function PostCommentsModal({
   const scrollViewRef = useRef(null);
 
   useEffect(() => {
-    if (visible && postId) {
+    if (visible && postId && /^[0-9a-fA-F]{24}$/.test(String(postId))) {
       const fetchComments = async () => {
         try {
           const res = await interactionService.getComments(postId);
@@ -281,7 +281,7 @@ export default function PostCommentsModal({
       setComments((prev) => [newComment, ...prev]);
     }
 
-    if (postId) {
+    if (postId && /^[0-9a-fA-F]{24}$/.test(String(postId))) {
       try {
         await interactionService.createComment(postId, {
           text: textToSend,

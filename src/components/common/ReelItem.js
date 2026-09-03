@@ -22,6 +22,7 @@ import { useTheme } from '../../theme';
 import api from '../../services/api';
 import interactionService from '../../services/interactionService';
 import { getSocket } from '../../services/socket';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 24) : 44;
@@ -115,6 +116,39 @@ export default function ReelItem({ item, height, isActive = true, onBackPress })
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  useEffect(() => {
+    async function loadCurrentUserId() {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        if (!token) return;
+        const parts = token.split('.');
+        if (parts.length >= 2) {
+          const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+          let decodedStr = '';
+          if (typeof atob === 'function') {
+            decodedStr = atob(base64);
+          } else if (typeof Buffer !== 'undefined') {
+            decodedStr = Buffer.from(base64, 'base64').toString('utf8');
+          }
+          if (decodedStr) {
+            const data = JSON.parse(decodedStr);
+            if (data.id || data.userId) {
+              setCurrentUserId(String(data.id || data.userId));
+            }
+          }
+        }
+      } catch (e) {}
+    }
+    loadCurrentUserId();
+  }, []);
+
+  const isOwnReel = Boolean(
+    item.isOwner ||
+    (currentUserId && item.authorId && String(currentUserId) === String(item.authorId)) ||
+    (currentUserId && item.userId && String(currentUserId) === String(item.userId))
+  );
 
   useEffect(() => {
     setIsLiked(Boolean(item.isLiked));
@@ -274,7 +308,9 @@ export default function ReelItem({ item, height, isActive = true, onBackPress })
   };
 
   const handleOpenUserProfile = () => {
-    if (item.authorId) {
+    if (isOwnReel) {
+      router.push('/user-profile');
+    } else if (item.authorId) {
       router.push({
         pathname: '/user-profile',
         params: { userId: item.authorId },
@@ -442,17 +478,19 @@ export default function ReelItem({ item, height, isActive = true, onBackPress })
           <Text style={styles.actionLabel}>{item.shareCount ?? 0}</Text>
         </TouchableOpacity>
 
-        {/* Calling Logo */}
-        <TouchableOpacity
-          style={styles.actionItem}
-          activeOpacity={0.8}
-          onPress={handleCallCreator}
-          accessibilityRole="button"
-          accessibilityLabel="Call creator"
-        >
-          <Ionicons name="call-outline" size={28} color="#FFFFFF" />
-          <Text style={styles.actionLabel}>Call</Text>
-        </TouchableOpacity>
+        {/* Calling Logo - Only visible when viewing someone else's reel */}
+        {!isOwnReel && (
+          <TouchableOpacity
+            style={styles.actionItem}
+            activeOpacity={0.8}
+            onPress={handleCallCreator}
+            accessibilityRole="button"
+            accessibilityLabel="Call creator"
+          >
+            <Ionicons name="call-outline" size={28} color="#FFFFFF" />
+            <Text style={styles.actionLabel}>Call</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Three-dot more */}
         <TouchableOpacity
@@ -471,8 +509,9 @@ export default function ReelItem({ item, height, isActive = true, onBackPress })
         {/* User row */}
         <View style={styles.userRow}>
           <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={handleOpenUserProfile}
+            activeOpacity={isOwnReel ? 1 : 0.8}
+            onPress={isOwnReel ? undefined : handleOpenUserProfile}
+            disabled={isOwnReel}
             style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}
           >
             {item.userAvatar ? (
@@ -496,15 +535,19 @@ export default function ReelItem({ item, height, isActive = true, onBackPress })
               />
             )}
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.followBtn, isFollowing && styles.followingBtn]}
-            activeOpacity={0.8}
-            onPress={handleFollowToggle}
-          >
-            <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
-              {isFollowing ? 'Following' : 'Follow'}
-            </Text>
-          </TouchableOpacity>
+
+          {/* Hide Follow button if this is the user's own reel (Instagram behavior) */}
+          {!isOwnReel && (
+            <TouchableOpacity
+              style={[styles.followBtn, isFollowing && styles.followingBtn]}
+              activeOpacity={0.8}
+              onPress={handleFollowToggle}
+            >
+              <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
+                {isFollowing ? 'Following' : 'Follow'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Only show caption entered at upload time */}

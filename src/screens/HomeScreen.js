@@ -52,7 +52,15 @@ export default function HomeScreen({ isNestedInPager }) {
       ]);
 
       if (feedRes?.data?.items && Array.isArray(feedRes.data.items)) {
-        setFeedItems(feedRes.data.items);
+        const myUserId = profile?.user?._id || profile?.user;
+        const validItems = feedRes.data.items.filter((it) => {
+          if (it.isOwner || (myUserId && String(it.authorId) === String(myUserId))) return false;
+          const img = it.imageUri || it.mediaItems?.[0]?.originalUrl || it.mediaItems?.[0]?.variants?.[0]?.url || it.mediaItems?.[0]?.thumbnail?.url;
+          if (!img) return false;
+          if (typeof img === 'string' && img.includes('cdn.rubaru.app')) return false;
+          return true;
+        });
+        setFeedItems(validItems);
         setNextCursor(feedRes.data.pageInfo?.nextCursor || null);
         setHasMore(Boolean(feedRes.data.pageInfo?.hasMore));
         if (feedRes.data.feed?.batchId) {
@@ -76,7 +84,15 @@ export default function HomeScreen({ isNestedInPager }) {
       setLoadingMore(true);
       const res = await feedService.getConnectedFeed({ cursor: nextCursor, limit: 10 });
       if (res?.data?.items && Array.isArray(res.data.items)) {
-        setFeedItems((prev) => [...prev, ...res.data.items]);
+        const myUserId = profile?.user?._id || profile?.user;
+        const validItems = res.data.items.filter((it) => {
+          if (it.isOwner || (myUserId && String(it.authorId) === String(myUserId))) return false;
+          const img = it.imageUri || it.mediaItems?.[0]?.originalUrl || it.mediaItems?.[0]?.variants?.[0]?.url || it.mediaItems?.[0]?.thumbnail?.url;
+          if (!img) return false;
+          if (typeof img === 'string' && img.includes('cdn.rubaru.app')) return false;
+          return true;
+        });
+        setFeedItems((prev) => [...prev, ...validItems]);
         setNextCursor(res.data.pageInfo?.nextCursor || null);
         setHasMore(Boolean(res.data.pageInfo?.hasMore));
       }

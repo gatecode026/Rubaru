@@ -16,7 +16,11 @@ const {
   recordShare,
   markNotInterested,
   unmarkNotInterested,
+  resolvePhotoContent,
 } = require('../controllers/interactionController');
+
+// Resolve / Auto-create photo content ID
+router.post('/content/resolve-photo', protect, resolvePhotoContent);
 
 // Content Likes
 router.post('/content/:contentId/like', protect, likeContent);
