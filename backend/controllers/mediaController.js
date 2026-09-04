@@ -1,5 +1,8 @@
 const mediaService = require('../services/mediaService');
 const storageProvider = require('../services/storage/storageProvider');
+const imagekitService = require('../services/imagekitService');
+const MediaAsset = require('../models/MediaAsset');
+const mongoose = require('mongoose');
 
 // @desc    Create a scoped, authenticated upload session
 // @route   POST /v1/media/upload-sessions
@@ -195,6 +198,95 @@ const getMediaDeliveryAccess = async (req, res) => {
   }
 };
 
+// @desc    Upload media directly to ImageKit and register a MediaAsset
+// @route   POST /v1/media/upload
+// @access  Private
+const uploadMultipartMedia = async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ success: false, message: 'No media file provided.' });
+    }
+
+    const purpose = req.body.purpose || 'POST_MEDIA';
+    const folder = purpose === 'STORY_MEDIA'
+      ? imagekitService.FOLDERS.STORIES
+      : purpose === 'REEL_VIDEO'
+      ? imagekitService.FOLDERS.REELS
+      : imagekitService.FOLDERS.POSTS;
+
+    const isVideo = file.mimetype.startsWith('video/');
+    const mediaType = isVideo ? 'VIDEO' : 'IMAGE';
+
+    // Upload directly to ImageKit
+    const ikRes = await imagekitService.uploadLocalFile(
+      file.path,
+      file.filename,
+      folder,
+      ['rubaru', purpose.toLowerCase(), req.user._id.toString()]
+    );
+
+    const mediaAssetId = new mongoose.Types.ObjectId();
+    const asset = await MediaAsset.create({
+      _id: mediaAssetId,
+      ownerId: req.user._id,
+      uploadSessionId: new mongoose.Types.ObjectId(),
+      purpose,
+      mediaType,
+      attachmentCategory: mediaType,
+      originalObjectKey: ikRes.filePath || ikRes.name,
+      originalMimeType: file.mimetype,
+      verifiedMimeType: file.mimetype,
+      fileSize: file.size || 0,
+      width: ikRes.width || (isVideo ? 1080 : 1080),
+      height: ikRes.height || (isVideo ? 1920 : 1350),
+      aspectRatio: (ikRes.width && ikRes.height) ? (ikRes.width / ikRes.height) : (isVideo ? 0.5625 : 0.8),
+      thumbnail: {
+        url: ikRes.thumbnailUrl || (isVideo ? `${ikRes.url}/ik-thumbnail.jpg` : ikRes.url),
+        width: 480,
+        height: isVideo ? 854 : 600,
+      },
+      variants: [
+        {
+          name: 'original',
+          objectKey: ikRes.filePath || ikRes.name,
+          mimeType: file.mimetype,
+          url: ikRes.url,
+          width: ikRes.width || 1080,
+          height: ikRes.height || (isVideo ? 1920 : 1350),
+          fileSize: file.size || 0,
+          processingState: 'READY',
+        },
+      ],
+      processingStatus: 'READY',
+      moderationStatus: 'APPROVED',
+    });
+
+    return res.status(201).json({
+      success: true,
+      mediaAssetId: asset._id.toString(),
+      _id: asset._id.toString(),
+      url: ikRes.url,
+      thumbnailUrl: asset.thumbnail.url,
+      data: {
+        mediaAssetId: asset._id.toString(),
+        _id: asset._id.toString(),
+        url: ikRes.url,
+        thumbnailUrl: asset.thumbnail.url,
+        mediaType,
+        width: asset.width,
+        height: asset.height,
+      },
+    });
+  } catch (error) {
+    console.error('[UPLOAD MULTIPART ERROR]:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Media upload failed',
+    });
+  }
+};
+
 module.exports = {
   createUploadSession,
   finalizeUploadSession,
@@ -205,4 +297,5 @@ module.exports = {
   deleteMediaAsset,
   handleDirectUpload,
   getMediaDeliveryAccess,
+  uploadMultipartMedia,
 };

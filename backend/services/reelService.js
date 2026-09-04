@@ -99,6 +99,7 @@ class ReelService {
 
     if (!videoMediaAssetId && payload.videoUri) {
       const objKey = `reels/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.mp4`;
+      const thumbUrl = payload.thumbnailUrl || (payload.videoUri.startsWith('http') ? `${payload.videoUri}/ik-thumbnail.jpg` : payload.videoUri);
       const createdAsset = await MediaAsset.create({
         ownerId: authorId,
         uploadSessionId: new mongoose.Types.ObjectId(),
@@ -114,6 +115,11 @@ class ReelService {
         height: 1920,
         aspectRatio: 0.5625,
         durationMs: payload.durationMs || 15000,
+        thumbnail: {
+          url: thumbUrl,
+          width: 480,
+          height: 854,
+        },
         variants: [
           {
             name: 'source',

@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Profile = require('../models/Profile');
+const imagekitService = require('../services/imagekitService');
 
 // Helper: Generate JWT
 const generateToken = (id) => {
@@ -248,7 +249,18 @@ const profileSetup = async (req, res) => {
     // Check if avatar is uploaded
     let avatarUri = 'https://i.pravatar.cc/150?img=60';
     if (req.file) {
-      avatarUri = `/uploads/images/${req.file.filename}`;
+      try {
+        const uploadedAvatar = await imagekitService.uploadLocalFile(
+          req.file.path,
+          req.file.filename,
+          imagekitService.FOLDERS.AVATARS,
+          ['avatar', req.user._id.toString()]
+        );
+        avatarUri = uploadedAvatar.url;
+      } catch (avatarErr) {
+        console.warn('[AUTH SETUP AVATAR IMAGEKIT FALLBACK]', avatarErr.message);
+        avatarUri = `/uploads/images/${req.file.filename}`;
+      }
     }
 
     // Upsert profile

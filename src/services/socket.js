@@ -27,6 +27,7 @@ export function connectSocket(token) {
     transports: ['polling', 'websocket'],
     reconnectionAttempts: 5,
     reconnectionDelay: 2000,
+    timeout: 5000,
   });
 
   socket.on('connect', () => {

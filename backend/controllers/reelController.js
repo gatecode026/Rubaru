@@ -1,4 +1,5 @@
 const reelService = require('../services/reelService');
+const imagekitService = require('../services/imagekitService');
 
 // @desc    Create a Reel
 // @route   POST /v1/reels
@@ -7,15 +8,29 @@ const createReel = async (req, res) => {
   try {
     const authorId = req.user._id;
     let videoUri = req.body.videoUri;
+    let thumbnailUrl = req.body.thumbnailUrl;
 
     // If video file was uploaded via FormData (multipart)
     if (req.file) {
-      videoUri = `/uploads/videos/${req.file.filename}`;
+      try {
+        const uploadedVideo = await imagekitService.uploadLocalFile(
+          req.file.path,
+          req.file.filename,
+          imagekitService.FOLDERS.REELS,
+          ['reel', 'video', authorId.toString()]
+        );
+        videoUri = uploadedVideo.url;
+        thumbnailUrl = uploadedVideo.thumbnailUrl || `${uploadedVideo.url}/ik-thumbnail.jpg`;
+      } catch (uploadErr) {
+        console.warn('[REEL VIDEO IMAGEKIT FALLBACK]', uploadErr.message);
+        videoUri = `/uploads/videos/${req.file.filename}`;
+      }
     }
 
     const payload = {
       ...req.body,
       videoUri,
+      thumbnailUrl,
     };
 
     const result = await reelService.createReel(authorId, payload);

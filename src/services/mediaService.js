@@ -73,6 +73,38 @@ export const mediaService = {
     const res = await api.delete(`/v1/media/${mediaId}`);
     return res.data;
   },
+
+  /**
+   * Upload media directly (supports React Native file object or FormData)
+   * Offloaded directly to ImageKit CDN
+   * @param {Object} fileObj - { uri, name, type }
+   * @param {string} purpose - 'POST_MEDIA' | 'STORY_MEDIA' | 'REEL_VIDEO'
+   */
+  uploadMedia: async (fileObj, purpose = 'POST_MEDIA') => {
+    if (fileObj instanceof FormData) {
+      const res = await api.post('/v1/media/upload', fileObj, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return res.data;
+    }
+
+    const formData = new FormData();
+    const localUri = fileObj.uri;
+    const filename = fileObj.name || localUri?.split('/').pop() || `media_${Date.now()}.jpg`;
+    const type = fileObj.type || (filename.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
+
+    formData.append('file', {
+      uri: localUri,
+      name: filename,
+      type,
+    });
+    formData.append('purpose', purpose);
+
+    const res = await api.post('/v1/media/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
 };
 
 export default mediaService;
