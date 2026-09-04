@@ -19,9 +19,13 @@ const discoveryRoutes = require('./routes/discoveryRoutes');
 const likeRoutes = require('./routes/likeRoutes');
 const matchRoutes = require('./routes/matchRoutes');
 const safetyRoutes = require('./routes/safetyRoutes');
+const { initRedis, getRedisHealth } = require('./config/redis');
 
-// Connect to Database
+// Connect to Database & Initialize Distributed Redis
 connectDB();
+initRedis().catch((err) => {
+  console.warn('[REDIS INIT NOTE]:', err.message);
+});
 
 const app = express();
 const server = http.createServer(app);
@@ -108,10 +112,11 @@ app.use('/v1', safetyRoutes);
 app.use('/api/v1', safetyRoutes);
 
 // Mount Social Notifications & Device Routes (v1)
+const deviceRoutes = require('./routes/deviceRoutes');
 app.use('/v1/notifications', notifRoutes);
 app.use('/api/v1/notifications', notifRoutes);
-app.use('/v1/devices', notifRoutes);
-app.use('/api/v1/devices', notifRoutes);
+app.use('/v1/devices', deviceRoutes);
+app.use('/api/v1/devices', deviceRoutes);
 app.use('/v1/users/me/notification-preferences', notifRoutes);
 app.use('/api/v1/users/me/notification-preferences', notifRoutes);
 
@@ -125,13 +130,66 @@ const syncRoutes = require('./routes/syncRoutes');
 app.use('/v1/messaging', syncRoutes);
 app.use('/api/v1/messaging', syncRoutes);
 
-// Health check routes
+// Mount Paid Communication & Billing Foundation Routes (v1)
+const paidCommunicationRoutes = require('./routes/paidCommunicationRoutes');
+const walletRoutes = require('./routes/walletRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+app.use('/v1/paid-communication', paidCommunicationRoutes);
+app.use('/api/v1/paid-communication', paidCommunicationRoutes);
+app.use('/v1/wallet', walletRoutes);
+app.use('/api/v1/wallet', walletRoutes);
+app.use('/v1/admin/paid-communication', adminRoutes);
+app.use('/api/v1/admin/paid-communication', adminRoutes);
+
+const pushAdapter = require('./services/pushAdapter');
+
+// Health and Readiness check routes
 app.get(['/', '/health', '/api/health'], (req, res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const redisHealth = getRedisHealth();
+  const pushStatus = pushAdapter.getProviderStatus();
+  const dbStatus = mongoose.connection.readyState === 1 ? 'CONNECTED' : 'DISCONNECTED';
+
   res.json({
     status: 'ok',
-    message: 'Rubaru API Server is running smoothly',
+    environment: process.env.NODE_ENV || 'development',
     timestamp: new Date().toISOString(),
+    components: {
+      database: { status: dbStatus, host: mongoose.connection.host || 'unknown' },
+      redis: redisHealth,
+      push: pushStatus,
+      turn: {
+        configured: Boolean(process.env.COTURN_SECRET || process.env.TURN_SECRET),
+        status: (process.env.COTURN_SECRET || process.env.TURN_SECRET) ? 'CONFIGURED' : (isProduction ? 'DISABLED_UNCONFIGURED' : 'DEV_STUN_FALLBACK'),
+      },
+    },
   });
+});
+
+app.get(['/ready', '/api/ready'], (req, res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const redisHealth = getRedisHealth();
+  const dbConnected = mongoose.connection.readyState === 1;
+
+  // In production, Redis must be real and connected, and DB must be connected
+  const isReady = dbConnected && (!isProduction || (redisHealth.connected && !redisHealth.isMock));
+
+  const responsePayload = {
+    ready: isReady,
+    status: isReady ? 'READY' : 'NOT_READY',
+    environment: process.env.NODE_ENV || 'development',
+    checks: {
+      database: dbConnected,
+      redis: isProduction ? (redisHealth.connected && !redisHealth.isMock) : redisHealth.connected,
+      redisDistributed: redisHealth.distributedReady,
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  if (!isReady) {
+    return res.status(503).json(responsePayload);
+  }
+  return res.status(200).json(responsePayload);
 });
 
 // Error handling middleware

@@ -1,12 +1,19 @@
 const Profile = require('../models/Profile');
 const Message = require('../models/Message');
+const Block = require('../models/Block');
+const turnService = require('../services/turnService');
+
+// In-memory rate limiting map for ICE candidates per socket/session (max 60 candidates per minute)
+const candidateRateLimits = new Map();
 
 /**
  * Register Calling and WebRTC Signaling Handlers
  * Isolated from the messaging domain to maintain 100% backward compatibility
  */
 function registerCallingHandlers(io, socket, userSocketMap) {
-  const userId = socket.data ? socket.data.userId : socket.user._id.toString();
+  const userId = socket.data ? socket.data.userId : (socket.user ? socket.user._id.toString() : null);
+
+  if (!userId) return;
 
   // 1. Outgoing Call Initiation
   socket.on('call_user', async (data) => {
@@ -70,7 +77,114 @@ function registerCallingHandlers(io, socket, userSocketMap) {
     io.to(`user:${recipientId}`).emit('call_hungup', { callSessionId });
   });
 
-  // 5. WebRTC SDP / ICE Candidates Relay
+  // 5. Standard WebRTC SDP / ICE Candidate Signaling Handlers with Validation & Rate Limiting
+  socket.on('call.offer', async (data, callback) => {
+    try {
+      const { recipientId, sessionId, sdp } = data || {};
+      if (!recipientId || !sdp) {
+        if (typeof callback === 'function') callback({ ok: false, message: 'recipientId and sdp are required' });
+        return;
+      }
+
+      // Validate SDP structure and size
+      const sdpValidation = turnService.validateSdp(typeof sdp === 'object' ? sdp.sdp : sdp);
+      if (!sdpValidation.valid) {
+        if (typeof callback === 'function') callback({ ok: false, message: sdpValidation.error });
+        return;
+      }
+
+      const isBlocked = await Block.findOne({
+        $or: [
+          { blocker: userId, blocked: recipientId },
+          { blocker: recipientId, blocked: userId },
+        ],
+      });
+      if (isBlocked) {
+        if (typeof callback === 'function') callback({ ok: false, message: 'Communication blocked' });
+        return;
+      }
+
+      io.to(`user:${recipientId}`).emit('call.offer', {
+        senderId: userId,
+        sessionId,
+        sdp,
+      });
+
+      if (typeof callback === 'function') callback({ ok: true });
+    } catch (err) {
+      if (typeof callback === 'function') callback({ ok: false, message: err.message });
+    }
+  });
+
+  socket.on('call.answer', async (data, callback) => {
+    try {
+      const { recipientId, sessionId, sdp } = data || {};
+      if (!recipientId || !sdp) {
+        if (typeof callback === 'function') callback({ ok: false, message: 'recipientId and sdp are required' });
+        return;
+      }
+
+      // Validate SDP structure and size
+      const sdpValidation = turnService.validateSdp(typeof sdp === 'object' ? sdp.sdp : sdp);
+      if (!sdpValidation.valid) {
+        if (typeof callback === 'function') callback({ ok: false, message: sdpValidation.error });
+        return;
+      }
+
+      io.to(`user:${recipientId}`).emit('call.answer', {
+        senderId: userId,
+        sessionId,
+        sdp,
+      });
+
+      if (typeof callback === 'function') callback({ ok: true });
+    } catch (err) {
+      if (typeof callback === 'function') callback({ ok: false, message: err.message });
+    }
+  });
+
+  socket.on('call.ice_candidate', async (data, callback) => {
+    try {
+      const { recipientId, sessionId, candidate } = data || {};
+      if (!recipientId || !candidate) {
+        if (typeof callback === 'function') callback({ ok: false, message: 'recipientId and candidate are required' });
+        return;
+      }
+
+      // Validate candidate structure
+      const candidateValidation = turnService.validateIceCandidate(candidate);
+      if (!candidateValidation.valid) {
+        if (typeof callback === 'function') callback({ ok: false, message: candidateValidation.error });
+        return;
+      }
+
+      // Rate limit check: max 60 candidates per minute per socket
+      const now = Date.now();
+      const rateKey = `${socket.id}:${sessionId || 'global'}`;
+      let rateData = candidateRateLimits.get(rateKey);
+      if (!rateData || now - rateData.windowStart > 60000) {
+        rateData = { windowStart: now, count: 0 };
+        candidateRateLimits.set(rateKey, rateData);
+      }
+      rateData.count++;
+      if (rateData.count > 60) {
+        if (typeof callback === 'function') callback({ ok: false, message: 'RATE_LIMIT_EXCEEDED: Too many ICE candidates' });
+        return;
+      }
+
+      io.to(`user:${recipientId}`).emit('call.ice_candidate', {
+        senderId: userId,
+        sessionId,
+        candidate,
+      });
+
+      if (typeof callback === 'function') callback({ ok: true });
+    } catch (err) {
+      if (typeof callback === 'function') callback({ ok: false, message: err.message });
+    }
+  });
+
+  // Legacy relay fallback
   socket.on('send_webrtc_signal', (data) => {
     const { recipientId, signalData } = data || {};
     const recipientSocketId = userSocketMap.get(recipientId);
@@ -172,6 +286,16 @@ function registerCallingHandlers(io, socket, userSocketMap) {
       }
     } catch (err) {
       console.error('[SOCKET CALL] submit_vote error:', err.message);
+    }
+  });
+
+  // Socket cleanup on disconnect
+  socket.on('disconnect', () => {
+    // Clear rate limiter entries for this socket
+    for (const [key] of candidateRateLimits.entries()) {
+      if (key.startsWith(`${socket.id}:`)) {
+        candidateRateLimits.delete(key);
+      }
     }
   });
 }

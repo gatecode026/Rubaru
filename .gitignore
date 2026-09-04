@@ -31,3 +31,5 @@ package-lock.json
 
 # Local uploads
 backend/uploads/
+uploads/
+.vscode/

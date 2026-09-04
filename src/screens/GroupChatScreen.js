@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,9 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
+import api from '../services/api';
+import messagingService from '../services/messagingService';
+import { getSocket } from '../services/socket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -73,12 +76,14 @@ export default function GroupChatScreen() {
   const insets = useSafeAreaInsets();
   const { isDarkMode } = useTheme();
 
-  const groupName = params.name || 'Product Team';
-  const groupInitials = params.initials || 'PT';
-  const onlineText = params.onlineText || '3 of 8 online';
+  const conversationId = params.id || params.chatId;
+  const groupName = params.name || 'Group Chat';
+  const groupInitials = params.initials || (groupName ? groupName.slice(0, 2).toUpperCase() : 'GC');
+  const onlineText = params.onlineText || 'Active Group';
 
-  const [messages, setMessages] = useState(initialGroupMessages);
+  const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
+  const [myUserId, setMyUserId] = useState(null);
   const flatListRef = useRef(null);
 
   // Dark mode button and gradient adaptations
@@ -87,27 +92,105 @@ export default function GroupChatScreen() {
   const sendBtnActiveBg = isDarkMode ? '#1C1C1E' : '#FF2E63';
   const actionIconColor = isDarkMode ? '#1C1C1E' : '#6B7280';
 
-  const handleSendMessage = () => {
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      try {
+        const meRes = await api.get('/profiles/me');
+        const myId = meRes.data.user || meRes.data._id;
+        if (isMounted) setMyUserId(myId);
+
+        if (conversationId) {
+          const syncRes = await messagingService.syncMessages(conversationId, { sinceSequence: 0, limit: 100 });
+          const list = syncRes?.messages || syncRes?.items || syncRes || [];
+          if (Array.isArray(list) && list.length > 0 && isMounted) {
+            const mapped = list.map((m) => ({
+              id: m.id || m._id,
+              type: m.type === 'IMAGE' || m.type === 'image' ? 'image' : (m.type === 'SYSTEM' ? 'system' : 'user'),
+              senderName: m.senderId?.toString() === myId?.toString() ? 'Me' : (m.senderName || 'Member'),
+              senderInitials: (m.senderName || 'M').slice(0, 2).toUpperCase(),
+              avatarBg: '#6366F1',
+              text: m.text || m.content || '',
+              time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+              isSentByMe: m.senderId?.toString() === myId?.toString(),
+            }));
+            setMessages(mapped);
+          }
+        }
+      } catch (e) {
+        console.log('[GROUP CHAT LOAD ERROR]', e.message);
+      }
+    }
+    load();
+
+    const socket = getSocket();
+    if (socket && conversationId) {
+      socket.emit('conversation.subscribe', { conversationId });
+      const onMsg = (msg) => {
+        if (!isMounted) return;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: msg.id || msg._id || String(Date.now()),
+            type: msg.type === 'IMAGE' || msg.type === 'image' ? 'image' : 'user',
+            senderName: msg.senderId?.toString() === myUserId?.toString() ? 'Me' : (msg.senderName || 'Member'),
+            senderInitials: (msg.senderName || 'M').slice(0, 2).toUpperCase(),
+            avatarBg: '#6366F1',
+            text: msg.text || msg.content || '',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isSentByMe: msg.senderId?.toString() === myUserId?.toString(),
+          },
+        ]);
+      };
+      socket.on('conversation.message.created', onMsg);
+      socket.on('receive_message', onMsg);
+
+      return () => {
+        isMounted = false;
+        socket.off('conversation.message.created', onMsg);
+        socket.off('receive_message', onMsg);
+        socket.emit('conversation.unsubscribe', { conversationId });
+      };
+    }
+    return () => { isMounted = false; };
+  }, [conversationId, myUserId]);
+
+  const handleSendMessage = async () => {
     if (!inputText.trim()) return;
+    const textToSend = inputText.trim();
+    setInputText('');
+
+    const tempId = Date.now().toString();
     const newMessage = {
-      id: Date.now().toString(),
+      id: tempId,
       type: 'user',
       senderName: 'Me',
-      text: inputText.trim(),
+      text: textToSend,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isSentByMe: true,
     };
     setMessages((prev) => [...prev, newMessage]);
-    setInputText('');
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
+
+    if (conversationId) {
+      try {
+        await messagingService.sendMessage(conversationId, {
+          type: 'TEXT',
+          text: textToSend,
+        });
+      } catch (err) {
+        console.log('[GROUP SEND ERROR]', err.message);
+      }
+    }
   };
 
   const handleHeaderPress = () => {
     router.push({
       pathname: '/group-settings',
       params: {
+        id: conversationId,
         name: groupName,
         initials: groupInitials,
       },

@@ -224,6 +224,60 @@ const PollStatuses = Object.freeze({
   EXPIRED: 'EXPIRED',
 });
 
+const CommunicationTypes = Object.freeze({
+  MESSAGE: 'MESSAGE',
+  AUDIO: 'AUDIO',
+  VIDEO: 'VIDEO',
+});
+
+const PaidSessionStatuses = Object.freeze({
+  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  CONNECTING: 'CONNECTING',
+  ACTIVE: 'ACTIVE',
+  ENDING: 'ENDING',
+  ENDED: 'ENDED',
+  DECLINED: 'DECLINED',
+  CANCELLED: 'CANCELLED',
+  MISSED: 'MISSED',
+  EXPIRED: 'EXPIRED',
+  FAILED: 'FAILED',
+  INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  BLOCKED: 'BLOCKED',
+});
+
+const WalletStatuses = Object.freeze({
+  ACTIVE: 'ACTIVE',
+  FROZEN: 'FROZEN',
+  CLOSED: 'CLOSED',
+});
+
+const LedgerEntryTypes = Object.freeze({
+  DEBIT: 'DEBIT',
+  CREDIT: 'CREDIT',
+});
+
+const LedgerTransactionTypes = Object.freeze({
+  COMMUNICATION_CHARGE: 'COMMUNICATION_CHARGE',
+  INITIAL_MIGRATION: 'INITIAL_MIGRATION',
+  DEPOSIT: 'DEPOSIT',
+  REFUND: 'REFUND',
+});
+
+const PaidSessionEndReasons = Object.freeze({
+  USER_HANGUP: 'USER_HANGUP',
+  CALL_DECLINED: 'CALL_DECLINED',
+  CANCELLED: 'CANCELLED',
+  MISSED: 'MISSED',
+  EXPIRED: 'EXPIRED',
+  INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  HEARTBEAT_TIMEOUT: 'HEARTBEAT_TIMEOUT',
+  DISCONNECTED: 'DISCONNECTED',
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  BLOCKED: 'BLOCKED',
+  SYSTEM_ERROR: 'SYSTEM_ERROR',
+});
+
 module.exports = {
   InteractionTypes,
   InteractionStatuses,
@@ -249,4 +303,11 @@ module.exports = {
   MemberNotificationPreferences,
   MessageReactions,
   PollStatuses,
+  CommunicationTypes,
+  PaidSessionStatuses,
+  WalletStatuses,
+  LedgerEntryTypes,
+  LedgerTransactionTypes,
+  PaidSessionEndReasons,
 };
+

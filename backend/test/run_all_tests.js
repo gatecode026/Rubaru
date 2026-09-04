@@ -36,6 +36,11 @@ const testFiles = [
   'test/offline_sync_tests.js',
   'test/presence_typing_tests.js',
   'test/reaction_reply_poll_tests.js',
+  'test/paid_communication_tests.js',
+  'test/pc02_e2e_verification_tests.js',
+  'test/pc03_hardening_reconciliation_load_tests.js',
+  'test/pc04_e2e_acceptance_and_cleanup_tests.js',
+  'test/pc05_staging_and_rollout_drills_tests.js',
   'test_all_endpoints.js',
 ];
 

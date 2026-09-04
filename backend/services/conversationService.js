@@ -460,9 +460,16 @@ async function getConversationList(actorUserId, options = {}) {
  * Retrieve single conversation details with authorization
  */
 async function getConversationDetails(actorUserId, conversationId) {
+  let effectiveActorId = actorUserId;
+  let effectiveConvId = conversationId;
+  if (actorUserId && typeof actorUserId === 'object' && actorUserId.actorUserId) {
+    effectiveActorId = actorUserId.actorUserId;
+    effectiveConvId = actorUserId.conversationId;
+  }
+
   const authContext = await authorizeConversationAccess({
-    actorUserId,
-    conversationId,
+    actorUserId: effectiveActorId,
+    conversationId: effectiveConvId,
     operation: 'VIEW',
   });
 
@@ -539,6 +546,415 @@ async function getConversationDetails(actorUserId, conversationId) {
   };
 }
 
+/**
+ * Create a real database-backed group conversation
+ */
+async function createGroupConversation({ actorUserId, name, avatarUri = '', memberUserIds = [] }) {
+  if (!actorUserId) {
+    throw new ConversationServiceError('AUTHENTICATION_REQUIRED', 'Authentication is required', 401);
+  }
+
+  const trimmedName = typeof name === 'string' ? name.trim() : '';
+  if (!trimmedName || trimmedName.length < 2 || trimmedName.length > 80) {
+    throw new ConversationServiceError('INVALID_GROUP_NAME', 'Group name must be between 2 and 80 characters', 400);
+  }
+
+  // Deduplicate and filter member IDs
+  const validMemberIds = [...new Set(
+    memberUserIds
+      .map((id) => (id ? id.toString() : null))
+      .filter((id) => id && id !== actorUserId.toString())
+  )];
+
+  // Validate users exist and are active
+  const targetUsers = await User.find({
+    _id: { $in: validMemberIds },
+    accountStatus: { $in: ['ACTIVE', 'active'] },
+  });
+
+  const activeMemberIds = targetUsers.map((u) => u._id.toString());
+  const allParticipantIds = [actorUserId, ...activeMemberIds];
+
+  const conversation = new Conversation({
+    type: ConversationTypes.GROUP,
+    status: ConversationStatuses.ACTIVE,
+    isGroup: true,
+    groupName: trimmedName,
+    groupAvatar: avatarUri || '',
+    createdBy: actorUserId,
+    participants: allParticipantIds,
+    memberCount: allParticipantIds.length,
+    lastSequence: 0,
+  });
+
+  await conversation.save();
+
+  // Create Owner membership for creator
+  await ConversationMember.create({
+    conversationId: conversation._id,
+    userId: actorUserId,
+    role: MemberRoles.OWNER,
+    state: MemberStates.ACTIVE,
+    joinedAt: new Date(),
+    joinedSequence: 0,
+  });
+
+  // Create Member memberships for initial members
+  for (const memberId of activeMemberIds) {
+    await ConversationMember.create({
+      conversationId: conversation._id,
+      userId: memberId,
+      role: MemberRoles.MEMBER,
+      state: MemberStates.ACTIVE,
+      joinedAt: new Date(),
+      joinedSequence: 0,
+    });
+  }
+
+  return {
+    id: conversation._id.toString(),
+    type: conversation.type,
+    isGroup: true,
+    groupName: conversation.groupName,
+    groupAvatar: conversation.groupAvatar,
+    memberCount: conversation.memberCount,
+    createdBy: actorUserId.toString(),
+    createdAt: conversation.createdAt,
+  };
+}
+
+/**
+ * Update Group Metadata (name, avatar) - Requires OWNER or ADMIN
+ */
+async function updateGroupMetadata({ actorUserId, conversationId, name, avatarUri }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'MANAGE_MEMBERS',
+  });
+
+  const { conversation } = authContext;
+  if (conversation.type !== ConversationTypes.GROUP && !conversation.isGroup) {
+    throw new ConversationServiceError('INVALID_CONVERSATION_TYPE', 'Only group metadata can be updated', 400);
+  }
+
+  if (name !== undefined) {
+    const trimmed = name ? name.trim() : '';
+    if (!trimmed || trimmed.length < 2 || trimmed.length > 80) {
+      throw new ConversationServiceError('INVALID_GROUP_NAME', 'Group name must be between 2 and 80 characters', 400);
+    }
+    conversation.groupName = trimmed;
+  }
+
+  if (avatarUri !== undefined) {
+    conversation.groupAvatar = avatarUri || '';
+  }
+
+  await conversation.save();
+
+  return {
+    id: conversation._id.toString(),
+    groupName: conversation.groupName,
+    groupAvatar: conversation.groupAvatar,
+    updatedAt: conversation.updatedAt,
+  };
+}
+
+/**
+ * Get Group Members list with roles and profile details
+ */
+async function getGroupMembers({ actorUserId, conversationId }) {
+  await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'VIEW',
+  });
+
+  const members = await ConversationMember.find({
+    conversationId,
+    state: MemberStates.ACTIVE,
+  })
+    .populate('userId', '_id isAgeVerified accountStatus')
+    .lean();
+
+  const userIds = members.map((m) => (m.userId ? m.userId._id : m.user));
+  const profiles = await DatingProfile.find({ user: { $in: userIds } }).lean();
+  const profileMap = new Map(profiles.map((p) => [p.user.toString(), p]));
+
+  return members.map((m) => {
+    const u = m.userId || {};
+    const uId = u._id ? u._id.toString() : (m.user ? m.user.toString() : '');
+    const profile = profileMap.get(uId);
+
+    return {
+      userId: uId,
+      role: m.role,
+      state: m.state,
+      joinedAt: m.joinedAt,
+      profile: formatMemberProfileDto(profile, u),
+    };
+  });
+}
+
+/**
+ * Add Members to Group - Requires OWNER or ADMIN
+ */
+async function addGroupMembers({ actorUserId, conversationId, memberUserIds = [] }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'MANAGE_MEMBERS',
+  });
+
+  const { conversation, member: actorMember } = authContext;
+  if (conversation.type !== ConversationTypes.GROUP && !conversation.isGroup) {
+    throw new ConversationServiceError('INVALID_CONVERSATION_TYPE', 'Cannot add members to non-group conversation', 400);
+  }
+
+  if (actorMember.role !== MemberRoles.OWNER && actorMember.role !== MemberRoles.ADMIN) {
+    throw new ConversationServiceError('FORBIDDEN', 'Only group owner or admins can add members', 403);
+  }
+
+  const validIds = [...new Set(
+    memberUserIds.map((id) => (id ? id.toString() : null)).filter(Boolean)
+  )];
+
+  const addedMembers = [];
+  for (const targetId of validIds) {
+    let existing = await ConversationMember.findOne({
+      conversationId: conversation._id,
+      userId: targetId,
+    });
+
+    if (existing) {
+      if (existing.state !== MemberStates.ACTIVE) {
+        existing.state = MemberStates.ACTIVE;
+        existing.role = MemberRoles.MEMBER;
+        existing.joinedAt = new Date();
+        existing.joinedSequence = conversation.lastSequence || 0;
+        await existing.save();
+        addedMembers.push(targetId);
+      }
+    } else {
+      await ConversationMember.create({
+        conversationId: conversation._id,
+        userId: targetId,
+        role: MemberRoles.MEMBER,
+        state: MemberStates.ACTIVE,
+        joinedAt: new Date(),
+        joinedSequence: conversation.lastSequence || 0,
+      });
+      addedMembers.push(targetId);
+    }
+  }
+
+  const activeCount = await ConversationMember.countDocuments({
+    conversationId: conversation._id,
+    state: MemberStates.ACTIVE,
+  });
+
+  conversation.memberCount = activeCount;
+  if (Array.isArray(conversation.participants)) {
+    for (const addedId of addedMembers) {
+      if (!conversation.participants.some((p) => p.toString() === addedId)) {
+        conversation.participants.push(addedId);
+      }
+    }
+  }
+  await conversation.save();
+
+  return {
+    conversationId: conversation._id.toString(),
+    addedCount: addedMembers.length,
+    memberCount: activeCount,
+  };
+}
+
+/**
+ * Remove Group Member - OWNER removes anyone; ADMIN removes MEMBER; Cannot remove OWNER
+ */
+async function removeGroupMember({ actorUserId, conversationId, targetUserId }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'MANAGE_MEMBERS',
+  });
+
+  const { conversation, member: actorMember } = authContext;
+  if (conversation.type !== ConversationTypes.GROUP && !conversation.isGroup) {
+    throw new ConversationServiceError('INVALID_CONVERSATION_TYPE', 'Cannot remove members from non-group conversation', 400);
+  }
+
+  if (actorMember.role !== MemberRoles.OWNER && actorMember.role !== MemberRoles.ADMIN) {
+    throw new ConversationServiceError('FORBIDDEN', 'Only group owner or admins can remove members', 403);
+  }
+
+  const targetMember = await ConversationMember.findOne({
+    conversationId: conversation._id,
+    userId: targetUserId,
+    state: MemberStates.ACTIVE,
+  });
+
+  if (!targetMember) {
+    throw new ConversationServiceError('MEMBER_NOT_FOUND', 'Target user is not an active member of this group', 404);
+  }
+
+  if (targetMember.role === MemberRoles.OWNER) {
+    throw new ConversationServiceError('CANNOT_REMOVE_OWNER', 'The group owner cannot be removed from the group', 403);
+  }
+
+  if (actorMember.role === MemberRoles.ADMIN && targetMember.role === MemberRoles.ADMIN) {
+    throw new ConversationServiceError('CANNOT_REMOVE_ADMIN', 'Admins cannot remove other admins. Only the owner can remove admins.', 403);
+  }
+
+  targetMember.state = MemberStates.REMOVED;
+  targetMember.removedAt = new Date();
+  targetMember.removedBy = actorUserId;
+  await targetMember.save();
+
+  const activeCount = await ConversationMember.countDocuments({
+    conversationId: conversation._id,
+    state: MemberStates.ACTIVE,
+  });
+
+  conversation.memberCount = activeCount;
+  await conversation.save();
+
+  return {
+    conversationId: conversation._id.toString(),
+    removedUserId: targetUserId.toString(),
+    memberCount: activeCount,
+  };
+}
+
+/**
+ * Update Member Role - Only OWNER can promote or demote ADMINs
+ */
+async function updateMemberRole({ actorUserId, conversationId, targetUserId, newRole }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'MANAGE_MEMBERS',
+  });
+
+  const { conversation, member: actorMember } = authContext;
+  if (actorMember.role !== MemberRoles.OWNER) {
+    throw new ConversationServiceError('OWNER_REQUIRED', 'Only the group owner can update member roles', 403);
+  }
+
+  if (![MemberRoles.ADMIN, MemberRoles.MEMBER].includes(newRole)) {
+    throw new ConversationServiceError('INVALID_ROLE', 'Role must be either ADMIN or MEMBER', 400);
+  }
+
+  const targetMember = await ConversationMember.findOne({
+    conversationId: conversation._id,
+    userId: targetUserId,
+    state: MemberStates.ACTIVE,
+  });
+
+  if (!targetMember) {
+    throw new ConversationServiceError('MEMBER_NOT_FOUND', 'Target user is not an active member', 404);
+  }
+
+  if (targetMember.role === MemberRoles.OWNER) {
+    throw new ConversationServiceError('CANNOT_MODIFY_OWNER_ROLE', 'Cannot change owner role directly. Use transfer ownership.', 403);
+  }
+
+  targetMember.role = newRole;
+  await targetMember.save();
+
+  return {
+    conversationId: conversation._id.toString(),
+    userId: targetUserId.toString(),
+    role: targetMember.role,
+  };
+}
+
+/**
+ * Transfer Group Ownership - Only current OWNER
+ */
+async function transferOwnership({ actorUserId, conversationId, targetUserId }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'MANAGE_MEMBERS',
+  });
+
+  const { conversation, member: actorMember } = authContext;
+  if (actorMember.role !== MemberRoles.OWNER) {
+    throw new ConversationServiceError('OWNER_REQUIRED', 'Only current owner can transfer ownership', 403);
+  }
+
+  const targetMember = await ConversationMember.findOne({
+    conversationId: conversation._id,
+    userId: targetUserId,
+    state: MemberStates.ACTIVE,
+  });
+
+  if (!targetMember) {
+    throw new ConversationServiceError('MEMBER_NOT_FOUND', 'Target user is not an active member', 404);
+  }
+
+  actorMember.role = MemberRoles.ADMIN;
+  targetMember.role = MemberRoles.OWNER;
+  conversation.createdBy = targetUserId;
+
+  await Promise.all([actorMember.save(), targetMember.save(), conversation.save()]);
+
+  return {
+    conversationId: conversation._id.toString(),
+    previousOwnerId: actorUserId.toString(),
+    newOwnerId: targetUserId.toString(),
+  };
+}
+
+/**
+ * Leave Group
+ */
+async function leaveGroup({ actorUserId, conversationId }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'VIEW',
+  });
+
+  const { conversation, member } = authContext;
+  if (conversation.type !== ConversationTypes.GROUP && !conversation.isGroup) {
+    throw new ConversationServiceError('INVALID_CONVERSATION_TYPE', 'Cannot leave a direct conversation', 400);
+  }
+
+  const activeCount = await ConversationMember.countDocuments({
+    conversationId: conversation._id,
+    state: MemberStates.ACTIVE,
+  });
+
+  if (member.role === MemberRoles.OWNER && activeCount > 1) {
+    throw new ConversationServiceError(
+      'OWNER_CANNOT_LEAVE_WITHOUT_TRANSFER',
+      'Group owner must transfer ownership to another member before leaving',
+      400
+    );
+  }
+
+  member.state = MemberStates.LEFT;
+  member.leftAt = new Date();
+  await member.save();
+
+  conversation.memberCount = Math.max(0, activeCount - 1);
+  if (conversation.memberCount === 0) {
+    conversation.status = ConversationStatuses.CLOSED;
+    conversation.closedAt = new Date();
+    conversation.closeReason = 'All members left';
+  }
+  await conversation.save();
+
+  return {
+    conversationId: conversation._id.toString(),
+    leftUserId: actorUserId.toString(),
+    remainingMemberCount: conversation.memberCount,
+  };
+}
+
 module.exports = {
   ensureDirectMatchConversation,
   closeConversationForUnmatch,
@@ -547,5 +963,14 @@ module.exports = {
   getConversationDetails,
   createConversationCursor,
   verifyConversationCursor,
+  createGroupConversation,
+  updateGroupMetadata,
+  getGroupMembers,
+  addGroupMembers,
+  removeGroupMember,
+  updateMemberRole,
+  transferOwnership,
+  leaveGroup,
   ConversationServiceError,
 };
+

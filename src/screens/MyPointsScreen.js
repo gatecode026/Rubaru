@@ -24,11 +24,11 @@ import api from '../services/api';
 const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0;
 
 const usageList = [
-  { id: '1', label: 'Like', cost: '10 Points', imageSource: require('@assets/images/like_icon.png'), iconSize: 34, borderColor: '#FFE5EC', borderWidth: 1 },
-  { id: '2', label: 'Messages', cost: '20 Points', icon: 'chatbubble-ellipses-outline', iconColor: '#8B5CF6', borderColor: '#E5D5F5', borderWidth: 1, IconComponent: Ionicons },
-  { id: '3', label: 'Profile Boost', cost: '50 Points', icon: 'eye', iconColor: '#EF4444', borderColor: '#F5D5D5', borderWidth: 1, IconComponent: Ionicons },
-  { id: '4', label: 'Super Like', cost: '30 Points', icon: 'star', iconColor: '#FBBF24', borderColor: '#F5E5D5', borderWidth: 1, IconComponent: Ionicons },
-  { id: '5', label: 'Premium', cost: '100 Points', icon: 'diamond-outline', iconColor: '#EC4899', borderColor: '#F5D5EB', borderWidth: 1, IconComponent: Ionicons },
+  { id: '1', label: 'Paid Chat', cost: '1 Coin/min', icon: 'chatbubbles-outline', iconColor: '#8B5CF6', borderColor: '#E5D5F5', borderWidth: 1, IconComponent: Ionicons },
+  { id: '2', label: 'Audio Call', cost: '5 Coins/min', icon: 'call-outline', iconColor: '#10B981', borderColor: '#D1FAE5', borderWidth: 1, IconComponent: Ionicons },
+  { id: '3', label: 'Video Call', cost: '10 Coins/min', icon: 'videocam-outline', iconColor: '#EF4444', borderColor: '#FEE2E2', borderWidth: 1, IconComponent: Ionicons },
+  { id: '4', label: 'Like', cost: '10 Points', imageSource: require('@assets/images/like_icon.png'), iconSize: 34, borderColor: '#FFE5EC', borderWidth: 1 },
+  { id: '5', label: 'Super Like', cost: '30 Points', icon: 'star', iconColor: '#FBBF24', borderColor: '#F5E5D5', borderWidth: 1, IconComponent: Ionicons },
 ];
 
 const packagesList = [

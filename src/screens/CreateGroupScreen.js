@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
+import messagingService from '../services/messagingService';
 
 const categoriesList = [
   { id: '1', label: 'Gaming Group', icon: 'game-controller' },
@@ -32,20 +33,42 @@ export default function CreateGroupScreen() {
   const [groupName, setGroupName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Gaming Group');
-  const [isPrivate, setIsPrivate] = useState(false);
+  const [creating, setCreating] = useState(false);
 
-  const handleCreateGroup = () => {
+  const handleCreateGroup = async () => {
     if (!groupName.trim()) {
       Alert.alert('Required', 'Please enter a group name.');
       return;
     }
 
-    Alert.alert('Group Created!', `Your group "${groupName.trim()}" has been created successfully.`, [
-      {
-        text: 'OK',
-        onPress: () => router.back(),
-      },
-    ]);
+    try {
+      setCreating(true);
+      const newGroup = await messagingService.createGroup({
+        groupName: groupName.trim(),
+        groupAvatar: '',
+        memberUserIds: [],
+      });
+      Alert.alert('Group Created!', `Your group "${groupName.trim()}" has been created successfully.`, [
+        {
+          text: 'Open Chat',
+          onPress: () => {
+            router.replace({
+              pathname: '/group-chat',
+              params: {
+                id: newGroup.id || newGroup._id,
+                name: newGroup.name || groupName.trim(),
+                initials: (groupName.trim() || 'GC').slice(0, 2).toUpperCase(),
+              },
+            });
+          },
+        },
+      ]);
+    } catch (err) {
+      console.error('[CREATE GROUP ERROR]', err);
+      Alert.alert('Error', err.response?.data?.message || err.message || 'Failed to create group');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleChoosePhoto = () => {

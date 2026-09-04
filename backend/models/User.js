@@ -45,8 +45,38 @@ const UserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    role: {
+      type: String,
+      enum: ['USER', 'ADMIN', 'SUPER_ADMIN', 'MODERATOR', 'FINANCE_ADMIN'],
+      default: 'USER',
+      index: true,
+    },
+    permissions: {
+      type: [String],
+      default: [],
+    },
   },
   { timestamps: true }
 );
+
+UserSchema.methods.hasPermission = function (requiredPermission) {
+  if (this.role === 'SUPER_ADMIN') {
+    return true;
+  }
+  if (!this.permissions || !Array.isArray(this.permissions)) {
+    return false;
+  }
+  if (this.permissions.includes('*')) {
+    return true;
+  }
+  if (this.permissions.includes(requiredPermission)) {
+    return true;
+  }
+  const prefix = requiredPermission.split('.')[0];
+  if (this.permissions.includes(`${prefix}.*`)) {
+    return true;
+  }
+  return false;
+};
 
 module.exports = mongoose.model('User', UserSchema);

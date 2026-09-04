@@ -1,17 +1,32 @@
 const { socketAuthMiddleware } = require('./socketAuth');
 const { registerMessagingHandlers } = require('./messagingSocketHandler');
 const { registerCallingHandlers } = require('./callingSocketHandler');
+const { registerPaidCommunicationHandlers } = require('./paidCommunicationSocketHandler');
 const { setSocketIO } = require('../services/socketDispatchService');
 const presenceService = require('../services/presenceService');
 const typingService = require('../services/typingService');
+const { createAdapter } = require('@socket.io/redis-adapter');
+const { getPublisherClient, getSubscriberClient } = require('../config/redis');
 
-// Map of userId -> primary socket ID for quick peer-to-peer call lookups
+// Map of userId -> primary socket ID for backward-compatible peer lookups
 const userSocketMap = new Map();
 
 /**
  * Authoritative Socket.io Setup and Connection Handler
  */
 const socketHandler = (io) => {
+  // Bind Redis adapter for multi-instance distributed communication
+  try {
+    const pubClient = getPublisherClient();
+    const subClient = getSubscriberClient();
+    if (pubClient && subClient && typeof pubClient.publish === 'function' && typeof subClient.subscribe === 'function') {
+      io.adapter(createAdapter(pubClient, subClient));
+      console.log('[SOCKET] Redis multi-instance adapter successfully attached.');
+    }
+  } catch (adapterErr) {
+    console.warn('[SOCKET ADAPTER] Redis adapter attachment note:', adapterErr.message);
+  }
+
   // Bind Socket.io instance to outbox dispatcher
   setSocketIO(io);
 
@@ -45,6 +60,7 @@ const socketHandler = (io) => {
     // 3. Register Domain Handlers
     registerMessagingHandlers(io, socket);
     registerCallingHandlers(io, socket, userSocketMap);
+    registerPaidCommunicationHandlers(io, socket);
 
     // 4. Disconnection Cleanup
     socket.on('disconnect', (reason) => {

@@ -19,6 +19,7 @@ import GroupFilterModal from '../components/common/GroupFilterModal';
 import { useTheme } from '../theme';
 import { useLanguage } from '../localization/LanguageContext';
 import api from '../services/api';
+import messagingService from '../services/messagingService';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -50,11 +51,16 @@ export default function GroupsScreen({ isNestedInPager }) {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
 
-      const res = await api.get('/chats');
-      const allChats = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-
-      // Filter only real Group chats
-      const groupChats = allChats.filter((c) => c.isGroup || c.type === 'GROUP');
+      let groupChats = [];
+      try {
+        const v1Res = await messagingService.listConversations({ type: 'GROUP' });
+        const items = Array.isArray(v1Res) ? v1Res : (v1Res?.items || []);
+        groupChats = items;
+      } catch (e) {
+        const res = await api.get('/chats');
+        const allChats = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        groupChats = allChats.filter((c) => c.isGroup || c.type === 'GROUP');
+      }
 
       const mappedGroups = groupChats.map((g, idx) => ({
         id: g.id || g._id || String(idx),
@@ -63,7 +69,7 @@ export default function GroupsScreen({ isNestedInPager }) {
         name: g.groupName || g.name || 'Group Chat',
         statusColor: '#34C759',
         adminName: g.adminName || (g.members && g.members[0]?.displayName) || 'Admin',
-        membersCount: g.membersCount ? `${g.membersCount}` : (g.memberCount ? `${g.memberCount}` : '1'),
+        membersCount: g.membersCount ? `${g.membersCount}` : (g.members?.length ? `${g.members.length}` : (g.memberCount ? `${g.memberCount}` : '1')),
       }));
 
       setGroups(mappedGroups);

@@ -19,6 +19,7 @@ import EmptyStateIllustration from '../components/common/EmptyStateIllustration'
 import { useTheme } from '../theme/index';
 import { useLanguage } from '../localization/LanguageContext';
 import api from '../services/api';
+import messagingService from '../services/messagingService';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -39,27 +40,33 @@ export default function ChatsScreen() {
 
   const fetchChats = useCallback(() => {
     async function load() {
-      try {
-        const [chatsRes, meRes] = await Promise.all([
-          api.get('/chats'),
-          api.get('/profiles/me'),
-        ]);
+        let rawConversations = [];
+        try {
+          const v1Res = await messagingService.listConversations();
+          rawConversations = Array.isArray(v1Res) ? v1Res : (v1Res?.items || []);
+        } catch (e) {
+          const chatsRes = await api.get('/chats');
+          rawConversations = Array.isArray(chatsRes.data) ? chatsRes.data : [];
+        }
+
+        const meRes = await api.get('/profiles/me');
         setMyProfile(meRes.data);
 
         // Map API response to ChatListItem shape
-        const mapped = chatsRes.data.map((c) => {
+        const mapped = rawConversations.map((c) => {
           const lastMsg = c.lastMessage;
           let msgType = 'text';
           let msgText = lastMsg?.text || 'Start a conversation';
           if (lastMsg?.type === 'image') { msgType = 'photo'; msgText = 'Photo'; }
           if (lastMsg?.type === 'voice') { msgType = 'audio'; msgText = 'Voice message'; }
 
+          const isGrp = c.isGroup || c.type === 'GROUP';
           return {
-            id: c.id,
-            chatId: c.id,
-            name: c.isGroup ? c.groupName : (c.otherParticipant?.displayName || 'Rubaru User'),
-            avatarUrl: c.isGroup
-              ? getAvatarUrl(c.groupAvatar)
+            id: c.id || c._id,
+            chatId: c.id || c._id,
+            name: isGrp ? (c.groupName || c.name || 'Group') : (c.otherParticipant?.displayName || 'Rubaru User'),
+            avatarUrl: isGrp
+              ? getAvatarUrl(c.groupAvatar || c.avatarUri)
               : getAvatarUrl(c.otherParticipant?.avatarUri),
             recipientId: c.otherParticipant?.userId,
             messageType: msgType,

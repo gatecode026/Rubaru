@@ -17,6 +17,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../services/api';
 import { getSocket } from '../services/socket';
 import { v4 as uuidv4 } from 'uuid';
+import { usePointsStore } from '../store/pointsStore';
+import paidCommunicationClient from '../services/paidCommunicationService';
+import { PaidSessionLiveBadge, PaidSessionReceiptModal } from '../components/common/PaidCommunicationModal';
 
 export default function ActiveCallScreen() {
   const router = useRouter();
@@ -34,6 +37,19 @@ export default function ActiveCallScreen() {
 
   const [callStatus, setCallStatus] = useState(initialStatus);
   const [secondsElapsed, setSecondsElapsed] = useState(0);
+
+  // Paid Communication State
+  const isPaidCall = params.isPaid === 'true' || Boolean(params.paidSessionId);
+  const [paidSessionId, setPaidSessionId] = useState(params.paidSessionId || null);
+  const [ratePerMinute, setRatePerMinute] = useState(params.ratePerMinute ? Number(params.ratePerMinute) : (initialCallType ? 10 : 5));
+  const [billedMinutes, setBilledMinutes] = useState(1);
+  const [coinsCharged, setCoinsCharged] = useState(0);
+  const [coinsEarned, setCoinsEarned] = useState(0);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
+  const isInitiator = params.isInitiator !== 'false';
+  const balance = usePointsStore((state) => state.balance);
+  const fetchBalance = usePointsStore((state) => state.fetchBalance);
 
   // In-call toggles
   const [isVideo, setIsVideo] = useState(initialCallType !== false);
@@ -90,25 +106,76 @@ export default function ActiveCallScreen() {
       }
     };
 
+    // Paid Communication Realtime Socket Updates
+    const onMinuteCharged = (data) => {
+      if (data.sessionId === paidSessionId || !paidSessionId) {
+        if (data.sessionId) setPaidSessionId(data.sessionId);
+        setBilledMinutes(data.minuteIndex || 1);
+        if (isInitiator) {
+          setCoinsCharged((prev) => prev + (data.amount || ratePerMinute));
+        } else {
+          setCoinsEarned((prev) => prev + (data.amount || ratePerMinute));
+        }
+        if (fetchBalance) fetchBalance();
+      }
+    };
+
+    const onLowBalance = (data) => {
+      if (data.sessionId === paidSessionId) {
+        console.warn('[PAID COMM] Low balance alert received for active call');
+      }
+    };
+
+    const onPaidSessionEnded = (data) => {
+      if (data.sessionId === paidSessionId) {
+        setReceiptData({
+          communicationType: initialCallType ? 'VIDEO' : 'AUDIO',
+          durationSeconds: secondsElapsed,
+          billedMinutes: data.billedMinutes || billedMinutes,
+          totalCoinsCharged: data.totalCoinsCharged || coinsCharged,
+          totalCoinsEarned: data.totalCoinsEarned || coinsEarned,
+          isInitiator,
+          counterpartyName: contactName,
+          endReason: data.endReason || 'NORMAL_COMPLETION',
+        });
+        setShowReceiptModal(true);
+      }
+    };
+
     socket.on('call_connected', onCallConnected);
     socket.on('call_declined', onCallDeclined);
     socket.on('call_hungup', onCallHungUp);
+    socket.on('paid_session.minute_charged', onMinuteCharged);
+    socket.on('paid_session.low_balance', onLowBalance);
+    socket.on('paid_session.ended', onPaidSessionEnded);
 
     return () => {
       socket.off('call_connected', onCallConnected);
       socket.off('call_declined', onCallDeclined);
       socket.off('call_hungup', onCallHungUp);
+      socket.off('paid_session.minute_charged', onMinuteCharged);
+      socket.off('paid_session.low_balance', onLowBalance);
+      socket.off('paid_session.ended', onPaidSessionEnded);
     };
-  }, [receiverId, initialStatus]);
+  }, [receiverId, initialStatus, paidSessionId, isInitiator, ratePerMinute, secondsElapsed]);
 
+  // Periodic heartbeat during active connected paid call
+  useEffect(() => {
+    let heartbeatInterval;
+    if (callStatus === 'connected' && paidSessionId) {
+      heartbeatInterval = setInterval(() => {
+        paidCommunicationClient.sendHeartbeat(paidSessionId);
+      }, 15000);
+    }
+    return () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+    };
+  }, [callStatus, paidSessionId]);
+
+  // Real connection lifecycle: Only transitions to connected upon real socket confirmation or initial connected param
   useEffect(() => {
     if (initialStatus === 'connected') {
       setCallStatus('connected');
-    } else {
-      // Fallback timer — auto-connect after 4.5s if socket hasn't connected
-      const t1 = setTimeout(() => { setCallStatus('ringing'); }, 2000);
-      const t2 = setTimeout(() => { setCallStatus('connected'); }, 4500);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
     }
   }, [initialStatus]);
 
@@ -137,6 +204,9 @@ export default function ActiveCallScreen() {
     if (socket && receiverId) {
       socket.emit('call_ended', { recipientId: receiverId, callSessionId });
     }
+    if (paidSessionId) {
+      paidCommunicationClient.endSession(paidSessionId, 'HANG_UP').catch(() => {});
+    }
     if (router.canGoBack()) {
       router.back();
     } else {
@@ -149,6 +219,27 @@ export default function ActiveCallScreen() {
     const socket = getSocket();
     if (socket && receiverId) {
       socket.emit('call_ended', { recipientId: receiverId, callSessionId });
+    }
+    if (paidSessionId) {
+      try {
+        const ended = await paidCommunicationClient.endSession(paidSessionId, 'HANG_UP');
+        if (ended) {
+          setReceiptData({
+            communicationType: initialCallType ? 'VIDEO' : 'AUDIO',
+            durationSeconds: secondsElapsed,
+            billedMinutes: ended.billedMinutes || billedMinutes,
+            totalCoinsCharged: ended.totalCoinsCharged || coinsCharged,
+            totalCoinsEarned: ended.totalCoinsEarned || coinsEarned,
+            isInitiator,
+            counterpartyName: contactName,
+            endReason: ended.endReason || 'HANG_UP',
+          });
+          setShowReceiptModal(true);
+          return;
+        }
+      } catch (e) {
+        console.warn('[PAID COMM] Failed to end session:', e.message);
+      }
     }
 
     // Save call log to database
@@ -202,12 +293,10 @@ export default function ActiveCallScreen() {
 
       {/* Main Full-Screen Video Feed / Background */}
       <View style={styles.fullScreenVideoWrapper}>
-        {/* Remote Camera Feed Image */}
+        {/* Remote Camera Feed Image / Stream Backdrop */}
         <Image
           source={{
-            uri: isVideo
-              ? 'https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg?w=1080'
-              : avatarUri,
+            uri: avatarUri || 'https://i.pravatar.cc/300?img=12',
           }}
           style={StyleSheet.absoluteFillObject}
           resizeMode="cover"
@@ -244,6 +333,15 @@ export default function ActiveCallScreen() {
                 </>
               )}
             </View>
+            {isPaidCall && callStatus === 'connected' && (
+              <PaidSessionLiveBadge
+                isInitiator={isInitiator}
+                ratePerMinute={ratePerMinute}
+                billedMinutes={billedMinutes}
+                totalCoins={isInitiator ? coinsCharged : coinsEarned}
+                currentBalance={balance}
+              />
+            )}
           </View>
 
           {/* Right Vertical Tool Column (Add Person, Chat, Flip Camera, Magic Filters) */}
@@ -298,7 +396,7 @@ export default function ActiveCallScreen() {
         {isVideo && (
           <View style={styles.pipThumbnailContainer}>
             <Image
-              source={{ uri: 'https://images.pexels.com/photos/1580271/pexels-photo-1580271.jpeg?w=400' }}
+              source={{ uri: 'https://i.pravatar.cc/150?img=60' }}
               style={styles.pipThumbnailImage}
               resizeMode="cover"
             />
@@ -504,8 +602,20 @@ export default function ActiveCallScreen() {
               </TouchableOpacity>
             )}
           </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Paid Communication End-of-Session Financial Receipt Modal */}
+      <PaidSessionReceiptModal
+        visible={showReceiptModal}
+        sessionData={receiptData}
+        onClose={() => {
+          setShowReceiptModal(false);
+          if (router.canGoBack()) router.back();
+          else router.push('/call-logs');
+        }}
+        onViewTransactions={() => {
+          setShowReceiptModal(false);
+          router.push('/transactions');
+        }}
+      />
 
     </View>
   );

@@ -18,10 +18,18 @@ export default function IncomingCallBanner({
   contactName = 'Rahul Kumawat',
   avatarUri = 'https://i.pravatar.cc/150?img=11',
   callType = 'voice',
+  isPaid = false,
+  ratePerMinute = 5,
+  communicationType = 'AUDIO',
   onAccept,
   onDecline,
 }) {
   if (!visible) return null;
+
+  const isMsg = communicationType === 'MESSAGE' || callType === 'message';
+  const isVid = communicationType === 'VIDEO' || callType === 'video';
+  const typeTitle = isMsg ? 'Paid Chat Request' : isVid ? 'Incoming Video Call' : 'Incoming Voice Call';
+  const typeIcon = isMsg ? 'chatbubbles' : isVid ? 'videocam' : 'call';
 
   return (
     <Modal
@@ -38,12 +46,18 @@ export default function IncomingCallBanner({
           />
 
           <View style={styles.infoColumn}>
-            <Text style={styles.callTypeLabel}>
-              {callType === 'video' ? 'Video Call' : 'Voice Call'}
-            </Text>
+            <View style={styles.titleRow}>
+              <Ionicons name={typeIcon} size={14} color="#FF2E63" style={{ marginRight: 4 }} />
+              <Text style={styles.callTypeLabel}>{typeTitle}</Text>
+            </View>
             <Text style={styles.contactName} numberOfLines={1}>
               {contactName}
             </Text>
+            {isPaid && (
+              <Text style={styles.earningBadge}>
+                Earn +{ratePerMinute} Coins / started min
+              </Text>
+            )}
           </View>
 
           <View style={styles.actionsRow}>
@@ -51,12 +65,12 @@ export default function IncomingCallBanner({
               style={[styles.actionButton, styles.declineButton]}
               activeOpacity={0.8}
               onPress={onDecline}
+              accessibilityLabel="Decline incoming request"
             >
               <Ionicons
-                name="call"
+                name="close"
                 size={22}
                 color="#FFFFFF"
-                style={{ transform: [{ rotate: '135deg' }] }}
               />
             </TouchableOpacity>
 
@@ -64,8 +78,9 @@ export default function IncomingCallBanner({
               style={[styles.actionButton, styles.acceptButton]}
               activeOpacity={0.8}
               onPress={onAccept}
+              accessibilityLabel="Accept incoming request"
             >
-              <Ionicons name="call" size={22} color="#FFFFFF" />
+              <Ionicons name={isMsg ? 'checkmark' : 'call'} size={22} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -107,16 +122,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 10,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
   callTypeLabel: {
     fontSize: 12,
     color: '#8E8E93',
-    fontWeight: '500',
-    marginBottom: 2,
+    fontWeight: '600',
   },
   contactName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#000000',
+  },
+  earningBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#10B981',
+    marginTop: 2,
   },
   actionsRow: {
     flexDirection: 'row',

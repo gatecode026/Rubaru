@@ -48,6 +48,13 @@ import ReplyPreviewBar from '../../src/components/common/ReplyPreviewBar';
 import { useTheme } from '../../src/theme';
 import api from '../../src/services/api';
 import { getSocket } from '../../src/services/socket';
+import { usePointsStore } from '../../src/store/pointsStore';
+import paidCommunicationClient from '../../src/services/paidCommunicationService';
+import {
+  PaidCommunicationConfirmModal,
+  PaidSessionLiveBadge,
+  PaidSessionReceiptModal,
+} from '../../src/components/common/PaidCommunicationModal';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || '';
 function getFullUrl(uri) {
@@ -231,11 +238,106 @@ export default function ChatDetailScreen() {
   const timerRef = useRef(null);
   const flatListRef = useRef(null);
 
+  // Paid Communication States
+  const balance = usePointsStore((state) => state.balance);
+  const fetchBalance = usePointsStore((state) => state.fetchBalance);
+  const [showPaidModal, setShowPaidModal] = useState(false);
+  const [paidModalType, setPaidModalType] = useState('MESSAGE'); // 'MESSAGE', 'AUDIO', 'VIDEO'
+  const [isPaidActive, setIsPaidActive] = useState(false);
+  const [activePaidSession, setActivePaidSession] = useState(null);
+  const [billedMinutes, setBilledMinutes] = useState(1);
+  const [coinsCharged, setCoinsCharged] = useState(0);
+  const [coinsEarned, setCoinsEarned] = useState(0);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
+  const [paidLoading, setPaidLoading] = useState(false);
+
   // id = chatId OR userId depending on entry point
   const routeId = params.id;
   const recipientId = params.recipientId; // set when coming from user profile
   const displayName = params.name || 'User';
   const displayAvatar = params.avatarUrl ? getFullUrl(params.avatarUrl) : '';
+
+  const getTargetUserId = () => {
+    if (recipientId) return recipientId;
+    return routeId;
+  };
+
+  const handleOpenPaidConfirm = (type) => {
+    setPaidModalType(type);
+    setShowPaidModal(true);
+    if (fetchBalance) fetchBalance();
+  };
+
+  const handleConfirmPaidSession = async () => {
+    try {
+      setPaidLoading(true);
+      const targetUserId = getTargetUserId();
+      const session = await paidCommunicationClient.initiateSession({
+        receiverId: targetUserId,
+        communicationType: paidModalType,
+        conversationId: activeChatId,
+      });
+
+      setShowPaidModal(false);
+      setPaidLoading(false);
+
+      if (paidModalType === 'AUDIO' || paidModalType === 'VIDEO') {
+        router.push({
+          pathname: '/active-call',
+          params: {
+            contactName: displayName,
+            avatarUri: displayAvatar,
+            receiverId: targetUserId,
+            callType: paidModalType === 'VIDEO' ? 'video' : 'voice',
+            initialStatus: 'calling',
+            isPaid: 'true',
+            paidSessionId: session.sessionId,
+            ratePerMinute: session.ratePerMinuteSnapshot,
+            isInitiator: 'true',
+          },
+        });
+      } else {
+        // Paid Chat Session
+        setActivePaidSession(session);
+        setIsPaidActive(true);
+        setBilledMinutes(1);
+        setCoinsCharged(session.ratePerMinuteSnapshot || 1);
+        if (fetchBalance) fetchBalance();
+      }
+    } catch (err) {
+      setPaidLoading(false);
+      alert(err.response?.data?.error || err.message || 'Failed to initiate paid session');
+    }
+  };
+
+  const handleEndPaidChat = async () => {
+    if (!activePaidSession) {
+      setIsPaidActive(false);
+      return;
+    }
+    try {
+      const ended = await paidCommunicationClient.endSession(activePaidSession.sessionId, 'NORMAL_COMPLETION');
+      setIsPaidActive(false);
+      setReceiptData({
+        communicationType: 'MESSAGE',
+        durationSeconds: (ended?.billedMinutes || billedMinutes) * 60,
+        billedMinutes: ended?.billedMinutes || billedMinutes,
+        totalCoinsCharged: ended?.totalCoinsCharged || coinsCharged,
+        totalCoinsEarned: ended?.totalCoinsEarned || coinsEarned,
+        isInitiator: true,
+        counterpartyName: displayName,
+        endReason: ended?.endReason || 'NORMAL_COMPLETION',
+      });
+      setShowReceiptModal(true);
+      setActivePaidSession(null);
+      if (fetchBalance) fetchBalance();
+    } catch (err) {
+      console.warn('[PAID CHAT] End error:', err.message);
+      setIsPaidActive(false);
+      setActivePaidSession(null);
+    }
+  };
 
   // Load messages from API
   useEffect(() => {
@@ -303,23 +405,24 @@ export default function ChatDetailScreen() {
     const socket = getSocket();
     if (!socket) return;
 
-    // Join the chat room
+    // Join both legacy and V1 chat room
     socket.emit('join_chat', activeChatId);
+    socket.emit('conversation.subscribe', { conversationId: activeChatId });
     console.log('[SOCKET] Joined chat room:', activeChatId);
 
     const onReceiveMessage = (msg) => {
       // Only add if not already in list (avoid duplicates from our own optimistic update)
       setMessages((prev) => {
         const alreadyExists = prev.some(
-          (m) => m.id === msg.id || (m.isSent && m.text === msg.text && !msg.senderId?.toString().includes(myUserId?.toString()))
+          (m) => m.id === (msg.id || msg._id) || (m.isSent && m.text === msg.text && !msg.senderId?.toString().includes(myUserId?.toString()))
         );
         if (alreadyExists) return prev;
         return [
           ...prev,
           {
-            id: msg.id,
+            id: msg.id || msg._id || String(Date.now()),
             type: msg.type || 'text',
-            text: msg.text || '',
+            text: msg.text || msg.content || '',
             attachmentUri: msg.attachmentUri ? getFullUrl(msg.attachmentUri) : '',
             time: new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
             isSent: msg.senderId?.toString() === myUserId?.toString(),
@@ -331,10 +434,13 @@ export default function ChatDetailScreen() {
     };
 
     socket.on('receive_message', onReceiveMessage);
+    socket.on('conversation.message.created', onReceiveMessage);
 
     return () => {
       socket.off('receive_message', onReceiveMessage);
+      socket.off('conversation.message.created', onReceiveMessage);
       socket.emit('leave_chat', activeChatId);
+      socket.emit('conversation.unsubscribe', { conversationId: activeChatId });
       console.log('[SOCKET] Left chat room:', activeChatId);
     };
   }, [activeChatId, myUserId]);
@@ -839,36 +945,31 @@ export default function ChatDetailScreen() {
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity
+              style={[styles.paidChatBtn, isPaidActive && styles.paidChatActiveBtn]}
+              activeOpacity={0.7}
+              onPress={isPaidActive ? handleEndPaidChat : () => handleOpenPaidConfirm('MESSAGE')}
+            >
+              <Ionicons
+                name={isPaidActive ? 'stop-circle' : 'flash'}
+                size={16}
+                color="#FFFFFF"
+                style={{ marginRight: 4 }}
+              />
+              <Text style={styles.paidChatBtnText}>
+                {isPaidActive ? 'End Paid' : 'Paid Chat'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={styles.headerIcon}
               activeOpacity={0.7}
-              onPress={() =>
-                router.push({
-                  pathname: '/active-call',
-                  params: {
-                    contactName: displayName,
-                    avatarUri: displayAvatar,
-                    callType: 'video',
-                    initialStatus: 'calling',
-                  },
-                })
-              }
+              onPress={() => handleOpenPaidConfirm('VIDEO')}
             >
               <Ionicons name="videocam-outline" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.headerIcon}
               activeOpacity={0.7}
-              onPress={() =>
-                router.push({
-                  pathname: '/active-call',
-                  params: {
-                    contactName: displayName,
-                    avatarUri: displayAvatar,
-                    callType: 'voice',
-                    initialStatus: 'calling',
-                  },
-                })
-              }
+              onPress={() => handleOpenPaidConfirm('AUDIO')}
             >
               <Ionicons name="call-outline" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
@@ -890,6 +991,19 @@ export default function ChatDetailScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* In-Chat Paid Session Live Status Bar */}
+        {isPaidActive && (
+          <View style={styles.paidChatBanner}>
+            <PaidSessionLiveBadge
+              isInitiator={true}
+              ratePerMinute={activePaidSession?.ratePerMinuteSnapshot || 1}
+              billedMinutes={billedMinutes}
+              totalCoins={coinsCharged}
+              currentBalance={balance}
+            />
+          </View>
+        )}
 
         {/* Message Thread */}
         <KeyboardAvoidingView
@@ -1042,11 +1156,57 @@ export default function ChatDetailScreen() {
         }}
         poll={selectedPollForResults}
       />
+
+      {/* Paid Communication Initiation Confirmation Modal */}
+      <PaidCommunicationConfirmModal
+        visible={showPaidModal}
+        communicationType={paidModalType}
+        ratePerMinute={paidModalType === 'VIDEO' ? 10 : paidModalType === 'AUDIO' ? 5 : 1}
+        currentBalance={balance}
+        recipientName={displayName}
+        onConfirm={handleConfirmPaidSession}
+        onCancel={() => setShowPaidModal(false)}
+        loading={paidLoading}
+      />
+
+      {/* Paid Communication Receipt Modal */}
+      <PaidSessionReceiptModal
+        visible={showReceiptModal}
+        sessionData={receiptData}
+        onClose={() => setShowReceiptModal(false)}
+        onViewTransactions={() => {
+          setShowReceiptModal(false);
+          router.push('/transactions');
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  paidChatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF2E63',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 4,
+  },
+  paidChatActiveBtn: {
+    backgroundColor: '#EF4444',
+  },
+  paidChatBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  paidChatBanner: {
+    backgroundColor: 'rgba(255, 46, 99, 0.08)',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 46, 99, 0.2)',
+  },
   safeContainer: {
     flex: 1,
     backgroundColor: '#FFF5F5',
