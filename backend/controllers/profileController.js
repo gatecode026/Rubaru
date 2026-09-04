@@ -5,6 +5,7 @@ const Notification = require('../models/Notification');
 const Content = require('../models/Content');
 const Match = require('../models/Match');
 const FollowRelationship = require('../models/FollowRelationship');
+const imagekitService = require('../services/imagekitService');
 
 /**
  * Enrich profile with live dynamic stats:
@@ -203,7 +204,19 @@ const editProfile = async (req, res) => {
     if (req.body.removeAvatar === 'true' || req.body.removeAvatar === true) {
       profile.avatarUri = 'https://i.pravatar.cc/150?img=60';
     } else if (req.files && req.files.avatar && req.files.avatar.length > 0) {
-      profile.avatarUri = `/uploads/images/${req.files.avatar[0].filename}`;
+      try {
+        const avatarFile = req.files.avatar[0];
+        const uploadedAvatar = await imagekitService.uploadLocalFile(
+          avatarFile.path,
+          avatarFile.filename,
+          imagekitService.FOLDERS.AVATARS,
+          ['avatar', req.user._id.toString()]
+        );
+        profile.avatarUri = uploadedAvatar.url;
+      } catch (avatarErr) {
+        console.warn('[PROFILE AVATAR IMAGEKIT FALLBACK]', avatarErr.message);
+        profile.avatarUri = `/uploads/images/${req.files.avatar[0].filename}`;
+      }
     }
 
     // Handle existing photos
@@ -216,8 +229,23 @@ const editProfile = async (req, res) => {
     }
 
     // Handle multiple photos upload
-    if (req.files && req.files.photos) {
-      const photoUrls = req.files.photos.map(file => `/uploads/images/${file.filename}`);
+    if (req.files && req.files.photos && req.files.photos.length > 0) {
+      const photoUrls = await Promise.all(
+        req.files.photos.map(async (file) => {
+          try {
+            const uploadedPhoto = await imagekitService.uploadLocalFile(
+              file.path,
+              file.filename,
+              imagekitService.FOLDERS.PHOTOS,
+              ['photo', req.user._id.toString()]
+            );
+            return uploadedPhoto.url;
+          } catch (photoErr) {
+            console.warn('[PROFILE PHOTO IMAGEKIT FALLBACK]', photoErr.message);
+            return `/uploads/images/${file.filename}`;
+          }
+        })
+      );
       profile.photos = [...(Array.isArray(profile.photos) ? profile.photos : []), ...photoUrls];
     }
 
