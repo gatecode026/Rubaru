@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import OnboardingScreen from '@screens/OnboardingScreen';
 import api from '../src/services/api';
+import storage from '../src/services/storage';
+import { connectSocket } from '../src/services/socket';
 
 export default function Index() {
   const router = useRouter();
@@ -12,24 +13,112 @@ export default function Index() {
 
   useEffect(() => {
     let isMounted = true;
-    const checkAuth = async () => {
+
+    const verifySession = async () => {
       try {
-        const token = await AsyncStorage.getItem('userToken');
-        if (token && isMounted) {
-          api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          setIsAuthenticated(true);
-          router.replace('/(tabs)');
+        const token = await storage.getToken();
+
+        // If no token exists, user is NOT signed up / not logged in
+        if (!token) {
+          if (isMounted) {
+            setIsAuthenticated(false);
+            setCheckingAuth(false);
+          }
           return;
         }
+
+        try {
+          // Verify with backend database
+          const response = await api.get('/auth/me', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const userData = response.data;
+
+          if (!isMounted) return;
+
+          // Check 1: Must be verified (isActive === true)
+          if (!userData.isActive) {
+            console.log('[AUTH CHECK] User is unverified, routing to OTP verification');
+            setCheckingAuth(false);
+            router.replace({
+              pathname: '/otp-verification',
+              params: {
+                email: userData.email || undefined,
+                phone: userData.phone || undefined,
+              },
+            });
+            return;
+          }
+
+          // Check 2: Must have completed profile setup
+          if (!userData.isProfileSetup) {
+            console.log('[AUTH CHECK] Profile setup incomplete, routing to profile-details');
+            setCheckingAuth(false);
+            router.replace({
+              pathname: '/profile-details',
+              params: { token },
+            });
+            return;
+          }
+
+          // Fully authenticated & verified user
+          await storage.saveSession(token, userData);
+          try {
+            connectSocket(token);
+          } catch (sockErr) {
+            console.warn('[AUTH CHECK SOCKET WARNING]', sockErr.message);
+          }
+          setIsAuthenticated(true);
+          setCheckingAuth(false);
+          router.replace('/(tabs)');
+        } catch (apiErr) {
+          console.log('[AUTH CHECK VERIFY ERROR]', apiErr.response?.status, apiErr.message);
+
+          // If token is invalid or user was removed from DB, wipe token and require sign up
+          if (apiErr.response?.status === 401 || apiErr.response?.status === 404) {
+            await storage.clearSession();
+            if (isMounted) {
+              setIsAuthenticated(false);
+              setCheckingAuth(false);
+            }
+          } else {
+            // Network failure / offline: check cached user session
+            try {
+              const cachedUser = await storage.getUser();
+              if (cachedUser && cachedUser.isActive && cachedUser.isProfileSetup) {
+                try {
+                  connectSocket(token);
+                } catch (_) {}
+                if (isMounted) {
+                  setIsAuthenticated(true);
+                  setCheckingAuth(false);
+                  router.replace('/(tabs)');
+                }
+              } else {
+                if (isMounted) {
+                  setIsAuthenticated(false);
+                  setCheckingAuth(false);
+                }
+              }
+            } catch (_) {
+              if (isMounted) {
+                setIsAuthenticated(false);
+                setCheckingAuth(false);
+              }
+            }
+          }
+        }
       } catch (err) {
-        console.log('[AUTH CHECK ERROR]', err);
-      } finally {
+        console.log('[AUTH CHECK UNEXPECTED ERROR]', err?.stack || err?.message || err);
         if (isMounted) {
+          setIsAuthenticated(false);
           setCheckingAuth(false);
         }
       }
     };
-    checkAuth();
+
+    verifySession();
+
     return () => {
       isMounted = false;
     };

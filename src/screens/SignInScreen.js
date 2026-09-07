@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import api from '@services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from '@services/storage';
 import { connectSocket } from '@services/socket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -61,8 +62,8 @@ export default function SignInScreen() {
 
       const { token, isProfileSetup } = response.data;
 
-      // Store JWT token
-      await AsyncStorage.setItem('userToken', token);
+      // Store persistent session
+      await storage.saveSession(token, response.data);
 
       // Set headers for all future requests
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -81,6 +82,17 @@ export default function SignInScreen() {
     } catch (error) {
       setLoading(false);
       console.error(error);
+      if (error.response?.data?.unverified) {
+        alert(error.response.data.message || 'Please verify your OTP code to activate your account.');
+        router.push({
+          pathname: '/otp-verification',
+          params: {
+            email: activeTab === 'email' ? email.trim().toLowerCase() : undefined,
+            phone: activeTab === 'phone' ? phone.trim() : undefined,
+          },
+        });
+        return;
+      }
       const errMsg = error.response?.data?.message || 'Invalid email or password. Please try again.';
       alert(errMsg);
     }

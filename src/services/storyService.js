@@ -67,6 +67,24 @@ export const storyService = {
     const res = await api.delete(`/v1/stories/${storyId}`);
     return res.data;
   },
+
+  /**
+   * Like a story
+   * @param {string} storyId
+   */
+  likeStory: async (storyId) => {
+    const res = await api.post(`/v1/content/${storyId}/like`);
+    return res.data;
+  },
+
+  /**
+   * Unlike a story
+   * @param {string} storyId
+   */
+  unlikeStory: async (storyId) => {
+    const res = await api.delete(`/v1/content/${storyId}/like`);
+    return res.data;
+  },
 };
 
 export default storyService;

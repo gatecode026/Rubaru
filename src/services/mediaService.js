@@ -98,7 +98,12 @@ export const mediaService = {
       name: filename,
       type,
     });
-    formData.append('purpose', purpose);
+    let normalizedPurpose = purpose;
+    if (normalizedPurpose === 'STORY') normalizedPurpose = 'STORY_MEDIA';
+    if (normalizedPurpose === 'REEL') normalizedPurpose = 'REEL_VIDEO';
+    if (normalizedPurpose === 'POST') normalizedPurpose = 'POST_MEDIA';
+
+    formData.append('purpose', normalizedPurpose);
 
     const res = await api.post('/v1/media/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

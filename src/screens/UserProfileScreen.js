@@ -38,6 +38,7 @@ import followService from '@services/followService';
 import reelService from '@services/reelService';
 import interactionService from '@services/interactionService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from '@services/storage';
 import { getSocket, disconnectSocket } from '@services/socket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -122,7 +123,8 @@ export default function UserProfileScreen() {
   const isOwnProfile = Boolean(
     !params.userId ||
     (currentUserId && String(params.userId) === String(currentUserId)) ||
-    (currentUserId && profile?.user?._id && String(profile.user._id) === String(currentUserId))
+    (currentUserId && profile?.user?._id && String(profile.user._id) === String(currentUserId)) ||
+    (currentUserId && profile?.user && String(profile.user) === String(currentUserId))
   );
 
   const scrollOffsetRef = useRef(0);
@@ -270,11 +272,13 @@ export default function UserProfileScreen() {
         } catch (e) {}
       }
 
-      const isTargetingOther = Boolean(params.userId && myId && String(params.userId) !== String(myId));
+      const rawTargetId = params.userId;
+      const isValidTargetId = rawTargetId && /^[0-9a-fA-F]{24}$/.test(String(rawTargetId));
+      const isTargetingOther = Boolean(isValidTargetId && myId && String(rawTargetId) !== String(myId));
 
       let response;
       if (isTargetingOther) {
-        response = await api.get(`/profiles/${params.userId}`);
+        response = await api.get(`/profiles/${rawTargetId}`);
       } else {
         response = await api.get('/profiles/me');
       }
@@ -284,7 +288,7 @@ export default function UserProfileScreen() {
       // Check follow status if viewing someone else
       if (isTargetingOther) {
         try {
-          const followStatusRes = await followService.getFollowStatus(params.userId);
+          const followStatusRes = await followService.getFollowStatus(rawTargetId);
           const status = followStatusRes.status || followStatusRes.data?.status;
           setIsFollowing(status === 'ACCEPTED');
         } catch (fErr) {
@@ -320,14 +324,18 @@ export default function UserProfileScreen() {
   };
 
   const handleFollowToggle = async () => {
-    if (!params.userId || isOwnProfile) return;
+    const targetId = params.userId || profile?.user?._id || profile?.user;
+    if (!targetId || !/^[0-9a-fA-F]{24}$/.test(String(targetId)) || isOwnProfile) {
+      console.warn('[FOLLOW] Cannot follow invalid or own user ID:', targetId);
+      return;
+    }
     const prev = isFollowing;
     setIsFollowing(!prev);
     try {
       if (prev) {
-        await followService.unfollowUser(params.userId);
+        await followService.unfollowUser(targetId);
       } else {
-        await followService.followUser(params.userId);
+        await followService.followUser(targetId);
       }
     } catch (err) {
       console.log('[FOLLOW TOGGLE ERROR]', err.message);
@@ -509,6 +517,41 @@ export default function UserProfileScreen() {
     return age;
   };
 
+  const formatPhoneDisplay = (phone) => {
+    if (!phone) return 'Not shared';
+    const raw = String(phone).trim();
+    const digitsOnly = raw.replace(/\D/g, '');
+    if (digitsOnly.length === 10) {
+      return `+91 ${digitsOnly.slice(0, 5)} ${digitsOnly.slice(5)}`;
+    }
+    if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
+      const num = digitsOnly.slice(2);
+      return `+91 ${num.slice(0, 5)} ${num.slice(5)}`;
+    }
+    return raw;
+  };
+
+  const getInterestBadge = (interestName) => {
+    const map = {
+      shopping: { emoji: '🛍️', icon: 'bag-handle-outline' },
+      run: { emoji: '🏃', icon: 'walk-outline' },
+      traveling: { emoji: '✈️', icon: 'airplane-outline' },
+      tennis: { emoji: '🎾', icon: 'tennisball-outline' },
+      photography: { emoji: '📸', icon: 'camera-outline' },
+      yoga: { emoji: '🧘', icon: 'flower-outline' },
+      cooking: { emoji: '🍳', icon: 'restaurant-outline' },
+      swimming: { emoji: '🏊', icon: 'water-outline' },
+      art: { emoji: '🎨', icon: 'color-palette-outline' },
+      music: { emoji: '🎵', icon: 'musical-notes-outline' },
+      karaoke: { emoji: '🎤', icon: 'mic-outline' },
+      extreme: { emoji: '⚡', icon: 'diamond-outline' },
+      drink: { emoji: '🍷', icon: 'wine-outline' },
+      videogames: { emoji: '🎮', icon: 'game-controller-outline' },
+    };
+    const key = String(interestName).toLowerCase().replace(/\s+/g, '');
+    return map[key] || { emoji: '✨', icon: 'heart-outline' };
+  };
+
   // Swipe-to-dismiss & Tap-to-dismiss for Settings Bottom Sheet Handle
   const handlePanResponder = useRef(
     PanResponder.create({
@@ -683,11 +726,16 @@ export default function UserProfileScreen() {
                 <Pressable
                   style={({ pressed }) => [styles.actionPill, pressed && styles.buttonPressed]}
                   onPress={() => {
+                    const recipientId = params.userId || profile?.user?._id || profile?.user;
+                    if (!recipientId || !/^[0-9a-fA-F]{24}$/.test(String(recipientId))) {
+                      alert('Cannot start chat: Invalid user');
+                      return;
+                    }
                     // Open or create a private chat with this user
                     router.push({
-                      pathname: `/chat/${params.userId}`,
+                      pathname: `/chat/${recipientId}`,
                       params: {
-                        recipientId: params.userId,
+                        recipientId: String(recipientId),
                         name: profile?.displayName || 'User',
                         avatarUrl: profile?.avatarUri || '',
                       },
@@ -699,16 +747,23 @@ export default function UserProfileScreen() {
 
                 <Pressable
                   style={({ pressed }) => [styles.actionPill, pressed && styles.buttonPressed]}
-                  onPress={() => router.push({
-                    pathname: '/active-call',
-                    params: {
-                      contactName: profile?.displayName || 'User',
-                      avatarUri: profile?.avatarUri || '',
-                      callType: 'voice',
-                      receiverId: params.userId,
-                      initialStatus: 'calling',
-                    },
-                  })}
+                  onPress={() => {
+                    const callRecipientId = params.userId || profile?.user?._id || profile?.user;
+                    if (!callRecipientId || !/^[0-9a-fA-F]{24}$/.test(String(callRecipientId))) {
+                      alert('Cannot start call: Invalid user');
+                      return;
+                    }
+                    router.push({
+                      pathname: '/active-call',
+                      params: {
+                        contactName: profile?.displayName || 'User',
+                        avatarUri: profile?.avatarUri || '',
+                        callType: 'voice',
+                        receiverId: String(callRecipientId),
+                        initialStatus: 'calling',
+                      },
+                    });
+                  }}
                 >
                   <Text style={styles.actionPillText}>{t('call', 'Call')}</Text>
                 </Pressable>
@@ -947,14 +1002,20 @@ export default function UserProfileScreen() {
             })() : (
               /* Inline About Me Content */
               <View style={styles.aboutMeInlineContainer}>
-                {/* 2. Bio Quote Card */}
-                <QuoteCard
-                  quoteStart={profile?.bio || 'Hello, I am new on Rubaru!'}
-                  quoteEmphasis=""
-                  width={SCREEN_WIDTH - 36}
-                />
+                {/* 1. Bio Quote / Editorial Card (if present) */}
+                {profile?.bio ? (
+                  <View style={styles.modernBioCard}>
+                    <View style={styles.bioCardHeaderRow}>
+                      <View style={styles.bioSparkleBadge}>
+                        <Ionicons name="sparkles" size={11} color="#FF2E63" />
+                        <Text style={styles.bioSparkleText}>BIO & VIBE</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.modernBioQuoteText}>"{profile.bio}"</Text>
+                  </View>
+                ) : null}
 
-                {/* 3. Stats Bar - Dynamic Likes, Connections, and Profile Views */}
+                {/* 2. Stats Bar - Dynamic Likes, Connections, and Profile Views */}
                 <StatsBar
                   likes={profile?.likesCount !== undefined ? profile.likesCount : (profile?.followersCount || 0)}
                   connections={profile?.connectionsCount !== undefined ? profile.connectionsCount : (profile?.followingCount || 0)}
@@ -970,29 +1031,95 @@ export default function UserProfileScreen() {
                   }}
                 />
 
-                {/* 4. About Section */}
+                {/* 3. Unified Profile Details Card (Replaces the 4 isolated red boxes) */}
                 <View style={styles.aboutSectionContainer}>
-                  <View style={styles.aboutTitleRow}>
-                    <Text style={styles.aboutSerifTitle}>{t('about', 'About')}</Text>
-                    <View style={styles.dashedAccentRow}>
-                      <View style={styles.dashLine} />
-                      <View style={styles.dashDot} />
+                  <View style={styles.aboutSectionHeaderRow}>
+                    <View style={styles.aboutSectionTitleWrap}>
+                      <View style={[styles.aboutSectionIconCircle, { backgroundColor: '#FFF0F3' }]}>
+                        <Ionicons name="person" size={13} color="#FF2E63" />
+                      </View>
+                      <Text style={styles.aboutSectionTitle}>{t('about', 'Profile Details')}</Text>
                     </View>
+                    {!params.userId && (
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => router.push('/edit-profile')}
+                        style={styles.aboutSectionSmallActionBtn}
+                      >
+                        <Ionicons name="pencil" size={12} color="#FF2E63" style={{ marginRight: 3 }} />
+                        <Text style={styles.aboutSectionSmallActionText}>Edit</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
-                  <View style={styles.detailsGrid}>
-                    <InfoPill icon="gift-outline" label={`${getAge(profile?.dateOfBirth)} Yrs`} />
-                    <InfoPill icon="transgender-outline" label={profile?.gender || 'N/A'} />
-                    <InfoPill icon="location-outline" label={profile?.locationName || 'India'} />
-                    <InfoPill icon="call-outline" label={profile?.user?.phone || 'N/A'}  />
+
+                  <View style={styles.unifiedDetailsCard}>
+                    {/* Row 1: Age & Gender */}
+                    <View style={styles.detailsMatrixRow}>
+                      <View style={styles.matrixCell}>
+                        <View style={[styles.matrixIconCircle, { backgroundColor: '#FFF0F3' }]}>
+                          <Ionicons name="calendar-outline" size={18} color="#FF2E63" />
+                        </View>
+                        <View style={styles.matrixTextWrap}>
+                          <Text style={styles.matrixLabel}>AGE</Text>
+                          <Text style={styles.matrixValue}>{getAge(profile?.dateOfBirth)} Yrs</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.matrixVerticalDivider} />
+
+                      <View style={styles.matrixCell}>
+                        <View style={[styles.matrixIconCircle, { backgroundColor: '#F5F3FF' }]}>
+                          <Ionicons name="transgender-outline" size={18} color="#8B5CF6" />
+                        </View>
+                        <View style={styles.matrixTextWrap}>
+                          <Text style={styles.matrixLabel}>GENDER</Text>
+                          <Text style={styles.matrixValue}>{profile?.gender || 'Not specified'}</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Hairline Horizontal Divider */}
+                    <View style={styles.matrixHorizontalDivider} />
+
+                    {/* Row 2: Location & Contact */}
+                    <View style={styles.detailsMatrixRow}>
+                      <View style={styles.matrixCell}>
+                        <View style={[styles.matrixIconCircle, { backgroundColor: '#FFFBEB' }]}>
+                          <Ionicons name="location-outline" size={18} color="#F59E0B" />
+                        </View>
+                        <View style={styles.matrixTextWrap}>
+                          <Text style={styles.matrixLabel}>LOCATION</Text>
+                          <Text style={styles.matrixValue} numberOfLines={1}>
+                            {profile?.locationName || 'Jaipur, India'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.matrixVerticalDivider} />
+
+                      <View style={styles.matrixCell}>
+                        <View style={[styles.matrixIconCircle, { backgroundColor: '#ECFDF5' }]}>
+                          <Ionicons name="call-outline" size={18} color="#10B981" />
+                        </View>
+                        <View style={styles.matrixTextWrap}>
+                          <Text style={styles.matrixLabel}>CONTACT</Text>
+                          <Text style={styles.matrixValue} numberOfLines={1}>
+                            {formatPhoneDisplay(profile?.user?.phone || profile?.phone)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
                   </View>
                 </View>
 
-                {/* 5. Short Videos & Reels Section (Instagram Reference) */}
+                {/* 4. Short Videos & Reels Section */}
                 <View style={styles.aboutSectionContainer}>
-                  <View style={styles.momentsHeaderRow}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Ionicons name="videocam" size={20} color="#FF2E63" style={{ marginRight: 8 }} />
-                      <Text style={styles.aboutSerifTitle}>Short Videos & Reels</Text>
+                  <View style={styles.aboutSectionHeaderRow}>
+                    <View style={styles.aboutSectionTitleWrap}>
+                      <View style={[styles.aboutSectionIconCircle, { backgroundColor: '#FFF0F5' }]}>
+                        <Ionicons name="videocam" size={13} color="#FF2E63" />
+                      </View>
+                      <Text style={styles.aboutSectionTitle}>Short Videos & Reels</Text>
                       {userReels.length > 0 && (
                         <View style={styles.reelsCountBadge}>
                           <Text style={styles.reelsCountBadgeText}>{userReels.length}</Text>
@@ -1001,12 +1128,19 @@ export default function UserProfileScreen() {
                     </View>
                     {!params.userId && (
                       <TouchableOpacity
-                        activeOpacity={0.8}
+                        activeOpacity={0.85}
                         onPress={handleOpenCreateOptions}
-                        style={styles.createReelSmallBtn}
+                        style={styles.gradientCreateWrapper}
                       >
-                        <Ionicons name="add" size={15} color="#FFFFFF" style={{ marginRight: 2 }} />
-                        <Text style={styles.createReelSmallText}>Create</Text>
+                        <LinearGradient
+                          colors={['#FF2E63', '#FF5E7E']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.gradientCreateBtn}
+                        >
+                          <Ionicons name="add" size={14} color="#FFFFFF" style={{ marginRight: 2 }} />
+                          <Text style={styles.gradientCreateBtnText}>Create</Text>
+                        </LinearGradient>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -1074,45 +1208,51 @@ export default function UserProfileScreen() {
                     </ScrollView>
                   ) : (
                     <TouchableOpacity
-                      activeOpacity={0.8}
+                      activeOpacity={0.85}
                       onPress={() => !params.userId && handleOpenCreateOptions()}
-                      style={styles.emptyReelBanner}
+                      style={styles.modernStudioBanner}
                     >
-                      <View style={styles.emptyReelIconCircle}>
-                        <Ionicons name="film-outline" size={24} color="#FF2E63" />
+                      <View style={styles.studioIconCircle}>
+                        <Ionicons name="film" size={22} color="#FF2E63" />
                       </View>
-                      <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text style={styles.emptyReelBannerTitle}>
-                          {params.userId
-                            ? 'No short videos posted yet'
-                            : 'Upload your first short video'}
+                      <View style={{ flex: 1, marginLeft: 14 }}>
+                        <Text style={styles.studioBannerTitle}>
+                          {params.userId ? 'No short videos yet' : 'Creator Showcase'}
                         </Text>
-                        <Text style={styles.emptyReelBannerSubtitle}>
-                          {params.userId
-                            ? 'Check back later for new reels'
-                            : 'Share short video clips to showcase on your profile'}
+                        <Text style={styles.studioBannerSubtitle}>
+                          {params.userId ? 'Check back soon for creative clips' : 'Share 15s short clips to express your vibe'}
                         </Text>
                       </View>
                       {!params.userId && (
-                        <View style={styles.addReelPillSmall}>
-                          <Text style={styles.addReelPillSmallText}>+ Add</Text>
+                        <View style={styles.studioActionBtn}>
+                          <Text style={styles.studioActionText}>+ Upload</Text>
                         </View>
                       )}
                     </TouchableOpacity>
                   )}
                 </View>
 
-                {/* 6. Captured Moments Section */}
+                {/* 5. Captured Moments Section */}
                 <View style={styles.aboutSectionContainer}>
-                  <View style={styles.momentsHeaderRow}>
-                    <Text style={styles.aboutSerifTitle}>{t('capturedMoments', 'Captured Moments')}</Text>
+                  <View style={styles.aboutSectionHeaderRow}>
+                    <View style={styles.aboutSectionTitleWrap}>
+                      <View style={[styles.aboutSectionIconCircle, { backgroundColor: '#FFF0F5' }]}>
+                        <Ionicons name="images" size={13} color="#FF2E63" />
+                      </View>
+                      <Text style={styles.aboutSectionTitle}>{t('capturedMoments', 'Captured Moments')}</Text>
+                    </View>
                     {!params.userId && (
-                      <Pressable onPress={() => router.push('/edit-profile')} style={styles.viewAllBtn}>
-                        <Text style={styles.viewAllText}>{t('viewAll', 'View All')}</Text>
-                        <Ionicons name="chevron-forward" size={14} color="#F04452" style={{ marginLeft: 2 }} />
-                      </Pressable>
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => router.push('/edit-profile')}
+                        style={styles.aboutSectionSmallActionBtn}
+                      >
+                        <Text style={styles.aboutSectionSmallActionText}>{t('viewAll', 'View All')}</Text>
+                        <Ionicons name="chevron-forward" size={12} color="#FF2E63" style={{ marginLeft: 2 }} />
+                      </TouchableOpacity>
                     )}
                   </View>
+
                   {((profile?.photosDetailed && profile.photosDetailed.length > 0) || (profile?.photos && profile.photos.length > 0)) ? (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.momentsScrollContent}>
                       {(profile?.photosDetailed && profile.photosDetailed.length > 0 ? profile.photosDetailed : profile.photos).map((photo, index) => (
@@ -1125,45 +1265,87 @@ export default function UserProfileScreen() {
                       ))}
                     </ScrollView>
                   ) : (
-                    <Pressable
+                    <TouchableOpacity
+                      activeOpacity={0.85}
                       onPress={() => !params.userId && router.push('/edit-profile')}
-                      style={styles.emptyInterestsContainer}
+                      style={styles.modernStudioBanner}
                     >
-                      <Ionicons name="image-outline" size={20} color="#FF2E63" />
-                      <Text style={styles.emptyInterestsText}>
-                        {params.userId
-                          ? 'No photos shared yet'
-                          : 'Add photos to showcase your moments'}
-                      </Text>
-                    </Pressable>
+                      <View style={[styles.studioIconCircle, { backgroundColor: '#FFF0F3' }]}>
+                        <Ionicons name="camera" size={22} color="#FF2E63" />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 14 }}>
+                        <Text style={styles.studioBannerTitle}>
+                          {params.userId ? 'No photos shared yet' : 'Photo Gallery'}
+                        </Text>
+                        <Text style={styles.studioBannerSubtitle}>
+                          {params.userId ? 'Photos will appear here once uploaded' : 'Showcase your best candid moments & trips'}
+                        </Text>
+                      </View>
+                      {!params.userId && (
+                        <View style={styles.studioActionBtn}>
+                          <Text style={styles.studioActionText}>+ Add</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
                   )}
                 </View>
 
-                {/* 7. Things I Love Section */}
+                {/* 6. Things I Love Section */}
                 <View style={styles.aboutSectionContainer}>
-                  <Text style={[styles.aboutSerifTitle, { marginBottom: 14 }]}>{t('thingsILove', 'Things I Love')}</Text>
+                  <View style={styles.aboutSectionHeaderRow}>
+                    <View style={styles.aboutSectionTitleWrap}>
+                      <View style={[styles.aboutSectionIconCircle, { backgroundColor: '#FFF1F2' }]}>
+                        <Ionicons name="heart" size={13} color="#FF2E63" />
+                      </View>
+                      <Text style={styles.aboutSectionTitle}>{t('thingsILove', 'Things I Love')}</Text>
+                    </View>
+                    {!params.userId && (
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => router.push('/edit-profile')}
+                        style={styles.aboutSectionSmallActionBtn}
+                      >
+                        <Ionicons name="pencil" size={12} color="#FF2E63" style={{ marginRight: 3 }} />
+                        <Text style={styles.aboutSectionSmallActionText}>Edit</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
                   {profile?.interests && profile.interests.length > 0 ? (
-                    <View style={styles.interestsWrappedGrid}>
+                    <View style={styles.passionsTagCloud}>
                       {profile.interests.map((interest, index) => {
-                        const matchingInterest = ALL_INTERESTS.find(i => i.name.toLowerCase() === interest.toLowerCase());
-                        const icon = matchingInterest ? matchingInterest.icon : 'heart-outline';
+                        const badge = getInterestBadge(interest);
                         return (
-                          <InterestPill key={index} icon={icon} label={interest} />
+                          <View key={index} style={styles.passionPillChip}>
+                            <Text style={styles.passionEmoji}>{badge.emoji}</Text>
+                            <Text style={styles.passionLabel}>{interest}</Text>
+                          </View>
                         );
                       })}
                     </View>
                   ) : (
-                    <Pressable
+                    <TouchableOpacity
+                      activeOpacity={0.85}
                       onPress={() => !params.userId && router.push('/edit-profile')}
-                      style={styles.emptyInterestsContainer}
+                      style={styles.modernStudioBanner}
                     >
-                      <Ionicons name={params.userId ? 'heart-outline' : 'add-circle-outline'} size={20} color="#FF2E63" />
-                      <Text style={styles.emptyInterestsText}>
-                        {params.userId
-                          ? `${profile?.displayName?.split(' ')[0] || 'This user'} hasn't added interests yet`
-                          : 'Add interests to show what you love'}
-                      </Text>
-                    </Pressable>
+                      <View style={[styles.studioIconCircle, { backgroundColor: '#FFF0F5' }]}>
+                        <Ionicons name="heart-outline" size={22} color="#FF2E63" />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 14 }}>
+                        <Text style={styles.studioBannerTitle}>
+                          {params.userId ? 'No interests listed' : 'Share Your Passions'}
+                        </Text>
+                        <Text style={styles.studioBannerSubtitle}>
+                          {params.userId ? 'Passions help find common vibes' : 'Add hobbies, music, and vibes you love'}
+                        </Text>
+                      </View>
+                      {!params.userId && (
+                        <View style={styles.studioActionBtn}>
+                          <Text style={styles.studioActionText}>+ Add</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
                   )}
                 </View>
               </View>
@@ -1400,7 +1582,7 @@ export default function UserProfileScreen() {
                 onPress={async () => {
                   setShowSettingsModal(false);
                   try {
-                    await AsyncStorage.removeItem('userToken');
+                    await storage.clearSession();
                     disconnectSocket();
                     router.replace('/sign-in');
                   } catch (e) {
@@ -2643,66 +2825,247 @@ const styles = StyleSheet.create({
   },
   aboutMeInlineContainer: {
     paddingHorizontal: 4,
-    marginTop: 45,
+    marginTop: 14,
+    marginBottom: 32,
+  },
+  modernBioCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    marginBottom: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(243, 244, 246, 0.9)',
+  },
+  bioCardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  bioSparkleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 46, 99, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    gap: 4,
+  },
+  bioSparkleText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FF2E63',
+    letterSpacing: 0.8,
+  },
+  modernBioQuoteText: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 22,
+    fontWeight: '500',
+    fontStyle: 'italic',
   },
   aboutSectionContainer: {
-    marginBottom: 20,
+    marginBottom: 22,
   },
-  aboutTitleRow: {
+  aboutSectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  aboutSerifTitle: {
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    fontSize: 20,
-    fontWeight: '700',
+  aboutSectionTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  aboutSectionIconCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  aboutSectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
     color: '#111827',
+    letterSpacing: -0.2,
   },
-  dashedAccentRow: {
+  aboutSectionSmallActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 12,
-    marginTop: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
-  dashLine: {
-    width: 30,
-    height: 1.5,
-    backgroundColor: '#F4A9B5',
-  },
-  dashDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#F04452',
-    marginLeft: 3,
-  },
-  detailsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  momentsHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  viewAllBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  viewAllText: {
+  aboutSectionSmallActionText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#F04452',
+    color: '#FF2E63',
+  },
+  gradientCreateWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  gradientCreateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  gradientCreateBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  unifiedDetailsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(243, 244, 246, 0.9)',
+  },
+  detailsMatrixRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+  },
+  matrixCell: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  matrixIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  matrixTextWrap: {
+    flex: 1,
+  },
+  matrixLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#9CA3AF',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  matrixValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  matrixVerticalDivider: {
+    width: 1,
+    height: 36,
+    backgroundColor: '#F3F4F6',
+    marginHorizontal: 4,
+  },
+  matrixHorizontalDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginVertical: 8,
+  },
+  modernStudioBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(243, 244, 246, 0.9)',
+  },
+  studioIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF0F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  studioBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  studioBannerSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  studioActionBtn: {
+    backgroundColor: '#FFF0F3',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 46, 99, 0.15)',
+  },
+  studioActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FF2E63',
+  },
+  passionsTagCloud: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 2,
+  },
+  passionPillChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  passionEmoji: {
+    fontSize: 15,
+    marginRight: 7,
+  },
+  passionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
   },
   momentsScrollContent: {
     paddingRight: 10,
-  },
-  interestsWrappedGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
   },
   emptyInterestsContainer: {
     flexDirection: 'row',
