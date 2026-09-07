@@ -7,12 +7,14 @@ const {
   login,
   profileSetup,
   setPassword,
+  getMe,
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
 const router = express.Router();
 
+router.get('/me', protect, getMe);
 router.post('/register-email', registerEmail);
 router.post('/register-phone', registerPhone);
 router.post('/register', register);

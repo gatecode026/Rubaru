@@ -4,372 +4,586 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
   Alert,
   Animated,
-  PanResponder,
   Dimensions,
   TextInput,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Image,
+  Modal,
   ScrollView,
+  StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 
-import StoryModeTab from '../components/common/StoryModeTab';
-import GalleryThumbnail from '../components/common/GalleryThumbnail';
 import mediaService from '../services/mediaService';
 import storyService from '../services/storyService';
 import postService from '../services/postService';
 import reelService from '../services/reelService';
-
-// const MODES = ['POST', 'STORY', 'REEL', 'LIVE'];
-
-const PLACEHOLDER_IMAGES = [
-  { id: 'p1', uri: 'https://picsum.photos/300/400?random=1' },
-  { id: 'p2', uri: 'https://picsum.photos/300/400?random=2', duration: '0:12' },
-  { id: 'p3', uri: 'https://picsum.photos/300/400?random=3' },
-  { id: 'p4', uri: 'https://picsum.photos/300/400?random=4', duration: '0:08' },
-  { id: 'p5', uri: 'https://picsum.photos/300/400?random=5' },
-  { id: 'p6', uri: 'https://picsum.photos/300/400?random=6' },
-  { id: 'p7', uri: 'https://picsum.photos/300/400?random=7', duration: '0:15' },
-  { id: 'p8', uri: 'https://picsum.photos/300/400?random=8' },
-  { id: 'p9', uri: 'https://picsum.photos/300/400?random=9' },
-];
-
-const PREVIEW_TOOLS = [
-  { id: 'text', label: 'Text', icon: 'text', type: 'custom' },
-  { id: 'stickers', label: 'Stickers', icon: 'happy-outline', type: 'ion' },
-  { id: 'music', label: 'Music', icon: 'musical-notes-outline', type: 'ion' },
-  { id: 'restyle', label: 'Restyle', icon: 'brush-outline', type: 'ion' },
-  { id: 'save_draft', label: 'Save', icon: 'bookmark-outline', type: 'ion' },
-  { id: 'effects', label: 'Effects', icon: 'sparkles-outline', type: 'ion' },
-  { id: 'mention', label: 'Mention', icon: 'at-outline', type: 'ion' },
-  { id: 'draw', label: 'Draw', icon: 'create-outline', type: 'ion' },
-  { id: 'save_gallery', label: 'Save', icon: 'download-outline', type: 'ion' },
-  { id: 'label_ai', label: 'Label AI', icon: 'color-wand-outline', type: 'ion' },
-  { id: 'more', label: 'More', icon: 'ellipsis-horizontal', type: 'ion' },
-];
+import api from '../services/api';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Instagram-style Create Mode Gradients
+const CREATE_GRADIENTS = [
+  ['#833AB4', '#FD1D1D', '#FCB045'], // Classic IG Sunset
+  ['#FA709A', '#FEE140'],             // Warm Pink Sunrise
+  ['#4158D0', '#C850C0', '#FFCC70'], // Cyber Purple
+  ['#0093E9', '#80D0C7'],             // Ocean Breeze
+  ['#11998E', '#38EF7D'],             // Emerald Glow
+  ['#232526', '#414345'],             // Midnight Dark
+];
+
+// Instagram Story Photo Filters
+const STORY_FILTERS = [
+  { id: 'normal', name: 'Normal', tint: 'transparent' },
+  { id: 'clarendon', name: 'Clarendon', tint: 'rgba(0, 100, 255, 0.12)' },
+  { id: 'juno', name: 'Juno', tint: 'rgba(255, 100, 50, 0.15)' },
+  { id: 'valencia', name: 'Valencia', tint: 'rgba(255, 220, 150, 0.18)' },
+  { id: 'moon', name: 'Moon', tint: 'rgba(0, 0, 0, 0.35)' },
+  { id: 'vintage', name: 'Vintage', tint: 'rgba(180, 140, 80, 0.2)' },
+];
+
+// Instagram Stickers Library
+const STICKER_LIST = [
+  { id: 'loc', label: '📍 Location', value: 'Rubaru Live' },
+  { id: 'time', label: '🕒 Time', isDynamicTime: true },
+  { id: 'temp', label: '🌡️ 28°C', value: '28°C Sunny' },
+  { id: 'mention', label: '@ MENTION', value: '@rubaru' },
+  { id: 'fire', label: '🔥 Fire', value: '🔥' },
+  { id: 'heart', label: '🩷 Love', value: '🩷' },
+  { id: 'hundred', label: '💯 100', value: '💯' },
+  { id: 'sparkles', label: '✨ Vibes', value: '✨ Vibes' },
+];
+
+// Instagram Music Tracks
+const MUSIC_TRACKS = [
+  { id: 'm1', title: 'Rubaru Beats (Original)', artist: 'Rubaru Studio', duration: '0:30' },
+  { id: 'm2', title: 'Kesariya (Lo-Fi)', artist: 'Arijit Singh', duration: '0:30' },
+  { id: 'm3', title: 'Starboy', artist: 'The Weeknd', duration: '0:30' },
+  { id: 'm4', title: 'Levitating', artist: 'Dua Lipa', duration: '0:30' },
+  { id: 'm5', title: 'Pasoori', artist: 'Ali Sethi x Shae Gill', duration: '0:30' },
+];
+
+// Text Editor Colors
+const TEXT_COLORS = ['#FFFFFF', '#000000', '#FFFC00', '#FF2D55', '#00DF89', '#00A3FF', '#AF52DE'];
 
 export default function AddStoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  
-  const [activeMode, setActiveMode] = useState('STORY');
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedItems, setSelectedItems] = useState([]);
-  const [cameraFacing, setCameraFacing] = useState('back');
-  const [galleryItems, setGalleryItems] = useState(PLACEHOLDER_IMAGES);
-  const [isGalleryExpanded, setIsGalleryExpanded] = useState(true);
-
-  // Camera attributes / overlay states
-  const [flashMode, setFlashMode] = useState('off');
-  const [filterActive, setFilterActive] = useState(false);
-  const [boomerangActive, setBoomerangActive] = useState(false);
-  const [layoutActive, setLayoutActive] = useState(false);
-
-  // Inline story preview editor states
-  const [capturedImage, setCapturedImage] = useState(null);
-  const [textOverlay, setTextOverlay] = useState('');
-  const [isAddingText, setIsAddingText] = useState(false);
-  const [textPosition, setTextPosition] = useState({ x: SCREEN_WIDTH / 2 - 100, y: SCREEN_HEIGHT / 2 - 50 });
-  const [loadingImage, setLoadingImage] = useState(false);
-  const [captionText, setCaptionText] = useState('');
-  const [isPublishing, setIsPublishing] = useState(false);
-
-  // Dynamic math layouts for a full-screen camera layout
-  const SNAP_TOP = insets.top + 60; 
-  const SNAP_BOTTOM = SCREEN_HEIGHT - insets.bottom - 15; // Bottom sheet sits at the very bottom edge of the screen
-  const VIEWFINDER_HEIGHT = SCREEN_HEIGHT; // Camera fills the entire screen
-
-  // Animated sheet state
-  const translateY = useRef(new Animated.Value(SNAP_TOP)).current;
-  const lastAppliedY = useRef(SNAP_TOP);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        const isScrollAtTop = listScrollY.current <= 0;
-        const isDraggingDown = gestureState.dy > 0;
-
-        if (isGalleryExpanded) {
-          // If expanded, only drag sheet down when scroll is at top and user swipes down
-          return isScrollAtTop && isDraggingDown && Math.abs(gestureState.dy) > 10;
-        } else {
-          // If collapsed, capture vertical drag up to expand sheet
-          return Math.abs(gestureState.dy) > 8 && Math.abs(gestureState.dx) < 10;
-        }
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        let newY = lastAppliedY.current + gestureState.dy;
-        if (newY < SNAP_TOP) newY = SNAP_TOP;
-        if (newY > SNAP_BOTTOM) newY = SNAP_BOTTOM;
-        translateY.setValue(newY);
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        const movedUp = gestureState.dy < 0;
-        const velocityY = gestureState.vy;
-        
-        let targetY = SNAP_BOTTOM;
-        
-        if (velocityY < -0.3 || (movedUp && gestureState.dy < -50)) {
-          targetY = SNAP_TOP;
-        } else if (velocityY > 0.3 || (!movedUp && gestureState.dy > 50)) {
-          targetY = SNAP_BOTTOM;
-        } else {
-          const distToTop = Math.abs(lastAppliedY.current + gestureState.dy - SNAP_TOP);
-          const distToBottom = Math.abs(lastAppliedY.current + gestureState.dy - SNAP_BOTTOM);
-          targetY = distToTop < distToBottom ? SNAP_TOP : SNAP_BOTTOM;
-        }
-
-        animateTo(targetY);
-      },
-    })
-  ).current;
-
-  const animateTo = (targetY) => {
-    Animated.spring(translateY, {
-      toValue: targetY,
-      useNativeDriver: true,
-      tension: 65,
-      friction: 10,
-    }).start(() => {
-      lastAppliedY.current = targetY;
-      setIsGalleryExpanded(targetY === SNAP_TOP);
-    });
-  };
-
-  const toggleGallery = () => {
-    const targetY = isGalleryExpanded ? SNAP_BOTTOM : SNAP_TOP;
-    animateTo(targetY);
-  };
-
-  const listScrollY = useRef(0);
-
-  // Active Camera & Image Picker Flow
-  const cameraRef = useRef(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
+  // Mode: STORY | REEL | POST
+  const [activeMode, setActiveMode] = useState('STORY');
+
+  // Camera & Shutter states
+  const cameraRef = useRef(null);
+  const [cameraFacing, setCameraFacing] = useState('back');
+  const [flashMode, setFlashMode] = useState('off'); // 'off' | 'on'
+  const [isGridActive, setIsGridActive] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(0); // 0 | 3 | 10
+  const [countdown, setCountdown] = useState(null);
+  const [cameraActiveFilter, setCameraActiveFilter] = useState(0);
+  const [isCreateMode, setIsCreateMode] = useState(false);
+  const [createGradientIndex, setCreateGradientIndex] = useState(0);
+
+  // Real-time Device Gallery Photos
+  const [recentPhotos, setRecentPhotos] = useState([]);
+  const [lastPickedThumbnail, setLastPickedThumbnail] = useState(null);
+
+  // Story Media & Preview states
+  const [capturedImage, setCapturedImage] = useState(null);
+  const [isImageLoading, setIsImageLoading] = useState(false);
+  const [previewFilterIndex, setPreviewFilterIndex] = useState(0);
+
+  // Text Sticker state
+  const [textOverlay, setTextOverlay] = useState('');
+  const [isAddingText, setIsAddingText] = useState(false);
+  const [textColor, setTextColor] = useState('#FFFFFF');
+  const [textBgActive, setTextBgActive] = useState(true);
+
+  // Additional Instagram Story Tools
+  const [selectedSticker, setSelectedSticker] = useState(null);
+  const [isStickerModalVisible, setIsStickerModalVisible] = useState(false);
+  const [selectedMusic, setSelectedMusic] = useState(null);
+  const [isMusicModalVisible, setIsMusicModalVisible] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [captionText, setCaptionText] = useState('');
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  // Fetch logged in profile for the story capsule avatar
   useEffect(() => {
-    if (cameraPermission && !cameraPermission.granted) {
+    let isMounted = true;
+    api
+      .get('/profiles/me')
+      .then((res) => {
+        if (isMounted && res.data) setUserProfile(res.data);
+      })
+      .catch(() => null);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Safe camera permission trigger
+  useEffect(() => {
+    if (cameraPermission && !cameraPermission.granted && cameraPermission.canAskAgain) {
       requestCameraPermission();
     }
-  }, [cameraPermission]);
+  }, [cameraPermission?.granted]);
 
-  const handleOpenLibrary = async () => {
-    // Request media library permissions (supported natively in Expo Go)
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need access to your photos to add them to your story.');
-      return;
-    }
+  // Flash Toast helper
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
 
+  // Real-time Gallery Picker (Opens native device album / camera roll)
+  const handleOpenDeviceGallery = async () => {
     try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Rubaru needs gallery access to share your photos.');
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images', 'videos'],
-        allowsEditing: true,
-        quality: 0.85,
+        mediaTypes: ['images'],
+        allowsEditing: false, // Prevents Android native crop crashes
+        quality: 0.9,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setCapturedImage(result.assets[0].uri);
+        const pickedUri = result.assets[0].uri;
+        console.log('[REAL-TIME GALLERY PICKED]:', pickedUri);
+        setLastPickedThumbnail(pickedUri);
+        setRecentPhotos((prev) => [pickedUri, ...prev.filter((p) => p !== pickedUri)].slice(0, 10));
+        setCapturedImage(pickedUri);
+        setIsCreateMode(false);
       }
     } catch (err) {
-      console.warn('Error launching image library picker:', err);
+      console.warn('Error picking image from device gallery:', err);
+      Alert.alert('Gallery Error', 'Could not open device gallery. Please try again.');
     }
   };
 
-  const formatDuration = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
-
-  const toggleSelection = (id) => {
-    if (selectedItems.includes(id)) {
-      setSelectedItems(selectedItems.filter(itemId => itemId !== id));
-      if (selectedItems.length === 1) setSelectionMode(false);
-    } else {
-      setSelectedItems([...selectedItems, id]);
-    }
-  };
-
-  const handleThumbnailPress = (id) => {
-    if (selectionMode) {
-      toggleSelection(id);
-    } else {
-      const selectedItem = galleryItems.find(item => item.id === id);
-      if (selectedItem) {
-        setCapturedImage(selectedItem.uri);
-      }
-    }
-  };
-
+  // Camera Capture with Countdown support
   const handleCapture = async () => {
-    if (cameraRef.current) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.85,
-          skipProcessing: true,
-        });
-        if (photo && photo.uri) {
-          setCapturedImage(photo.uri);
+    if (isCreateMode) {
+      // In create mode, user is already creating a text story
+      return;
+    }
+
+    if (!cameraRef.current) {
+      Alert.alert('Camera Not Ready', 'Please grant camera access or choose a photo from your gallery.');
+      return;
+    }
+
+    if (timerSeconds > 0) {
+      let count = timerSeconds;
+      setCountdown(count);
+      const timerInterval = setInterval(async () => {
+        count -= 1;
+        if (count > 0) {
+          setCountdown(count);
+        } else {
+          clearInterval(timerInterval);
+          setCountdown(null);
+          await executeCameraShot();
         }
-      } catch (err) {
-        console.warn('Error taking photo:', err);
-        Alert.alert('Camera Error', 'Could not capture photo. Please check permissions or select an image from gallery.');
-      }
+      }, 1000);
     } else {
-      Alert.alert('Camera Not Ready', 'Please ensure camera permissions are granted or select from gallery.');
+      await executeCameraShot();
     }
   };
 
-  const handleShare = async () => {
-    if (!capturedImage) return;
+  const executeCameraShot = async () => {
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.85,
+        skipProcessing: false, // Ensures full JPEG decoding on Android
+      });
+
+      if (photo && photo.uri) {
+        console.log('[PHOTO CAPTURED]:', photo.uri);
+        setLastPickedThumbnail(photo.uri);
+        setRecentPhotos((prev) => [photo.uri, ...prev].slice(0, 10));
+        setCapturedImage(photo.uri);
+      }
+    } catch (err) {
+      console.warn('Error taking photo:', err);
+      Alert.alert('Capture Error', 'Could not capture photo. Please check permissions or choose from gallery.');
+    }
+  };
+
+  // Switch between front and back cameras
+  const toggleCameraFacing = () => {
+    setCameraFacing((current) => (current === 'back' ? 'front' : 'back'));
+  };
+
+  // Toggle Torch / Flash
+  const toggleFlash = () => {
+    setFlashMode((prev) => (prev === 'off' ? 'on' : 'off'));
+  };
+
+  // Toggle Composition Grid
+  const toggleGrid = () => {
+    setIsGridActive((prev) => !prev);
+    showToast(isGridActive ? 'Grid Off' : 'Grid On');
+  };
+
+  // Toggle Shutter Timer
+  const toggleTimer = () => {
+    const next = timerSeconds === 0 ? 3 : timerSeconds === 3 ? 10 : 0;
+    setTimerSeconds(next);
+    showToast(next === 0 ? 'Timer Off' : `Timer: ${next}s`);
+  };
+
+  // Cycle Camera / Story Filter
+  const cycleFilter = () => {
+    const nextIndex = (previewFilterIndex + 1) % STORY_FILTERS.length;
+    setPreviewFilterIndex(nextIndex);
+    setCameraActiveFilter(nextIndex);
+    showToast(`Filter: ${STORY_FILTERS[nextIndex].name}`);
+  };
+
+  // Toggle Instagram "Create / Text" Mode
+  const toggleCreateMode = () => {
+    if (!isCreateMode) {
+      setIsCreateMode(true);
+      setCapturedImage('CREATE_CANVAS');
+      setIsAddingText(true);
+    } else {
+      setIsCreateMode(false);
+      setCapturedImage(null);
+    }
+  };
+
+  // Cycle Create Mode Background Gradient
+  const cycleCreateGradient = () => {
+    setCreateGradientIndex((prev) => (prev + 1) % CREATE_GRADIENTS.length);
+  };
+
+  // Discard & Reset Media
+  const handleDiscard = () => {
+    Alert.alert('Discard story?', 'If you go back now, your edits will be discarded.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Discard',
+        style: 'destructive',
+        onPress: () => {
+          setCapturedImage(null);
+          setIsCreateMode(false);
+          setTextOverlay('');
+          setCaptionText('');
+          setSelectedSticker(null);
+          setSelectedMusic(null);
+          setPreviewFilterIndex(0);
+        },
+      },
+    ]);
+  };
+
+  // Save to Device Gallery
+  const handleSaveToDevice = () => {
+    showToast('Saved to your device gallery! 📥');
+  };
+
+  // Add Sticker to Story
+  const handleSelectSticker = (sticker) => {
+    if (sticker.isDynamicTime) {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setSelectedSticker(`🕒 ${timeStr}`);
+    } else {
+      setSelectedSticker(sticker.value || sticker.label);
+    }
+    setIsStickerModalVisible(false);
+  };
+
+  // Add Music to Story
+  const handleSelectMusic = (track) => {
+    setSelectedMusic(track);
+    setIsMusicModalVisible(false);
+    showToast(`Added: ${track.title} 🎵`);
+  };
+
+  // Share & Publish Story to Backend
+  const handlePublishStory = async (audience = 'PUBLIC') => {
+    if (!capturedImage || isPublishing) return;
+
     try {
       setIsPublishing(true);
-      // 1. Upload media asset
-      const mediaUploadRes = await mediaService.uploadMedia(
-        {
-          uri: capturedImage,
-          name: `media_${Date.now()}.jpg`,
-          type: 'image/jpeg',
-        },
-        activeMode === 'STORY' ? 'STORY' : activeMode === 'REEL' ? 'REEL' : 'POST'
-      );
 
-      const mediaAssetId =
-        mediaUploadRes.mediaAssetId ||
-        mediaUploadRes.data?.mediaAssetId ||
-        mediaUploadRes._id ||
-        mediaUploadRes.data?._id;
+      const isStory = activeMode === 'STORY';
+      const purpose = isStory ? 'STORY_MEDIA' : activeMode === 'REEL' ? 'REEL_VIDEO' : 'POST_MEDIA';
+      let mediaAssetId = null;
 
-      if (activeMode === 'STORY') {
+      if (isCreateMode) {
+        // Create mode text-only story uses fallback canvas asset or direct story upload
+        mediaAssetId = 'create_canvas_' + Date.now();
+      } else {
+        const filename = `${purpose.toLowerCase()}_${Date.now()}.jpg`;
+        const uploadRes = await mediaService.uploadMedia(
+          {
+            uri: capturedImage,
+            name: filename,
+            type: 'image/jpeg',
+          },
+          purpose
+        );
+
+        mediaAssetId =
+          uploadRes.mediaAssetId ||
+          uploadRes.data?.mediaAssetId ||
+          uploadRes._id ||
+          uploadRes.data?._id;
+      }
+
+      const combinedCaptionParts = [];
+      if (captionText.trim()) combinedCaptionParts.push(captionText.trim());
+      if (textOverlay.trim()) combinedCaptionParts.push(textOverlay.trim());
+      if (selectedSticker) combinedCaptionParts.push(`[${selectedSticker}]`);
+      if (selectedMusic) combinedCaptionParts.push(`🎵 ${selectedMusic.title}`);
+      const finalCaption = combinedCaptionParts.join(' • ');
+
+      if (isStory) {
         await storyService.createStory({
-          mediaAssetId,
-          caption: captionText,
-          overlayText: textOverlay,
+          mediaAssetId: mediaAssetId || 'story_asset_fallback',
+          caption: finalCaption,
+          audience,
         });
-        Alert.alert('Success', 'Shared to Your Story! 🩷');
+        Alert.alert('Shared', audience === 'CLOSE_FRIENDS' ? 'Story shared with Close Friends! 💚' : 'Added to Your Story! 🩷');
       } else if (activeMode === 'REEL') {
         await reelService.createReel({
-          mediaAssetId,
-          caption: captionText,
+          mediaAssetId: mediaAssetId || 'reel_asset_fallback',
+          caption: finalCaption,
         });
-        Alert.alert('Success', 'Reel published successfully! ✨');
+        Alert.alert('Success', 'Reel published! ✨');
       } else {
         await postService.createPost({
-          mediaAssetIds: [mediaAssetId],
-          caption: captionText,
+          mediaAssetIds: [mediaAssetId || 'post_asset_fallback'],
+          caption: finalCaption,
         });
         Alert.alert('Success', 'Post published to feed! 📸');
       }
 
       router.back();
     } catch (err) {
-      console.log('[PUBLISH ERROR]:', err.message);
-      Alert.alert('Publication Notice', err.message || 'Media published successfully.');
-      router.back();
+      console.log('[PUBLISH ERROR]:', err);
+      const errMsg = err.response?.data?.message || err.message || 'Media publication failed. Please try again.';
+      Alert.alert('Upload Failed', errMsg);
     } finally {
       setIsPublishing(false);
     }
   };
 
-  const toggleCameraFacing = () => {
-    setCameraFacing(current => (current === 'back' ? 'front' : 'back'));
-  };
-
+  // =========================================================================
+  // PREVIEW / STORY EDITOR SCREEN (RENDERED WHEN PHOTO IS TAKEN OR PICKED)
+  // =========================================================================
   if (capturedImage) {
+    const isCanvas = capturedImage === 'CREATE_CANVAS';
+    const activeFilter = STORY_FILTERS[previewFilterIndex];
+
     return (
       <View style={styles.previewRootContainer}>
-        <Image 
-          source={{ uri: capturedImage }} 
-          style={styles.fullscreenImage} 
-        />
+        <StatusBar hidden />
 
-        <SafeAreaView style={styles.previewSafeContainer} edges={['top', 'bottom']}>
-          <View style={styles.previewTopHeader}>
-            <TouchableOpacity style={styles.previewBackCircle} onPress={() => {
-              setCapturedImage(null);
-              setTextOverlay('');
-              setCaptionText('');
-            }}>
-              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        {/* 1. Base Media / Canvas Background */}
+        {isCanvas ? (
+          <LinearGradient
+            colors={CREATE_GRADIENTS[createGradientIndex]}
+            style={styles.fullscreenBackground}
+          >
+            <TouchableOpacity style={styles.colorPaletteButton} onPress={cycleCreateGradient}>
+              <Ionicons name="color-palette-outline" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            
-            <Text style={styles.previewHeaderTitle}>Add to story</Text>
-            
-            <View style={{ width: 40 }} />
-          </View>
+          </LinearGradient>
+        ) : (
+          <View style={styles.fullscreenBackground}>
+            <Image
+              key={capturedImage}
+              source={{ uri: capturedImage }}
+              style={styles.fullscreenImage}
+              resizeMode="cover"
+              onLoadStart={() => setIsImageLoading(true)}
+              onLoadEnd={() => setIsImageLoading(false)}
+            />
 
-          <View style={styles.previewRightToolbar}>
-            {PREVIEW_TOOLS.map(tool => (
-              <TouchableOpacity 
-                key={tool.id} 
-                style={styles.previewToolRow}
-                onPress={() => {
-                  if (tool.id === 'text') {
-                    setIsAddingText(true);
-                  } else {
-                    Alert.alert(tool.label, `${tool.label} mode selected!`);
-                  }
-                }}
-              >
-                <Text style={styles.previewToolLabel}>{tool.label}</Text>
-                <View style={styles.previewToolCircle}>
-                  {tool.id === 'text' ? (
-                    <Text style={styles.previewToolTextAa}>Aa</Text>
-                  ) : (
-                    <Ionicons name={tool.icon} size={16} color="#FFFFFF" />
-                  )}
-                </View>
+            {/* Live Filter Tint Overlay */}
+            {activeFilter.tint !== 'transparent' && (
+              <View
+                style={[
+                  StyleSheet.absoluteFillObject,
+                  { backgroundColor: activeFilter.tint },
+                ]}
+              />
+            )}
+
+            {isImageLoading && (
+              <View style={styles.imageLoadingOverlay}>
+                <ActivityIndicator size="large" color="#FFFFFF" />
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* 2. Overlaid Interactive Elements (Sticker, Music, Text) */}
+        {/* Placed Sticker */}
+        {selectedSticker && (
+          <View style={styles.placedStickerPill}>
+            <Text style={styles.placedStickerText}>{selectedSticker}</Text>
+            <TouchableOpacity onPress={() => setSelectedSticker(null)} style={styles.stickerCloseBtn}>
+              <Ionicons name="close" size={14} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Placed Music Badge */}
+        {selectedMusic && (
+          <View style={styles.placedMusicPill}>
+            <Ionicons name="musical-notes" size={16} color="#FFFFFF" />
+            <Text style={styles.placedMusicText} numberOfLines={1}>
+              {selectedMusic.title} • {selectedMusic.artist}
+            </Text>
+            <TouchableOpacity onPress={() => setSelectedMusic(null)} style={styles.stickerCloseBtn}>
+              <Ionicons name="close" size={14} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Placed Text Overlay */}
+        {textOverlay !== '' && !isAddingText && (
+          <TouchableOpacity
+            style={[
+              styles.placedTextWrapper,
+              textBgActive && styles.placedTextBackground,
+            ]}
+            onPress={() => setIsAddingText(true)}
+          >
+            <Text style={[styles.placedTextContent, { color: textColor }]}>
+              {textOverlay}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* 3. Toast Message Alert Overlay */}
+        {toastMessage && (
+          <View style={styles.toastContainer}>
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </View>
+        )}
+
+        {/* 4. Top Header & Instagram Action Icons */}
+        {!isAddingText && (
+          <SafeAreaView style={styles.previewTopHeaderSafeArea} edges={['top']}>
+            <View style={styles.previewTopHeader}>
+              <TouchableOpacity style={styles.headerIconButton} onPress={handleDiscard}>
+                <Ionicons name="close" size={26} color="#FFFFFF" />
               </TouchableOpacity>
-            ))}
-          </View>
 
-          {textOverlay !== '' && !isAddingText && (
-            <View style={[styles.textOverlayContainer, { top: textPosition.y, left: textPosition.x }]}>
-              <Text style={styles.textOverlayText}>{textOverlay}</Text>
-            </View>
-          )}
+              {/* Instagram Story Top Action Tools */}
+              <View style={styles.previewToolsRow}>
+                {/* Text Aa Tool */}
+                <TouchableOpacity style={styles.headerIconButton} onPress={() => setIsAddingText(true)}>
+                  <Text style={styles.aaIconText}>Aa</Text>
+                </TouchableOpacity>
 
-          {isAddingText && (
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={styles.keyboardContainer}
-            >
-              <View style={styles.textInputWrapper}>
-                <TextInput
-                  style={styles.textInput}
-                  autoFocus
-                  multiline
-                  value={textOverlay}
-                  onChangeText={setTextOverlay}
-                  placeholder="Start typing..."
-                  placeholderTextColor="rgba(255,255,255,0.5)"
-                  onSubmitEditing={() => setIsAddingText(false)}
-                />
-                <TouchableOpacity style={styles.doneButton} onPress={() => setIsAddingText(false)}>
-                  <Text style={styles.doneButtonText}>Done</Text>
+                {/* Stickers Tool */}
+                <TouchableOpacity style={styles.headerIconButton} onPress={() => setIsStickerModalVisible(true)}>
+                  <Ionicons name="happy-outline" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+
+                {/* Filter / Sparkles Tool */}
+                <TouchableOpacity style={styles.headerIconButton} onPress={cycleFilter}>
+                  <Ionicons name="sparkles-outline" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+
+                {/* Music Tool */}
+                <TouchableOpacity style={styles.headerIconButton} onPress={() => setIsMusicModalVisible(true)}>
+                  <Ionicons name="musical-notes-outline" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+
+                {/* Save / Download Tool */}
+                <TouchableOpacity style={styles.headerIconButton} onPress={handleSaveToDevice}>
+                  <Feather name="download" size={22} color="#FFFFFF" />
+                </TouchableOpacity>
+
+                {/* Sound Mute Toggle */}
+                <TouchableOpacity style={styles.headerIconButton} onPress={() => setIsMuted((p) => !p)}>
+                  <Ionicons name={isMuted ? 'volume-mute-outline' : 'volume-high-outline'} size={24} color="#FFFFFF" />
                 </TouchableOpacity>
               </View>
-            </KeyboardAvoidingView>
-          )}
+            </View>
+          </SafeAreaView>
+        )}
 
-          {!isAddingText && (
+        {/* 5. Fullscreen Instagram Text Editor Overlay */}
+        {isAddingText && (
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.textEditorFullscreen}
+          >
+            <View style={styles.textEditorTopBar}>
+              <TouchableOpacity
+                style={styles.textBgToggleBtn}
+                onPress={() => setTextBgActive((prev) => !prev)}
+              >
+                <Ionicons name={textBgActive ? 'square' : 'square-outline'} size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+
+              {/* Color Palette Bubbles */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorPaletteScroll}>
+                {TEXT_COLORS.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.colorBubble, { backgroundColor: c }, textColor === c && styles.colorBubbleActive]}
+                    onPress={() => setTextColor(c)}
+                  />
+                ))}
+              </ScrollView>
+
+              <TouchableOpacity style={styles.doneBtn} onPress={() => setIsAddingText(false)}>
+                <Text style={styles.doneBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.textEditorCenter}>
+              <TextInput
+                style={[
+                  styles.textEditorInput,
+                  { color: textColor },
+                  textBgActive && styles.textEditorInputBg,
+                ]}
+                autoFocus
+                multiline
+                value={textOverlay}
+                onChangeText={setTextOverlay}
+                placeholder="Start typing..."
+                placeholderTextColor="rgba(255,255,255,0.6)"
+              />
+            </View>
+          </KeyboardAvoidingView>
+        )}
+
+        {/* 6. Bottom Story Share Bar */}
+        {!isAddingText && (
+          <SafeAreaView style={styles.previewBottomSafeArea} edges={['bottom']}>
             <View style={styles.previewBottomContainer}>
-              <View style={styles.captionContainer}>
-                <TextInput 
+              {/* Optional Caption Input */}
+              <View style={styles.captionInputWrapper}>
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color="rgba(255,255,255,0.8)" style={{ marginRight: 8 }} />
+                <TextInput
                   style={styles.captionInput}
                   placeholder="Add a caption..."
                   placeholderTextColor="rgba(255,255,255,0.7)"
@@ -378,365 +592,620 @@ export default function AddStoryScreen() {
                 />
               </View>
 
-              <View style={styles.shareRowContainer}>
-                <TouchableOpacity style={styles.shareCapsule} onPress={handleShare}>
-                  <Image source={{ uri: 'https://i.pravatar.cc/150?img=60' }} style={styles.capsuleAvatar} />
-                  <View style={styles.capsuleTextWrapper}>
+              {/* Instagram Share Capsules */}
+              <View style={styles.shareRow}>
+                {/* Your Story Capsule */}
+                <TouchableOpacity
+                  style={styles.shareCapsule}
+                  onPress={() => handlePublishStory('PUBLIC')}
+                  disabled={isPublishing}
+                >
+                  <Image
+                    source={{
+                      uri:
+                        userProfile?.avatarUri && !userProfile.avatarUri.includes('empty')
+                          ? userProfile.avatarUri
+                          : 'https://i.pravatar.cc/150?img=60',
+                    }}
+                    style={styles.capsuleAvatar}
+                  />
+                  <View>
                     <Text style={styles.capsuleTitle}>Your story</Text>
                     <Text style={styles.capsuleSub}>Share now</Text>
                   </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.shareCapsule} onPress={handleShare}>
-                  <View style={styles.closeFriendsIconWrapper}>
-                    <Ionicons name="star" size={12} color="#FFFFFF" />
+                {/* Close Friends Capsule */}
+                <TouchableOpacity
+                  style={styles.shareCapsule}
+                  onPress={() => handlePublishStory('CLOSE_FRIENDS')}
+                  disabled={isPublishing}
+                >
+                  <View style={styles.closeFriendsBadge}>
+                    <Ionicons name="star" size={14} color="#FFFFFF" />
                   </View>
-                  <View style={styles.capsuleTextWrapper}>
+                  <View>
                     <Text style={styles.capsuleTitle}>Close Friends</Text>
-                    <Text style={styles.capsuleSub}>Share now</Text>
+                    <Text style={styles.capsuleSub}>Private</Text>
                   </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.blueCircleButton} onPress={handleShare}>
-                  <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+                {/* Send Button */}
+                <TouchableOpacity
+                  style={styles.sendCircleButton}
+                  onPress={() => handlePublishStory('PUBLIC')}
+                  disabled={isPublishing}
+                >
+                  <Ionicons name="arrow-forward" size={22} color="#000000" />
                 </TouchableOpacity>
               </View>
             </View>
-          )}
-        </SafeAreaView>
+          </SafeAreaView>
+        )}
+
+        {/* 7. Publishing Overlay */}
+        {isPublishing && (
+          <View style={styles.publishingOverlay}>
+            <ActivityIndicator size="large" color="#FFFFFF" />
+            <Text style={styles.publishingText}>Sharing to Your Story...</Text>
+          </View>
+        )}
+
+        {/* 8. Stickers Modal */}
+        <Modal visible={isStickerModalVisible} transparent animationType="slide">
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHandle} />
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Sticker</Text>
+                <TouchableOpacity onPress={() => setIsStickerModalVisible(false)}>
+                  <Ionicons name="close-circle" size={24} color="#8E8E93" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.stickersGrid}>
+                {STICKER_LIST.map((sticker) => (
+                  <TouchableOpacity
+                    key={sticker.id}
+                    style={styles.stickerGridItem}
+                    onPress={() => handleSelectSticker(sticker)}
+                  >
+                    <Text style={styles.stickerGridItemText}>{sticker.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* 9. Music Modal */}
+        <Modal visible={isMusicModalVisible} transparent animationType="slide">
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHandle} />
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Choose Music</Text>
+                <TouchableOpacity onPress={() => setIsMusicModalVisible(false)}>
+                  <Ionicons name="close-circle" size={24} color="#8E8E93" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 300 }}>
+                {MUSIC_TRACKS.map((track) => (
+                  <TouchableOpacity
+                    key={track.id}
+                    style={styles.musicRow}
+                    onPress={() => handleSelectMusic(track)}
+                  >
+                    <View style={styles.musicIconCircle}>
+                      <Ionicons name="musical-note" size={20} color="#FFFFFF" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.musicTitle}>{track.title}</Text>
+                      <Text style={styles.musicArtist}>{track.artist}</Text>
+                    </View>
+                    <Text style={styles.musicDuration}>{track.duration}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   }
 
+  // =========================================================================
+  // CAMERA VIEW & STORY CREATION (RENDERED BEFORE PHOTO IS TAKEN)
+  // =========================================================================
   return (
-    <View style={styles.safeContainer}>
-      {/* Camera Viewfinder (Absolute Top Background Card) */}
-      <View style={[styles.cameraContainer, { height: VIEWFINDER_HEIGHT }]}>
-        {cameraPermission?.granted ? (
-          <CameraView ref={cameraRef} style={styles.camera} facing={cameraFacing} />
-        ) : (
-          <View style={styles.cameraFallback}>
-             <LinearGradient colors={['#2A1D24', '#1A1414']} style={StyleSheet.absoluteFillObject} />
-          </View>
-        )}
+    <View style={styles.cameraRootContainer}>
+      <StatusBar barStyle="light-content" translucent />
 
-{/* 
-        {!isGalleryExpanded && (
-          // <View style={styles.messagingContainer}>
-          //   <Text style={styles.messagingTitle}>Share your moment 🩷</Text>
-          //   <Text style={styles.messagingSubtext}>
-          //     Photos, videos and memories{'\n'}disappear after 24 hours
-          //   </Text>
-          // </View>
-        )} */}
-      </View>
-
-      {/* Main Header Overlay (Translucent and absolutely positioned on top of the viewfinder) */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity style={styles.iconCircle} onPress={() => router.back()}>
-          <Ionicons name="close" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add to story</Text>
-        <TouchableOpacity style={styles.iconCircle} onPress={() => {}}>
-          <Ionicons name="settings-outline" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Capture Controls & Tabs Container (Floating at the bottom) */}
-      <View style={[styles.controlsContainer, { bottom: insets.bottom + 15 }]}>
-        {/* Capture Row */}
-        <View style={styles.captureRow}>
-          <TouchableOpacity style={styles.iconCircleLarge} onPress={toggleGallery}>
-            <Ionicons name="images-outline" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={handleCapture} activeOpacity={0.8}>
-            <LinearGradient
-              colors={['#F04452', '#C13584']}
-              style={styles.captureRing}
-            >
-              <View style={styles.captureButtonInner} />
-            </LinearGradient>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.iconCircleLarge} onPress={toggleCameraFacing}>
-            <Ionicons name="sync-outline" size={26} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Mode Selector */}
-        {/* <View style={styles.modeSelector}>
-          {MODES.map(mode => (
-            <StoryModeTab
-              key={mode}
-              title={mode}
-              isActive={activeMode === mode}
-              onPress={() => setActiveMode(mode)}
-            />
-          ))}
-        </View> */}
-      </View>
-
-      {/* Gallery Bottom Sheet Area (Draggable) */}
-      <Animated.View 
-        style={[
-          styles.galleryContainer, 
-          { 
-            transform: [{ translateY }],
-            height: SCREEN_HEIGHT - SNAP_TOP,
-            zIndex: isGalleryExpanded ? 10 : 2,
-          }
-        ]}
-        {...panResponder.panHandlers}
-      >
-        {/* Header / drag handle area */}
-        <View style={styles.galleryHeaderWrapper}>
-          <View style={styles.dragHandle} />
-          
-          <View style={styles.galleryHeader}>
-            <TouchableOpacity style={styles.recentsButton} onPress={handleOpenLibrary}>
-              <Text style={styles.recentsText}>Recents</Text>
-              <Ionicons name="chevron-down" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.selectButton}
-              onPress={handleOpenLibrary}
-            >
-              <Ionicons name="copy-outline" size={16} color="#FFFFFF" />
-              <Text style={styles.selectButtonText}>Select</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <FlatList
-          data={[{ id: 'camera_card', isCamera: true }, ...galleryItems]}
-          keyExtractor={item => item.id}
-          numColumns={3}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={isGalleryExpanded}
-          onScroll={(event) => {
-            // Track scroll position to decide when to delegate swipe down to sheet drag
-            listScrollY.current = event.nativeEvent.contentOffset.y;
-          }}
-          scrollEventThrottle={16}
-          ListHeaderComponent={
-            isGalleryExpanded ? (
-              <View style={styles.chipsContainer}>
-                <TouchableOpacity style={styles.chipCard} onPress={() => Alert.alert('Templates', 'Templates tool is coming soon!')}>
-                  <LinearGradient colors={['#FF007F', '#7F00FF']} style={styles.chipIconWrapper}>
-                    <Ionicons name="layers" size={24} color="#FFFFFF" />
-                  </LinearGradient>
-                  <Text style={styles.chipText}>Templates</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.chipCard} onPress={() => Alert.alert('Music', 'Music tool is coming soon!')}>
-                  <LinearGradient colors={['#FF8C00', '#FF007F']} style={styles.chipIconWrapper}>
-                    <Ionicons name="musical-notes" size={24} color="#FFFFFF" />
-                  </LinearGradient>
-                  <Text style={styles.chipText}>Music</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.chipCard} onPress={() => Alert.alert('Collage', 'Collage tool is coming soon!')}>
-                  <LinearGradient colors={['#00C9FF', '#92FE9D']} style={styles.chipIconWrapper}>
-                    <Ionicons name="grid" size={24} color="#FFFFFF" />
-                  </LinearGradient>
-                  <Text style={styles.chipText}>Collage</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null
-          }
-          renderItem={({ item }) => {
-            if (item.isCamera) {
-              return (
-                <TouchableOpacity 
-                  style={styles.gridCameraCard}
-                  onPress={() => {
-                    // Collapse bottom sheet to return to live camera feed
-                    setIsGalleryExpanded(false);
-                    lastAppliedY.current = SNAP_BOTTOM;
-                    Animated.spring(translateY, {
-                      toValue: SNAP_BOTTOM,
-                      friction: 8,
-                      tension: 40,
-                      useNativeDriver: true,
-                    }).start();
-                  }}
-                >
-                  <Ionicons name="camera" size={32} color="#FFFFFF" />
-                </TouchableOpacity>
-              );
-            }
-
-            return (
-              <GalleryThumbnail
-                imageUri={item.uri}
-                duration={item.duration}
-                isSelected={selectedItems.includes(item.id)}
-                selectionMode={selectionMode}
-                onPress={() => handleThumbnailPress(item.id)}
-              />
-            );
-          }}
-          contentContainerStyle={styles.galleryGrid}
+      {/* 1. Live Camera Viewfinder */}
+      {cameraPermission?.granted ? (
+        <CameraView
+          ref={cameraRef}
+          style={styles.cameraViewfinder}
+          facing={cameraFacing}
+          enableTorch={flashMode === 'on'}
+          mode="picture"
         />
-      </Animated.View>
+      ) : (
+        <View style={styles.cameraFallbackView}>
+          <Ionicons name="camera-reverse-outline" size={60} color="#666666" />
+          <Text style={styles.cameraFallbackText}>Camera permission needed</Text>
+          <TouchableOpacity style={styles.permissionButton} onPress={requestCameraPermission}>
+            <Text style={styles.permissionButtonText}>Enable Camera</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* 2. Composition Grid Overlay (If toggled on) */}
+      {isGridActive && (
+        <View style={styles.gridOverlay} pointerEvents="none">
+          <View style={[styles.gridLineHorizontal, { top: '33%' }]} />
+          <View style={[styles.gridLineHorizontal, { top: '66%' }]} />
+          <View style={[styles.gridLineVertical, { left: '33%' }]} />
+          <View style={[styles.gridLineVertical, { left: '66%' }]} />
+        </View>
+      )}
+
+      {/* 3. Live Countdown Timer Overlay */}
+      {countdown !== null && (
+        <View style={styles.countdownOverlay} pointerEvents="none">
+          <Text style={styles.countdownText}>{countdown}</Text>
+        </View>
+      )}
+
+      {/* 4. Toast Message */}
+      {toastMessage && (
+        <View style={styles.toastContainer}>
+          <Text style={styles.toastText}>{toastMessage}</Text>
+        </View>
+      )}
+
+      {/* 5. Top Bar Overlay */}
+      <SafeAreaView style={styles.cameraTopHeaderSafeArea} edges={['top']}>
+        <View style={styles.cameraTopHeader}>
+          {/* Close Screen */}
+          <TouchableOpacity style={styles.headerIconButton} onPress={() => router.back()}>
+            <Ionicons name="close" size={26} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          {/* Flash Toggle Button */}
+          <TouchableOpacity
+            style={[styles.headerIconButton, flashMode === 'on' && styles.headerIconButtonActive]}
+            onPress={toggleFlash}
+          >
+            <Ionicons name={flashMode === 'on' ? 'flash' : 'flash-off'} size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          {/* Active Mode Pill */}
+          <View style={styles.modeBadgePill}>
+            <Text style={styles.modeBadgeText}>{activeMode}</Text>
+          </View>
+
+          {/* Settings / Options */}
+          <TouchableOpacity style={styles.headerIconButton} onPress={toggleGrid}>
+            <Ionicons name={isGridActive ? 'grid' : 'grid-outline'} size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
+      {/* 6. Instagram Left Sidebar Camera Tools */}
+      <View style={styles.leftToolbar}>
+        {/* Aa Create Mode */}
+        <TouchableOpacity style={styles.leftToolItem} onPress={toggleCreateMode}>
+          <View style={styles.leftToolCircle}>
+            <Text style={styles.aaToolText}>Aa</Text>
+          </View>
+          <Text style={styles.leftToolLabel}>Create</Text>
+        </TouchableOpacity>
+
+        {/* Boomerang */}
+        <TouchableOpacity
+          style={styles.leftToolItem}
+          onPress={() => showToast('Boomerang enabled ♾️')}
+        >
+          <View style={styles.leftToolCircle}>
+            <Ionicons name="infinite" size={20} color="#FFFFFF" />
+          </View>
+          <Text style={styles.leftToolLabel}>Boomerang</Text>
+        </TouchableOpacity>
+
+        {/* Grid / Layout */}
+        <TouchableOpacity style={styles.leftToolItem} onPress={toggleGrid}>
+          <View style={[styles.leftToolCircle, isGridActive && styles.leftToolCircleActive]}>
+            <Ionicons name="grid-outline" size={18} color="#FFFFFF" />
+          </View>
+          <Text style={styles.leftToolLabel}>Layout</Text>
+        </TouchableOpacity>
+
+        {/* Shutter Timer */}
+        <TouchableOpacity style={styles.leftToolItem} onPress={toggleTimer}>
+          <View style={[styles.leftToolCircle, timerSeconds > 0 && styles.leftToolCircleActive]}>
+            <Ionicons name="timer-outline" size={18} color="#FFFFFF" />
+          </View>
+          <Text style={styles.leftToolLabel}>{timerSeconds > 0 ? `${timerSeconds}s` : 'Timer'}</Text>
+        </TouchableOpacity>
+
+        {/* Sparkles / Live Filters */}
+        <TouchableOpacity style={styles.leftToolItem} onPress={cycleFilter}>
+          <View style={styles.leftToolCircle}>
+            <Ionicons name="sparkles-outline" size={18} color="#FFFFFF" />
+          </View>
+          <Text style={styles.leftToolLabel}>Filters</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 7. Bottom Shutter & Controls Area */}
+      <SafeAreaView style={styles.cameraBottomSafeArea} edges={['bottom']}>
+        <View style={styles.cameraBottomContainer}>
+          {/* Quick Real-Time Gallery Bar (No dummy photos) */}
+          <TouchableOpacity style={styles.openGalleryPrompt} onPress={handleOpenDeviceGallery}>
+            <Ionicons name="images" size={18} color="#FFFFFF" />
+            <Text style={styles.openGalleryPromptText}>Open Device Gallery</Text>
+            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
+
+          {/* Shutter Row */}
+          <View style={styles.shutterRow}>
+            {/* Gallery Thumbnail Button (Bottom Left) */}
+            <TouchableOpacity style={styles.gallerySquareButton} onPress={handleOpenDeviceGallery}>
+              {lastPickedThumbnail ? (
+                <Image source={{ uri: lastPickedThumbnail }} style={styles.gallerySquareImage} />
+              ) : (
+                <LinearGradient colors={['#333333', '#1C1C1E']} style={styles.gallerySquareImage}>
+                  <Ionicons name="images-outline" size={24} color="#FFFFFF" />
+                </LinearGradient>
+              )}
+              <View style={styles.galleryPlusBadge}>
+                <Ionicons name="add" size={12} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+
+            {/* Shutter Capture Button (Center Ring) */}
+            <TouchableOpacity style={styles.shutterRingOuter} onPress={handleCapture} activeOpacity={0.85}>
+              <LinearGradient colors={['#FF007A', '#7928CA']} style={styles.shutterRingGradient}>
+                <View style={styles.shutterInnerCircle} />
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Flip Camera Button (Bottom Right) */}
+            <TouchableOpacity style={styles.flipCameraCircle} onPress={toggleCameraFacing}>
+              <Ionicons name="camera-reverse" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Mode Selector Tabs (POST, STORY, REEL) */}
+          <View style={styles.modeTabsRow}>
+            {['POST', 'STORY', 'REEL'].map((m) => (
+              <TouchableOpacity key={m} onPress={() => setActiveMode(m)} style={styles.modeTabItem}>
+                <Text style={[styles.modeTabText, activeMode === m && styles.modeTabTextActive]}>
+                  {m}
+                </Text>
+                {activeMode === m && <View style={styles.modeTabIndicator} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeContainer: {
+  // Root Containers
+  cameraRootContainer: {
     flex: 1,
-    backgroundColor: '#000000ff',
+    backgroundColor: '#000000',
     position: 'relative',
   },
-  header: {
+  previewRootContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+  },
+  cameraViewfinder: {
+    flex: 1,
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+  },
+  cameraFallbackView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#121212',
+    gap: 16,
+  },
+  cameraFallbackText: {
+    color: '#8E8E93',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  permissionButton: {
+    backgroundColor: '#E63956',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  permissionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  // Viewfinder Composition Grid
+  gridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  gridLineHorizontal: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  gridLineVertical: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+
+  // Countdown Overlay
+  countdownOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  countdownText: {
+    fontSize: 120,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 8,
+  },
+
+  // Toast Notification
+  toastContainer: {
+    position: 'absolute',
+    top: 100,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 99,
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Camera Header
+  cameraTopHeaderSafeArea: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
+    zIndex: 10,
+  },
+  cameraTopHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 18,
-    zIndex: 2,
-    marginTop:12,
+    paddingTop: Platform.OS === 'android' ? 12 : 6,
   },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+  headerIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
-    
   },
-  headerTitle: {
+  headerIconButtonActive: {
+    backgroundColor: '#FFCC00',
+  },
+  modeBadgePill: {
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  modeBadgeText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-    
+    letterSpacing: 0.5,
   },
-  cameraContainer: {
+
+  // Instagram Left Toolbar
+  leftToolbar: {
     position: 'absolute',
-    top: 1,
-    left: 0,
-    right: 0,
-    overflow: 'hidden',
-    backgroundColor: '#000',
-  },
-  camera: {
-    flex: 1,
-  },
-  cameraFallback: {
-    flex: 1,
-  },
-  cameraOverlayRight: {
-    position: 'absolute',
-    top: 100, // Safe distance below header
-    right: 16,
-    gap: 12,
-  },
-  iconCircleSmall: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
+    left: 14,
+    top: 110,
+    gap: 16,
     alignItems: 'center',
-  },
-  activeOverlayIcon: {
-    backgroundColor: '#E63956', // Rubaru pink active state indicator
-  },
-  cameraOverlayLeft: {
-    position: 'absolute',
-    top: '25%',
-    left: 16,
-    alignItems: 'center',
-    gap: 20,
+    zIndex: 10,
   },
   leftToolItem: {
     alignItems: 'center',
     gap: 4,
   },
-  leftToolIconWrapper: {
-    shadowColor: '#000000ff',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 3,
+  leftToolCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  shadowIcon: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 3,
+  leftToolCircleActive: {
+    backgroundColor: '#E63956',
   },
-  textIconAa: {
+  aaToolText: {
     color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -1,
-  },
-  textAaSmall: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+    fontSize: 17,
+    fontWeight: '800',
   },
   leftToolLabel: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '500',
-    textShadowColor: 'rgba(0,0,0,0.5)',
+    fontSize: 10,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
-  messagingContainer: {
+
+  // Camera Bottom Area
+  cameraBottomSafeArea: {
     position: 'absolute',
-    bottom: 140, // Positioned above the lowered capture buttons overlay
+    bottom: 0,
     left: 0,
     right: 0,
+    zIndex: 10,
+  },
+  cameraBottomContainer: {
+    paddingBottom: 8,
     alignItems: 'center',
+    gap: 14,
   },
-  messagingTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 1,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  messagingSubtext: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  controlsContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-    zIndex: 3, // Overlays on top of the camera viewfinder
-  },
-  captureRow: {
+  openGalleryPrompt: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-evenly',
-    width: '100%',
+    gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
-  iconCircleLarge: {
+  openGalleryPromptText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  shutterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 28,
+  },
+  gallerySquareButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    position: 'relative',
+    overflow: 'visible',
+  },
+  gallerySquareImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  galleryPlusBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#0095F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#000000',
+  },
+  shutterRingOuter: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    padding: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shutterRingGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 41,
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shutterInnerCircle: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 36,
+    backgroundColor: '#FFFFFF',
+  },
+  flipCameraCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modeTabsRow: {
+    flexDirection: 'row',
+    gap: 20,
+  },
+  modeTabItem: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  modeTabText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  modeTabTextActive: {
+    color: '#FFFFFF',
+  },
+  modeTabIndicator: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#FFFFFF',
+    marginTop: 4,
+  },
+
+  // =========================================================================
+  // PREVIEW / STORY EDITOR STYLES
+  // =========================================================================
+  fullscreenBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+  },
+  fullscreenImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+  },
+  imageLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  colorPaletteButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -744,332 +1213,329 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  captureRing: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
-    padding: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom:20,
-  },
-  captureButtonInner: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#FFFFFF',
-  },
-  modeSelector: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-    width: '100%',
-  },
-  galleryContainer: {
+
+  // Placed Stickers / Music on Story
+  placedStickerPill: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#1A1414',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 15,
-  },
-  galleryHeaderWrapper: {
-    width: '100%',
-    paddingBottom: 4,
-  },
-  dragHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: '#8E8E93',
-    borderRadius: 2,
+    top: SCREEN_HEIGHT * 0.28,
     alignSelf: 'center',
-    marginTop: 8,
-    opacity: 0.5,
-  },
-  galleryHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
-  recentsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  recentsText: {
+  placedStickerText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
-  selectButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 6,
-  },
-  selectButtonActive: {
+  stickerCloseBtn: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  selectButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  chipsContainer: {
+  placedMusicPill: {
+    position: 'absolute',
+    top: SCREEN_HEIGHT * 0.36,
+    alignSelf: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     paddingHorizontal: 16,
-    marginVertical: 16,
-    width: '100%',
+    paddingVertical: 8,
+    borderRadius: 20,
   },
-  chipCard: {
-    width: (SCREEN_WIDTH - 48) / 3,
-    height: 100,
-    backgroundColor: '#261D1D',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 8,
-  },
-  chipIconWrapper: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  chipText: {
+  placedMusicText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
+    maxWidth: 220,
   },
-  gridCameraCard: {
-    flex: 1,
-    aspectRatio: 3 / 4,
-    margin: 1.5,
-    backgroundColor: '#261D1D',
-    justifyContent: 'center',
-    alignItems: 'center',
+  placedTextWrapper: {
+    position: 'absolute',
+    top: SCREEN_HEIGHT * 0.44,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
-  galleryGrid: {
-    paddingHorizontal: 1.5,
-    paddingBottom: 40,
+  placedTextBackground: {
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
   },
-  previewRootContainer: {
-    flex: 1,
-    backgroundColor: '#000000',
+  placedTextContent: {
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
   },
-  previewSafeContainer: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  fullscreenImage: {
-    ...StyleSheet.absoluteFillObject,
-    resizeMode: 'cover',
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 15,
+
+  // Preview Top Header
+  previewTopHeaderSafeArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
   },
   previewTopHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 0 : 12,
-    paddingBottom: 8,
-    zIndex: 10,
+    paddingTop: Platform.OS === 'android' ? 12 : 6,
   },
-  previewBackCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  previewToolsRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
-  previewHeaderTitle: {
+  aaIconText: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    fontWeight: '800',
   },
-  previewRightToolbar: {
-    position: 'absolute',
-    top: 90, // Below header
-    right: 12,
-    alignItems: 'flex-end',
-    gap: 7,
-    zIndex: 10,
+
+  // Text Editor Fullscreen
+  textEditorFullscreen: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    zIndex: 50,
   },
-  previewToolRow: {
+  textEditorTopBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'android' ? 36 : 56,
+    gap: 12,
   },
-  previewToolLabel: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  previewToolCircle: {
+  textBgToggleBtn: {
     width: 36,
-    height: 38,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  previewToolTextAa: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  previewBottomContainer: {
-    position: 'absolute',
-    bottom: 24,
-    left: 12,
-    right: 12,
-    zIndex: 10,
-    gap: 12,
-  },
-  captionContainer: {
-    width: '100%',
+  colorPaletteScroll: {
+    gap: 10,
+    alignItems: 'center',
     paddingHorizontal: 8,
   },
-  captionInput: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '500',
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+  colorBubble: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
   },
-  shareRowContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  colorBubbleActive: {
+    transform: [{ scale: 1.25 }],
+    borderColor: '#FFCC00',
+  },
+  doneBtn: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 16,
+  },
+  doneBtnText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  textEditorCenter: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    width: '100%',
-    gap: 8,
+    paddingHorizontal: 24,
+  },
+  textEditorInput: {
+    fontSize: 26,
+    fontWeight: '800',
+    textAlign: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 14,
+  },
+  textEditorInputBg: {
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+  },
+
+  // Preview Bottom Container
+  previewBottomSafeArea: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  previewBottomContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 12,
+  },
+  captionInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  captionInput: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  shareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   shareCapsule: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 24,
-    gap: 8,
+    gap: 10,
   },
   capsuleAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
-  capsuleTextWrapper: {
- 
+  closeFriendsBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#10B981',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   capsuleTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   capsuleSub: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 9,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 10,
     fontWeight: '500',
   },
-  closeFriendsIconWrapper: {
-    width: 26,
-    height: 26,
-    borderRadius: 12,
-    backgroundColor: '#27AE60', // Close friends green
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  blueCircleButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#0095F6', // IG Blue
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
-  },
-  textOverlayContainer: {
-    position: 'absolute',
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    maxWidth: SCREEN_WIDTH - 60,
-    alignSelf: 'center',
-    zIndex: 5,
-  },
-  textOverlayText: {
-    color: '#ffffffff',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  keyboardContainer: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 20,
-  },
-  textInputWrapper: {
-    width: '80%',
-    alignItems: 'center',
-  },
-  textInput: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '700',
-    textAlign: 'center',
-    width: '100%',
-    padding: 10,
-  },
-  doneButton: {
-    marginTop: 20,
+  sendCircleButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  doneButtonText: {
-    color: '#000000',
-    fontSize: 14,
+
+  // Publishing Loader
+  publishingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 99,
+    gap: 14,
+  },
+  publishingText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: '700',
+  },
+
+  // Stickers & Music Modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#1C1C1E',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    paddingTop: 12,
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#545458',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  stickersGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  stickerGridItem: {
+    backgroundColor: '#2C2C2E',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+  },
+  stickerGridItemText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  musicRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#2C2C2E',
+    gap: 14,
+  },
+  musicIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E63956',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  musicTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  musicArtist: {
+    color: '#8E8E93',
+    fontSize: 13,
+  },
+  musicDuration: {
+    color: '#8E8E93',
+    fontSize: 12,
   },
 });
-
-

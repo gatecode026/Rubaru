@@ -12,6 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import api from '@services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import storage from '@services/storage';
 import { connectSocket } from '@services/socket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -57,8 +58,13 @@ export default function OtpVerificationScreen() {
       setVerifying(false);
       const { token, isProfileSetup } = response.data;
       
-      // Store token in local storage
-      await AsyncStorage.setItem('userToken', token);
+      // Store session in persistent storage
+      await storage.saveSession(token, {
+        email: params.email || undefined,
+        phone: params.phone || undefined,
+        isActive: true,
+        isProfileSetup,
+      });
       
       // Configure default header for future requests
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;

@@ -208,7 +208,12 @@ const uploadMultipartMedia = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No media file provided.' });
     }
 
-    const purpose = req.body.purpose || 'POST_MEDIA';
+    let purpose = req.body.purpose || 'POST_MEDIA';
+    if (purpose === 'STORY') purpose = 'STORY_MEDIA';
+    if (purpose === 'REEL') purpose = 'REEL_VIDEO';
+    if (purpose === 'POST') purpose = 'POST_MEDIA';
+    if (purpose === 'PROFILE') purpose = 'PROFILE_PHOTO';
+
     const folder = purpose === 'STORY_MEDIA'
       ? imagekitService.FOLDERS.STORIES
       : purpose === 'REEL_VIDEO'
