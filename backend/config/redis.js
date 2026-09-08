@@ -201,8 +201,10 @@ function getRedisHealth() {
 module.exports = {
   initRedis,
   getRedisClient,
+  getCommandClient: getRedisClient,
   getPublisherClient,
   getSubscriberClient,
   closeRedis,
   getRedisHealth,
 };
+

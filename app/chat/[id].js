@@ -15,24 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-let Audio;
-try {
-  Audio = require('expo-av').Audio;
-} catch (e) {
-  Audio = {
-    requestPermissionsAsync: async () => ({ status: 'granted' }),
-    setAudioModeAsync: async () => {},
-    Recording: {
-      createAsync: async () => {
-        console.warn('Audio recording is not supported in this environment.');
-        return { recording: { stopAndUnloadAsync: async () => {}, getURI: () => null } };
-      }
-    },
-    RecordingOptionsPresets: {
-      HIGH_QUALITY: {}
-    }
-  };
-}
+import Audio from '../../src/services/audioHelper';
 import MessageBubble from '../../src/components/common/MessageBubble';
 import MessageOptionsMenu from '../../src/components/common/MessageOptionsMenu';
 import EmojiPickerSheet from '../../src/components/common/EmojiPickerSheet';

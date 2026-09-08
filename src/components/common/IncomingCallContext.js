@@ -1,72 +1,64 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { Linking, Platform } from 'react-native';
+import React, { createContext, useContext, useEffect, useCallback, useRef } from 'react';
+import { Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import IncomingCallBanner from './IncomingCallBanner';
 import { connectSocket, getSocket } from '../../services/socket';
+import { useCallStore } from '../../store/callStore';
+import callPushClientService from '../../services/callPushClientService';
 import paidCommunicationClient from '../../services/paidCommunicationService';
 
 const IncomingCallContext = createContext();
 
 export function IncomingCallProvider({ children }) {
   const router = useRouter();
-  const [callData, setCallData] = useState(null);
   const coldStartHandledRef = useRef(false);
 
-  // Cold-Start Push Deep Link & Action Restoration
+  const callStore = useCallStore();
+  const {
+    callId,
+    callStatus,
+    callType,
+    peerId,
+    peerName,
+    peerAvatar,
+    ratePerMinute,
+    acceptIncomingCall,
+    rejectIncomingCall,
+  } = callStore;
+
+  // Cold-Start & Runtime Deep Link Action Handling (R4-C6)
   useEffect(() => {
-    async function handleColdStartCallAction() {
+    callPushClientService.initialize();
+
+    async function handleInitialUrl() {
       if (coldStartHandledRef.current) return;
       try {
         const initialUrl = await Linking.getInitialURL();
-        if (initialUrl && initialUrl.includes('rubaru://call/')) {
+        if (initialUrl && initialUrl.includes('rubaru://call')) {
           coldStartHandledRef.current = true;
-          const urlObj = new URL(initialUrl);
-          const sessionId = urlObj.searchParams.get('sessionId') || initialUrl.split('rubaru://call/')[1]?.split('?')[0];
-          const action = urlObj.searchParams.get('action') || 'ANSWER';
-
-          if (sessionId) {
-            const token = await AsyncStorage.getItem('userToken');
-            if (token) {
-              // Validate session from authoritative backend before navigating
-              try {
-                const session = await paidCommunicationClient.getSession(sessionId);
-                if (session && (session.status === 'PENDING' || session.status === 'ACCEPTED')) {
-                  if (action === 'ANSWER') {
-                    await paidCommunicationClient.acceptSession(sessionId);
-                    router.push({
-                      pathname: '/active-call',
-                      params: {
-                        contactName: session.initiatorId?.displayName || 'Rubaru User',
-                        avatarUri: session.initiatorId?.avatarUrl || '',
-                        callType: session.communicationType === 'VIDEO' ? 'video' : 'voice',
-                        receiverId: session.initiatorId?._id || session.initiatorId,
-                        paidSessionId: sessionId,
-                        isPaid: 'true',
-                        isInitiator: 'false',
-                        ratePerMinute: String(session.ratePerMinuteSnapshot || 5),
-                        initialStatus: 'connected',
-                      },
-                    });
-                  } else if (action === 'DECLINE') {
-                    await paidCommunicationClient.declineSession(sessionId, 'DECLINED_FROM_NOTIFICATION');
-                  }
-                }
-              } catch (sessErr) {
-                console.warn('[COLD START] Session validation failed or expired:', sessErr.message);
-              }
-            }
-          }
+          await callPushClientService.parseAndHandleCallDeepLink(initialUrl, router);
         }
       } catch (e) {
-        console.log('[COLD START] Deep link parse info:', e.message);
+        console.warn('[COLD START] Deep link error:', e.message);
       }
     }
 
-    handleColdStartCallAction();
+    handleInitialUrl();
+
+    // Listen for runtime incoming deep links (when backgrounded)
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      if (url && url.includes('rubaru://call')) {
+        callPushClientService.parseAndHandleCallDeepLink(url, router);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, [router]);
 
-  // Connect socket on boot and register authoritative events
+  // Connect socket and listen to canonical calling events
   useEffect(() => {
     async function initSocket() {
       try {
@@ -84,134 +76,85 @@ export function IncomingCallProvider({ children }) {
       const socket = getSocket();
       if (socket && !socket._incomingCallRegistered) {
         socket._incomingCallRegistered = true;
-        console.log('[SOCKET] Registering incoming_call, paid_session.requested, and call.cancelled listeners');
+        console.log('[SOCKET] Registering canonical call:incoming & paid_session.requested listeners');
 
-        // Canonical Paid Communication Session Request Listener
+        // Canonical call:incoming
+        socket.on('call:incoming', (data) => {
+          console.log('[SOCKET] Canonical call:incoming received:', data);
+          callStore.handleIncomingCall(data);
+        });
+
+        // Legacy / Paid Session Request
         socket.on('paid_session.requested', (data) => {
           console.log('[SOCKET] paid_session.requested received:', data);
           const commType = data.communicationType || 'AUDIO';
-          const rate = data.ratePerMinute || (commType === 'VIDEO' ? 10 : commType === 'MESSAGE' ? 1 : 5);
-          setCallData({
-            contactName: data.initiatorName || 'Rubaru User',
-            avatarUri: data.initiatorAvatar || '',
-            callType: commType === 'VIDEO' ? 'video' : (commType === 'MESSAGE' ? 'message' : 'voice'),
-            communicationType: commType,
-            ratePerMinute: rate,
+          callStore.handleIncomingCall({
+            callId: data.sessionId,
+            sessionId: data.sessionId,
             callerId: data.initiatorId,
-            callSessionId: data.sessionId,
-            paidSessionId: data.sessionId,
-            isPaid: true,
+            callerName: data.initiatorName || 'Rubaru User',
+            callerAvatar: data.initiatorAvatar || '',
+            callType: commType === 'VIDEO' ? 'video' : 'audio',
+            communicationType: commType,
+            ratePerMinute: data.ratePerMinute || (commType === 'VIDEO' ? 10 : 5),
           });
         });
 
-        // Remote party hung up or cancelled (Multi-device ring cancellation)
-        socket.on('call_hungup', () => {
-          console.log('[SOCKET] Remote party hung up');
-          setCallData(null);
+        socket.on('call:cancelled', (data) => {
+          console.log('[SOCKET] Call cancelled by caller or answered elsewhere:', data);
+          callStore.handleCallEnded(data);
         });
 
-        socket.on('call.cancelled', () => {
-          console.log('[SOCKET] Call cancelled by caller or answered on another device');
-          setCallData(null);
-        });
-
-        socket.on('paid_session.ended', () => {
-          console.log('[SOCKET] Paid session ended');
-          setCallData(null);
-        });
-
-        socket.on('paid_session.declined', () => {
-          console.log('[SOCKET] Paid session declined');
-          setCallData(null);
+        socket.on('call:ended', (data) => {
+          console.log('[SOCKET] Call ended event received:', data);
+          callStore.handleCallEnded(data);
         });
       }
     }, 1000);
 
     return () => {
       clearInterval(interval);
-      const socket = getSocket();
-      if (socket) {
-        socket.off('paid_session.requested');
-        socket.off('call_hungup');
-        socket.off('call.cancelled');
-        socket.off('paid_session.ended');
-        socket.off('paid_session.declined');
-        socket._incomingCallRegistered = false;
-      }
     };
   }, []);
 
   const handleAccept = useCallback(async () => {
-    if (!callData) return;
-    const { contactName, avatarUri, callType, callerId, callSessionId, isPaid, paidSessionId, communicationType, ratePerMinute } = callData;
+    if (callStatus !== 'INCOMING') return;
 
-    if (isPaid && paidSessionId) {
-      try {
-        await paidCommunicationClient.acceptSession(paidSessionId);
-      } catch (err) {
-        console.warn('[INCOMING CALL] Failed to accept paid session:', err.message);
-      }
-    }
-
-    setCallData(null);
-
-    if (communicationType === 'MESSAGE') {
-      router.push({
-        pathname: `/chat/${callerId}`,
-        params: {
-          id: callerId,
-          name: contactName,
-          avatarUrl: avatarUri,
-          paidSessionId,
-          isPaid: 'true',
-          isInitiator: 'false',
-        },
-      });
-    } else {
+    const result = await acceptIncomingCall();
+    if (result && result.success) {
       router.push({
         pathname: '/active-call',
         params: {
-          contactName,
-          avatarUri,
-          callType: callType || 'voice',
-          receiverId: callerId,
-          callSessionId,
-          paidSessionId: paidSessionId || null,
-          isPaid: isPaid ? 'true' : 'false',
+          contactName: peerName,
+          avatarUri: peerAvatar,
+          callType: callType,
+          receiverId: peerId,
+          callSessionId: callId,
+          isPaid: 'true',
           isInitiator: 'false',
-          ratePerMinute: ratePerMinute ? String(ratePerMinute) : (callType === 'video' ? '10' : '5'),
+          ratePerMinute: String(ratePerMinute),
           initialStatus: 'connected',
         },
       });
     }
-  }, [callData, router]);
+  }, [callStatus, acceptIncomingCall, peerName, peerAvatar, callType, peerId, callId, ratePerMinute, router]);
 
   const handleDecline = useCallback(async () => {
-    if (!callData) return;
-    const { callerId, callSessionId, isPaid, paidSessionId } = callData;
-
-    if (isPaid && paidSessionId) {
-      try {
-        await paidCommunicationClient.declineSession(paidSessionId, 'DECLINED_BY_RECEIVER');
-      } catch (err) {
-        console.warn('[INCOMING CALL] Failed to decline paid session:', err.message);
-      }
-    }
-
-    setCallData(null);
-  }, [callData]);
+    if (callStatus !== 'INCOMING') return;
+    await rejectIncomingCall('DECLINED_BY_RECEIVER');
+  }, [callStatus, rejectIncomingCall]);
 
   return (
     <IncomingCallContext.Provider value={{}}>
       {children}
       <IncomingCallBanner
-        visible={!!callData}
-        contactName={callData?.contactName || ''}
-        avatarUri={callData?.avatarUri || ''}
-        callType={callData?.callType || 'voice'}
-        communicationType={callData?.communicationType || 'AUDIO'}
-        ratePerMinute={callData?.ratePerMinute || 5}
-        isPaid={Boolean(callData?.isPaid)}
+        visible={callStatus === 'INCOMING'}
+        contactName={peerName || 'Rubaru User'}
+        avatarUri={peerAvatar || ''}
+        callType={callType || 'voice'}
+        communicationType={callType === 'video' ? 'VIDEO' : 'AUDIO'}
+        ratePerMinute={ratePerMinute || 5}
+        isPaid={true}
         onAccept={handleAccept}
         onDecline={handleDecline}
       />

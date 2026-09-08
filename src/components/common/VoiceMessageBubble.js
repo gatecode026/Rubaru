@@ -2,19 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
-let Audio;
-try {
-  Audio = require('expo-av').Audio;
-} catch (e) {
-  Audio = {
-    Sound: {
-      createAsync: async () => {
-        console.warn('Audio playback is not supported in this environment.');
-        return { sound: { playAsync: async () => {}, pauseAsync: async () => {}, unloadAsync: async () => {} } };
-      }
-    }
-  };
-}
+import Audio from '../../services/audioHelper';
 
 export default function VoiceMessageBubble({ uri, duration = '00:32', time, isSent, isRead, onLongPress }) {
   const { isDarkMode, colors } = useTheme();

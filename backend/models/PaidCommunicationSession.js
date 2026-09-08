@@ -1,54 +1,81 @@
 const mongoose = require('mongoose');
-const { PaidSessionStatuses, CommunicationTypes, PaidSessionEndReasons } = require('./enums');
+const { CallStatuses, PaidSessionStatuses, CommunicationTypes, CallEndReasons, PaidSessionEndReasons } = require('./enums');
 
+/**
+ * Authoritative Call & Paid Communication State Transition Matrix
+ */
 const ALLOWED_STATE_TRANSITIONS = {
-  [PaidSessionStatuses.PENDING]: [
-    PaidSessionStatuses.ACCEPTED,
-    PaidSessionStatuses.DECLINED,
-    PaidSessionStatuses.CANCELLED,
-    PaidSessionStatuses.MISSED,
-    PaidSessionStatuses.EXPIRED,
-    PaidSessionStatuses.BLOCKED,
-    PaidSessionStatuses.FAILED,
+  [CallStatuses.INITIATED]: [
+    CallStatuses.RINGING,
+    CallStatuses.ACCEPTED,
+    CallStatuses.REJECTED,
+    CallStatuses.DECLINED,
+    CallStatuses.CANCELLED,
+    CallStatuses.FAILED,
+    CallStatuses.MISSED,
   ],
-  [PaidSessionStatuses.ACCEPTED]: [
-    PaidSessionStatuses.CONNECTING,
-    PaidSessionStatuses.ACTIVE,
-    PaidSessionStatuses.ENDING,
-    PaidSessionStatuses.ENDED,
-    PaidSessionStatuses.CANCELLED,
-    PaidSessionStatuses.MISSED,
-    PaidSessionStatuses.EXPIRED,
-    PaidSessionStatuses.FAILED,
+  [CallStatuses.PENDING]: [
+    CallStatuses.RINGING,
+    CallStatuses.ACCEPTED,
+    CallStatuses.DECLINED,
+    CallStatuses.REJECTED,
+    CallStatuses.CANCELLED,
+    CallStatuses.MISSED,
+    CallStatuses.EXPIRED,
+    CallStatuses.BLOCKED,
+    CallStatuses.FAILED,
   ],
-  [PaidSessionStatuses.CONNECTING]: [
-    PaidSessionStatuses.ACTIVE,
-    PaidSessionStatuses.ENDING,
-    PaidSessionStatuses.ENDED,
-    PaidSessionStatuses.CANCELLED,
-    PaidSessionStatuses.MISSED,
-    PaidSessionStatuses.EXPIRED,
-    PaidSessionStatuses.FAILED,
+  [CallStatuses.RINGING]: [
+    CallStatuses.ACCEPTED,
+    CallStatuses.REJECTED,
+    CallStatuses.DECLINED,
+    CallStatuses.CANCELLED,
+    CallStatuses.MISSED,
+    CallStatuses.BUSY,
+    CallStatuses.FAILED,
   ],
-  [PaidSessionStatuses.ACTIVE]: [
-    PaidSessionStatuses.ENDING,
-    PaidSessionStatuses.ENDED,
-    PaidSessionStatuses.INSUFFICIENT_BALANCE,
-    PaidSessionStatuses.FAILED,
+  [CallStatuses.ACCEPTED]: [
+    CallStatuses.CONNECTING,
+    CallStatuses.ACTIVE,
+    CallStatuses.CANCELLED,
+    CallStatuses.FAILED,
+    CallStatuses.ENDED,
+    CallStatuses.ENDING,
   ],
-  [PaidSessionStatuses.ENDING]: [
-    PaidSessionStatuses.ENDED,
-    PaidSessionStatuses.FAILED,
+  [CallStatuses.CONNECTING]: [
+    CallStatuses.ACTIVE,
+    CallStatuses.CANCELLED,
+    CallStatuses.FAILED,
+    CallStatuses.ENDED,
+    CallStatuses.ENDING,
+  ],
+  [CallStatuses.ACTIVE]: [
+    CallStatuses.RECONNECTING,
+    CallStatuses.ENDED,
+    CallStatuses.FAILED,
+    CallStatuses.INSUFFICIENT_BALANCE,
+    CallStatuses.ENDING,
+  ],
+  [CallStatuses.RECONNECTING]: [
+    CallStatuses.ACTIVE,
+    CallStatuses.ENDED,
+    CallStatuses.FAILED,
+  ],
+  [CallStatuses.ENDING]: [
+    CallStatuses.ENDED,
+    CallStatuses.FAILED,
   ],
   // Terminal states cannot transition to anything
-  [PaidSessionStatuses.ENDED]: [],
-  [PaidSessionStatuses.DECLINED]: [],
-  [PaidSessionStatuses.CANCELLED]: [],
-  [PaidSessionStatuses.MISSED]: [],
-  [PaidSessionStatuses.EXPIRED]: [],
-  [PaidSessionStatuses.FAILED]: [],
-  [PaidSessionStatuses.INSUFFICIENT_BALANCE]: [],
-  [PaidSessionStatuses.BLOCKED]: [],
+  [CallStatuses.REJECTED]: [],
+  [CallStatuses.DECLINED]: [],
+  [CallStatuses.CANCELLED]: [],
+  [CallStatuses.MISSED]: [],
+  [CallStatuses.EXPIRED]: [],
+  [CallStatuses.BUSY]: [],
+  [CallStatuses.FAILED]: [],
+  [CallStatuses.ENDED]: [],
+  [CallStatuses.INSUFFICIENT_BALANCE]: [],
+  [CallStatuses.BLOCKED]: [],
 };
 
 const PaidCommunicationSessionSchema = new mongoose.Schema(
@@ -58,6 +85,12 @@ const PaidCommunicationSessionSchema = new mongoose.Schema(
       required: true,
       unique: true,
       index: true,
+    },
+    callId: {
+      type: String,
+      unique: true,
+      index: true,
+      sparse: true,
     },
     initiatorId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -69,6 +102,16 @@ const PaidCommunicationSessionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+      index: true,
+    },
+    caller: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
+    },
+    receiver: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
       index: true,
     },
     conversationId: {
@@ -100,19 +143,44 @@ const PaidCommunicationSessionSchema = new mongoose.Schema(
     configurationVersion: {
       type: Number,
       required: true,
+      default: 1,
       min: 1,
     },
     status: {
       type: String,
       enum: Object.values(PaidSessionStatuses),
-      default: PaidSessionStatuses.PENDING,
+      default: CallStatuses.INITIATED,
       index: true,
+    },
+    idempotencyKey: {
+      type: String,
+      default: null,
+      index: true,
+      sparse: true,
+      trim: true,
+    },
+    billingParty: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
     },
     requestExpiresAt: {
       type: Date,
       default: null,
     },
+    initiatedAt: {
+      type: Date,
+      default: null,
+    },
+    ringingAt: {
+      type: Date,
+      default: null,
+    },
     acceptedAt: {
+      type: Date,
+      default: null,
+    },
+    connectingAt: {
       type: Date,
       default: null,
     },
@@ -132,9 +200,27 @@ const PaidCommunicationSessionSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    reconnectingAt: {
+      type: Date,
+      default: null,
+    },
+    reconnectionDeadline: {
+      type: Date,
+      default: null,
+    },
     endedAt: {
       type: Date,
       default: null,
+    },
+    durationSeconds: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    billableSeconds: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     lastInitiatorHeartbeatAt: {
       type: Date,
@@ -154,6 +240,11 @@ const PaidCommunicationSessionSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    coinsReserved: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     totalCoinsCharged: {
       type: Number,
       default: 0,
@@ -164,7 +255,21 @@ const PaidCommunicationSessionSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    coinsRefunded: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    endedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
     endReason: {
+      type: String,
+      default: null,
+    },
+    failureCode: {
       type: String,
       default: null,
     },
@@ -180,16 +285,59 @@ const PaidCommunicationSessionSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    schemaVersion: {
+      type: Number,
+      default: 2,
+    },
   },
   { timestamps: true }
 );
 
+// Synchronize caller/receiver aliases before save
+PaidCommunicationSessionSchema.pre('validate', function () {
+  if (this.sessionId && !this.callId) {
+    this.callId = this.sessionId;
+  }
+  if (this.callId && !this.sessionId) {
+    this.sessionId = this.callId;
+  }
+  if (this.initiatorId && !this.caller) {
+    this.caller = this.initiatorId;
+  }
+  if (this.caller && !this.initiatorId) {
+    this.initiatorId = this.caller;
+  }
+  if (this.receiverId && !this.receiver) {
+    this.receiver = this.receiverId;
+  }
+  if (this.receiver && !this.receiverId) {
+    this.receiverId = this.receiver;
+  }
+  if (!this.billingParty && this.initiatorId) {
+    this.billingParty = this.initiatorId;
+  }
+  if (!this.initiatedAt && this.createdAt) {
+    this.initiatedAt = this.createdAt;
+  }
+});
+
 // Indexes
 PaidCommunicationSessionSchema.index({ initiatorId: 1, status: 1 });
 PaidCommunicationSessionSchema.index({ receiverId: 1, status: 1 });
+PaidCommunicationSessionSchema.index({ caller: 1, createdAt: -1 });
+PaidCommunicationSessionSchema.index({ receiver: 1, createdAt: -1 });
 PaidCommunicationSessionSchema.index({ conversationId: 1, createdAt: -1 });
 PaidCommunicationSessionSchema.index({ status: 1, nextChargeAt: 1 });
 PaidCommunicationSessionSchema.index({ status: 1, requestExpiresAt: 1 });
+PaidCommunicationSessionSchema.index({ status: 1, reconnectionDeadline: 1 });
+PaidCommunicationSessionSchema.index(
+  { caller: 1, idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } }
+);
 
 /**
  * Validate State Machine Transition

@@ -4,6 +4,7 @@ const PaidCommunicationConfig = require('../models/PaidCommunicationConfig');
 const Wallet = require('../models/Wallet');
 const walletService = require('./walletService');
 const paidCommunicationService = require('./paidCommunicationService');
+const callService = require('./callService');
 const {
   PaidSessionStatuses,
   PaidSessionEndReasons,
@@ -61,9 +62,10 @@ class PaidBillingWorker {
   async runBillingPass() {
     const now = new Date();
 
-    // 1. Expire unaccepted pending sessions
+    // 1. Expire unaccepted pending sessions & stale reconnects
     try {
       await paidCommunicationService.expirePendingSessions();
+      await callService.recoverStaleCalls();
     } catch (expErr) {
       console.warn('[PAID BILLING WORKER] Expire pending error:', expErr.message);
     }

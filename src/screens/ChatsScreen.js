@@ -40,6 +40,7 @@ export default function ChatsScreen() {
 
   const fetchChats = useCallback(() => {
     async function load() {
+      try {
         let rawConversations = [];
         try {
           const v1Res = await messagingService.listConversations();

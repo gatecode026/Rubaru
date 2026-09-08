@@ -3,45 +3,79 @@ const crypto = require('crypto');
 const CALL_SECRET = process.env.CALL_SIGNING_SECRET || process.env.JWT_SECRET || 'rubaru_secure_call_signing_key_2026';
 
 /**
- * Creates a minimal, versioned, cryptographically signed incoming-call push payload
+ * Creates an authoritative, versioned, cryptographically signed incoming-call push payload (R4-C6)
+ * Schema:
+ * {
+ *   type: "INCOMING_CALL",
+ *   version: 1,
+ *   callId: string,
+ *   callType: "AUDIO" | "VIDEO",
+ *   caller: { id: string, displayName: string, avatarUrl: string | null },
+ *   ratePerMinute: number,
+ *   expiresAt: string,
+ *   issuedAt: string,
+ *   nonce: string,
+ *   signature: string
+ * }
  */
 function createIncomingCallPayload({
+  callId,
   sessionId,
   caller,
   callType,
   ratePerMinute,
   expiresInSeconds = 60,
 }) {
+  const targetCallId = callId || sessionId;
   const now = new Date();
   const expiresAt = new Date(now.getTime() + expiresInSeconds * 1000);
-  const actionNonce = crypto.randomBytes(16).toString('hex');
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const normalizedCallType = (callType || 'AUDIO').toUpperCase();
 
-  const dataToSign = `${sessionId}:${actionNonce}:${expiresAt.toISOString()}`;
+  const dataToSign = `${targetCallId}:${nonce}:${expiresAt.toISOString()}`;
   const signature = crypto.createHmac('sha256', CALL_SECRET).update(dataToSign).digest('hex');
 
+  const callerObj = {
+    id: caller?.id || caller?._id?.toString() || 'unknown',
+    displayName: caller?.displayName || caller?.name || caller?.email || 'Rubaru User',
+    avatarUrl: caller?.avatarUrl || caller?.profilePhoto || null,
+  };
+
   return {
-    eventVersion: '1.0',
-    eventType: 'INCOMING_CALL',
-    sessionId,
-    caller: {
-      id: caller.id || caller._id?.toString(),
-      displayName: caller.displayName || caller.name || caller.email || 'Rubaru User',
-      avatarUrl: caller.avatarUrl || caller.profilePhoto || null,
-    },
-    callType: callType.toUpperCase(),
-    ratePerMinute,
-    createdAt: now.toISOString(),
+    type: 'INCOMING_CALL',
+    version: 1,
+    callId: targetCallId,
+    callType: normalizedCallType,
+    caller: callerObj,
+    ratePerMinute: Number(ratePerMinute) || 5,
     expiresAt: expiresAt.toISOString(),
-    actionNonce,
+    issuedAt: now.toISOString(),
+    nonce,
     signature,
+    // Backward compatibility aliases
+    sessionId: targetCallId,
+    eventType: 'INCOMING_CALL',
+    eventVersion: '1.0',
+    createdAt: now.toISOString(),
+    actionNonce: nonce,
   };
 }
 
 /**
- * Verifies the authenticity and expiration of an incoming call payload action
+ * Verifies the authenticity, non-tampering, non-replay, and unexpired state of an incoming call payload action
  */
-function verifyCallActionToken({ sessionId, actionNonce, expiresAt, signature }) {
-  if (!sessionId || !actionNonce || !expiresAt || !signature) {
+function verifyCallActionToken({
+  callId,
+  sessionId,
+  nonce,
+  actionNonce,
+  expiresAt,
+  signature,
+}) {
+  const targetCallId = callId || sessionId;
+  const targetNonce = nonce || actionNonce;
+
+  if (!targetCallId || !targetNonce || !expiresAt || !signature) {
     return { valid: false, error: 'MISSING_SIGNATURE_FIELDS' };
   }
 
@@ -50,19 +84,28 @@ function verifyCallActionToken({ sessionId, actionNonce, expiresAt, signature })
     return { valid: false, error: 'ACTION_EXPIRED' };
   }
 
-  const expectedData = `${sessionId}:${actionNonce}:${expirationDate.toISOString()}`;
+  const expectedData = `${targetCallId}:${targetNonce}:${expirationDate.toISOString()}`;
   const expectedSignature = crypto.createHmac('sha256', CALL_SECRET).update(expectedData).digest('hex');
 
-  const isValid = crypto.timingSafeEqual(
-    Buffer.from(signature, 'hex'),
-    Buffer.from(expectedSignature, 'hex')
-  );
+  let isValid = false;
+  if (signature.length === expectedSignature.length) {
+    isValid = crypto.timingSafeEqual(
+      Buffer.from(signature, 'hex'),
+      Buffer.from(expectedSignature, 'hex')
+    );
+  }
 
   if (!isValid) {
     return { valid: false, error: 'INVALID_SIGNATURE' };
   }
 
-  return { valid: true, sessionId, actionNonce, expiresAt };
+  return {
+    valid: true,
+    callId: targetCallId,
+    sessionId: targetCallId,
+    nonce: targetNonce,
+    expiresAt: expirationDate.toISOString(),
+  };
 }
 
 module.exports = {

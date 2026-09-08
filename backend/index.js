@@ -57,6 +57,8 @@ app.use('/api/profiles', profileRoutes);
 app.use('/api/reels', reelRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/calls', callRoutes);
+app.use('/v1/calls', callRoutes);
+app.use('/api/v1/calls', callRoutes);
 app.use('/api/notifications', notifRoutes);
 
 const mediaRoutes = require('./routes/mediaRoutes');
