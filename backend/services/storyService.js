@@ -6,6 +6,7 @@ const FollowRelationship = require('../models/FollowRelationship');
 const Block = require('../models/Block');
 const User = require('../models/User');
 const StoryView = require('../models/StoryView');
+const ContentLike = require('../models/ContentLike');
 const OutboxEvent = require('../models/OutboxEvent');
 const socialPolicyService = require('./socialPolicyService');
 const { AuthorizationContexts } = require('./socialPolicyService');
@@ -93,10 +94,12 @@ class StoryService {
     const expiresAt = new Date(publishedAt.getTime() + STORY_DURATION_MS);
 
     // 5. Construct Safe Media Items Payload
+    const primaryUrl = mediaAsset.variants?.[0]?.url || mediaAsset.thumbnail?.url || '';
     const mediaItem = {
       mediaAssetId: mediaAsset._id,
       position: 0,
       mediaType: mediaAsset.mediaType,
+      originalUrl: primaryUrl,
       variants: mediaAsset.variants,
       thumbnail: mediaAsset.thumbnail,
       width: mediaAsset.width || 1080,
@@ -391,21 +394,32 @@ class StoryService {
     }
 
     const storyIds = authorized.map((s) => s._id);
-    const [profile, userViews] = await Promise.all([
+    const [profile, userViews, userLikes] = await Promise.all([
       Profile.findOne({ user: targetUserId }).select('user displayName username avatarUri isVerified isPrivate').lean(),
       StoryView.find({ viewerId, storyId: { $in: storyIds } }).select('storyId').lean(),
+      ContentLike.find({ userId: viewerId, contentId: { $in: storyIds }, status: 'ACTIVE' }).select('contentId').lean(),
     ]);
 
     const viewedSet = new Set(userViews.map((v) => v.storyId.toString()));
+    const likedSet = new Set(userLikes.map((l) => l.contentId.toString()));
     const serializedStories = authorized.map((s) => {
       const dto = serializeContentForViewer(s, { authorProfile: profile });
       dto.isViewed = viewedSet.has(s._id.toString());
+      dto.isLiked = likedSet.has(s._id.toString());
+      dto.viewsCount = s.viewsCount || 0;
       return dto;
     });
+
+    // Determine initial playback index: jump directly to the first unviewed story, or the latest story
+    let initialIndex = serializedStories.findIndex((s) => !s.isViewed);
+    if (initialIndex === -1) {
+      initialIndex = Math.max(0, serializedStories.length - 1);
+    }
 
     return {
       author: profile,
       stories: serializedStories,
+      initialIndex,
     };
   }
 
@@ -442,6 +456,11 @@ class StoryService {
       err.code = access.reasonCode || 'FORBIDDEN';
       err.statusCode = access.safeErrorStatus || 403;
       throw err;
+    }
+
+    // Do NOT record view or increment view count if author is viewing their own story
+    if (story.authorId.toString() === viewerId.toString()) {
+      return { recorded: false, isSelf: true };
     }
 
     const eventId = payload.eventId || `view_${storyId}_${viewerId}_${Date.now()}`;
@@ -529,35 +548,71 @@ class StoryService {
       throw err;
     }
 
-    const limit = Math.min(Math.max(parseInt(options.limit, 10) || 20, 1), 50);
+    const limit = Math.min(Math.max(parseInt(options.limit, 10) || 50, 1), 100);
 
-    const views = await StoryView.find({ storyId })
-      .sort({ firstViewedAt: -1, _id: -1 })
-      .limit(limit)
-      .lean();
+    const [views, likes] = await Promise.all([
+      StoryView.find({ storyId, viewerId: { $ne: story.authorId } })
+        .sort({ firstViewedAt: -1, _id: -1 })
+        .limit(limit)
+        .lean(),
+      ContentLike.find({ contentId: storyId, userId: { $ne: story.authorId }, status: 'ACTIVE' })
+        .select('userId createdAt')
+        .lean(),
+    ]);
 
-    const viewerUserIds = views.map((v) => v.viewerId);
-    const profiles = await Profile.find({ user: { $in: viewerUserIds } })
-      .select('user displayName username avatarUri isVerified')
+    const likedUserIdsSet = new Set(likes.map((l) => l.userId.toString()));
+    const allUserIds = [...new Set([...views.map((v) => v.viewerId.toString()), ...likedUserIdsSet])];
+
+    const profiles = await Profile.find({ user: { $in: allUserIds } })
+      .select('user displayName username avatarUri isVerified bio')
       .lean();
 
     const profileMap = new Map(profiles.map((p) => [p.user.toString(), p]));
 
     const viewersList = views.map((v) => {
       const p = profileMap.get(v.viewerId.toString()) || {};
+      const hasLiked = likedUserIdsSet.has(v.viewerId.toString());
       return {
         viewerId: v.viewerId,
+        userId: v.viewerId,
         displayName: p.displayName || 'Rubaru User',
         username: p.username || '',
         avatarUri: p.avatarUri || '',
         isVerified: Boolean(p.isVerified),
         firstViewedAt: v.firstViewedAt,
+        hasLiked,
       };
+    });
+
+    // Also include any users who liked if they are not in the views array
+    const viewedSet = new Set(views.map((v) => v.viewerId.toString()));
+    for (const like of likes) {
+      if (like.userId.toString() !== story.authorId.toString() && !viewedSet.has(like.userId.toString())) {
+        const p = profileMap.get(like.userId.toString()) || {};
+        viewersList.unshift({
+          viewerId: like.userId,
+          userId: like.userId,
+          displayName: p.displayName || 'Rubaru User',
+          username: p.username || '',
+          avatarUri: p.avatarUri || '',
+          isVerified: Boolean(p.isVerified),
+          firstViewedAt: like.createdAt,
+          hasLiked: true,
+        });
+      }
+    }
+
+    // Sort: Users who liked the story appear at the top (Instagram behavior)
+    viewersList.sort((a, b) => {
+      if (a.hasLiked && !b.hasLiked) return -1;
+      if (!a.hasLiked && b.hasLiked) return 1;
+      return new Date(b.firstViewedAt || 0) - new Date(a.firstViewedAt || 0);
     });
 
     return {
       viewers: viewersList,
-      totalViews: views.length,
+      totalViews: viewersList.length,
+      totalLikes: likes.length,
     };
   }
 

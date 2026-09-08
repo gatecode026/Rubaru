@@ -2,10 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const mediaConfig = require('../../config/mediaConfig');
+const imagekitService = require('../imagekitService');
 
 /**
  * Storage Provider Factory & Adapter Interface
- * Provides unified API for Local Disk and Cloud Object Storage (S3/R2/GCS).
+ * Provides unified API for Local Disk and Cloud Object Storage (S3/R2/GCS/ImageKit).
  */
 class LocalDiskStorageProvider {
   constructor() {
@@ -13,6 +14,7 @@ class LocalDiskStorageProvider {
     if (!fs.existsSync(this.baseDir)) {
       fs.mkdirSync(this.baseDir, { recursive: true });
     }
+    this._imagekitUrls = new Map();
   }
 
   _resolveLocalPath(objectKey) {
@@ -98,10 +100,25 @@ class LocalDiskStorageProvider {
     }
 
     fs.writeFileSync(fullPath, buffer);
+
+    let ikUrl = null;
+    try {
+      const fileName = path.basename(objectKey);
+      const folder = '/rubaru/' + path.dirname(objectKey).replace(/\\/g, '/');
+      const ikRes = await imagekitService.uploadBuffer(buffer, fileName, folder, ['media']);
+      if (ikRes && ikRes.url) {
+        ikUrl = ikRes.url;
+        this._imagekitUrls.set(objectKey, ikRes.url);
+      }
+    } catch (err) {
+      console.warn('[STORAGE PROVIDER IMAGEKIT UPLOAD WARNING]', err.message);
+    }
+
     return {
       objectKey,
       sizeBytes: buffer.length,
       mimeType,
+      url: ikUrl,
     };
   }
 
@@ -113,8 +130,16 @@ class LocalDiskStorageProvider {
   }
 
   async createReadAuthorization(objectKey, expiresInSec = 3600) {
-    if (mediaConfig.storage.cdnBaseUrl) {
-      return `${mediaConfig.storage.cdnBaseUrl}/${objectKey}`;
+    if (!objectKey) return '';
+    if (objectKey.startsWith('http://') || objectKey.startsWith('https://')) {
+      return objectKey;
+    }
+    if (this._imagekitUrls.has(objectKey)) {
+      return this._imagekitUrls.get(objectKey);
+    }
+    const ikEndpoint = process.env.IMAGEKIT_URL_ENDPOINT || (mediaConfig.storage && mediaConfig.storage.cdnBaseUrl);
+    if (ikEndpoint) {
+      return `${ikEndpoint.replace(/\/$/, '')}/${objectKey.replace(/^\//, '')}`;
     }
     return `/${mediaConfig.storage.localUploadDir}/${objectKey}`;
   }

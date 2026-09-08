@@ -76,6 +76,8 @@ export default function RootLayout() {
               <Stack.Screen name="customer-support-flow" />
               <Stack.Screen name="feedback" />
               <Stack.Screen name="faqs" />
+              <Stack.Screen name="add-story" options={{ presentation: 'modal', headerShown: false }} />
+              <Stack.Screen name="view-story" options={{ presentation: 'fullScreenModal', headerShown: false }} />
             </Stack>
           </IncomingCallProvider>
         </ThemeProvider>
@@ -83,3 +85,5 @@ export default function RootLayout() {
     </QueryClientProvider>
   );
 }
+
+export { ErrorBoundary } from 'expo-router';

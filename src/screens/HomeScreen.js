@@ -259,54 +259,86 @@ export default function HomeScreen({ isNestedInPager }) {
           ListHeaderComponent={
             <>
               {/* Stories Horizontal Row */}
-              <FlatList
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                data={
-                  storyTray.length > 0
-                    ? storyTray.map((g, idx) => ({
-                        id: g.authorId || String(idx),
-                        name: g.author?.displayName || g.author?.username || 'User',
-                        imageUrl: g.author?.avatarUri || g.previewThumbnail || 'https://i.pravatar.cc/150?img=32',
-                        isFirst: g.author?.isSelf || idx === 0,
-                        hasUnviewed: g.hasUnviewed,
-                        userId: g.authorId,
-                      }))
-                    : [
-                        {
-                          id: 'self_story',
-                          name: 'Your Story',
-                          imageUrl: profile?.avatarUri || 'https://i.pravatar.cc/150?img=60',
-                          isFirst: true,
-                          hasUnviewed: false,
-                        },
-                      ]
-                }
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <StoryAvatar
-                    name={item.name}
-                    imageUrl={item.imageUrl}
-                    isFirst={item.isFirst}
-                    hasUnviewed={item.hasUnviewed}
-                    onPress={
-                      item.isFirst
-                        ? () => router.push('/add-story')
-                        : () =>
+              {(() => {
+                const myUserId = profile?.user?._id || profile?.user;
+                const selfGroup = storyTray.find(
+                  (g) => g.author?.isSelf || (myUserId && String(g.authorId) === String(myUserId))
+                );
+                const friendGroups = storyTray.filter(
+                  (g) => !g.author?.isSelf && (!myUserId || String(g.authorId) !== String(myUserId))
+                );
+
+                const selfItem = {
+                  id: 'self_story',
+                  name: 'Your story',
+                  imageUrl: profile?.avatarUri || selfGroup?.author?.avatarUri || 'https://i.pravatar.cc/150?img=60',
+                  isSelf: true,
+                  hasActiveStories: Boolean(selfGroup && selfGroup.stories && selfGroup.stories.length > 0),
+                  hasUnviewed: Boolean(selfGroup && selfGroup.stories && selfGroup.stories.length > 0 && selfGroup.hasUnviewed),
+                  userId: myUserId || selfGroup?.authorId,
+                };
+
+                const friendItems = friendGroups.map((g) => ({
+                  id: g.authorId,
+                  name: g.author?.displayName || g.author?.username || 'User',
+                  imageUrl: g.author?.avatarUri || g.previewThumbnail || 'https://i.pravatar.cc/150?img=32',
+                  isSelf: false,
+                  hasActiveStories: true,
+                  hasUnviewed: Boolean(g.hasUnviewed),
+                  userId: g.authorId,
+                }));
+
+                const trayData = [selfItem, ...friendItems];
+
+                return (
+                  <FlatList
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    data={trayData}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                      <StoryAvatar
+                        name={item.name}
+                        imageUrl={item.imageUrl}
+                        isSelf={item.isSelf}
+                        hasActiveStories={item.hasActiveStories}
+                        hasUnviewed={item.hasUnviewed}
+                        onPress={() => {
+                          if (item.isSelf) {
+                            if (item.hasActiveStories) {
+                              router.push({
+                                pathname: '/view-story',
+                                params: {
+                                  userId: item.userId,
+                                  name: 'Your story',
+                                  imageUrl: item.imageUrl,
+                                  isSelf: 'true',
+                                  openLatest: 'true',
+                                },
+                              });
+                            } else {
+                              router.push('/add-story');
+                            }
+                          } else {
                             router.push({
                               pathname: '/view-story',
                               params: {
                                 userId: item.userId,
                                 name: item.name,
                                 imageUrl: item.imageUrl,
+                                isSelf: 'false',
                               },
-                            })
-                    }
+                            });
+                          }
+                        }}
+                        onAddPress={() => router.push('/add-story')}
+                      />
+                    )}
+                    contentContainerStyle={styles.storiesContentContainer}
+                    style={styles.storiesContainer}
                   />
-                )}
-                contentContainerStyle={styles.storiesContentContainer}
-                style={styles.storiesContainer}
-              />
+                );
+              })()}
             </>
           }
           contentContainerStyle={styles.feedContentContainer}

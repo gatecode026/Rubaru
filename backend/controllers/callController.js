@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const CallLog = require('../models/CallLog');
 const Profile = require('../models/Profile');
 
@@ -57,6 +58,10 @@ const createCallLog = async (req, res) => {
 
   if (!receiverId || !callType) {
     return res.status(400).json({ message: 'Please provide receiverId and callType' });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(receiverId)) {
+    return res.status(400).json({ message: 'Invalid receiverId format' });
   }
 
   try {

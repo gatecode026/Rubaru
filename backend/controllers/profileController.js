@@ -5,6 +5,7 @@ const Notification = require('../models/Notification');
 const Content = require('../models/Content');
 const Match = require('../models/Match');
 const FollowRelationship = require('../models/FollowRelationship');
+const imagekitService = require('../services/imagekitService');
 
 /**
  * Enrich profile with live dynamic stats:
@@ -138,6 +139,9 @@ const getMe = async (req, res) => {
 // @access  Private
 const getProfile = async (req, res) => {
   try {
+    if (!req.params.userId || !mongoose.Types.ObjectId.isValid(req.params.userId)) {
+      return res.status(404).json({ message: 'Profile not found' });
+    }
     const profile = await Profile.findOne({ user: req.params.userId }).populate('user', 'email phone');
     if (!profile) {
       return res.status(404).json({ message: 'Profile not found' });
@@ -203,7 +207,19 @@ const editProfile = async (req, res) => {
     if (req.body.removeAvatar === 'true' || req.body.removeAvatar === true) {
       profile.avatarUri = 'https://i.pravatar.cc/150?img=60';
     } else if (req.files && req.files.avatar && req.files.avatar.length > 0) {
-      profile.avatarUri = `/uploads/images/${req.files.avatar[0].filename}`;
+      try {
+        const avatarFile = req.files.avatar[0];
+        const uploadedAvatar = await imagekitService.uploadLocalFile(
+          avatarFile.path,
+          avatarFile.filename,
+          imagekitService.FOLDERS.AVATARS,
+          ['avatar', req.user._id.toString()]
+        );
+        profile.avatarUri = uploadedAvatar.url;
+      } catch (avatarErr) {
+        console.warn('[PROFILE AVATAR IMAGEKIT FALLBACK]', avatarErr.message);
+        profile.avatarUri = `/uploads/images/${req.files.avatar[0].filename}`;
+      }
     }
 
     // Handle existing photos
@@ -216,8 +232,23 @@ const editProfile = async (req, res) => {
     }
 
     // Handle multiple photos upload
-    if (req.files && req.files.photos) {
-      const photoUrls = req.files.photos.map(file => `/uploads/images/${file.filename}`);
+    if (req.files && req.files.photos && req.files.photos.length > 0) {
+      const photoUrls = await Promise.all(
+        req.files.photos.map(async (file) => {
+          try {
+            const uploadedPhoto = await imagekitService.uploadLocalFile(
+              file.path,
+              file.filename,
+              imagekitService.FOLDERS.PHOTOS,
+              ['photo', req.user._id.toString()]
+            );
+            return uploadedPhoto.url;
+          } catch (photoErr) {
+            console.warn('[PROFILE PHOTO IMAGEKIT FALLBACK]', photoErr.message);
+            return `/uploads/images/${file.filename}`;
+          }
+        })
+      );
       profile.photos = [...(Array.isArray(profile.photos) ? profile.photos : []), ...photoUrls];
     }
 
@@ -245,6 +276,10 @@ const editProfile = async (req, res) => {
 const followProfile = async (req, res) => {
   const targetUserId = req.params.userId;
   const currentUserId = req.user._id;
+
+  if (!targetUserId || !mongoose.Types.ObjectId.isValid(targetUserId)) {
+    return res.status(400).json({ message: 'Invalid target user ID' });
+  }
 
   if (targetUserId === currentUserId.toString()) {
     return res.status(400).json({ message: 'You cannot follow yourself' });
@@ -366,14 +401,22 @@ const searchProfiles = async (req, res) => {
 
     const result = profiles
       .filter((p) => p.user)
-      .map((p) => ({
-        userId: p.user._id || p.user,
-        displayName: p.displayName || 'Rubaru User',
-        username: p.username || '',
-        avatarUri: p.avatarUri || '',
-        bio: p.bio || '',
-        locationName: p.locationName || '',
-      }));
+      .map((p) => {
+        const uid = (p.user._id || p.user).toString();
+        return {
+          id: uid,
+          _id: uid,
+          userId: uid,
+          displayName: p.displayName || 'Rubaru User',
+          username: p.username || '',
+          avatarUri: p.avatarUri || '',
+          bio: p.bio || '',
+          locationName: p.locationName || '',
+          dateOfBirth: p.dateOfBirth,
+          photos: p.photos || [],
+          interests: p.interests || [],
+        };
+      });
 
     res.status(200).json(result);
   } catch (error) {
@@ -386,20 +429,67 @@ const searchProfiles = async (req, res) => {
 // @access  Private
 const getAllProfiles = async (req, res) => {
   try {
-    const profiles = await Profile.find({ user: { $ne: req.user._id } })
-      .limit(30)
-      .populate('user', '_id email');
+    const query = req.user ? { user: { $ne: req.user._id } } : {};
+
+    // Filter by gender
+    if (req.query.gender && req.query.gender !== 'Everyone' && req.query.gender !== 'all') {
+      query.gender = req.query.gender;
+    }
+
+    // Filter by interest
+    if (req.query.interest && req.query.interest !== 'All') {
+      query.interests = { $regex: new RegExp(`^${req.query.interest.trim()}$`, 'i') };
+    }
+
+    // Filter by city / region
+    if (req.query.city && req.query.city.trim() && req.query.city !== 'All India' && req.query.city !== 'India') {
+      const cityRegex = new RegExp(req.query.city.trim(), 'i');
+      query.locationName = { $regex: cityRegex };
+    }
+
+    // Filter by age range
+    if (req.query.minAge || req.query.maxAge) {
+      const minAge = parseInt(req.query.minAge) || 18;
+      const maxAge = parseInt(req.query.maxAge) || 100;
+      const now = new Date();
+      const latestDob = new Date(now.getFullYear() - minAge, now.getMonth(), now.getDate());
+      const earliestDob = new Date(now.getFullYear() - maxAge - 1, now.getMonth(), now.getDate());
+      query.dateOfBirth = { $gte: earliestDob, $lte: latestDob };
+    }
+
+    let sort = { createdAt: -1 };
+    if (req.query.sortBy === 'most_popular') {
+      sort = { followersCount: -1, likesCount: -1 };
+    }
+
+    const profiles = await Profile.find(query)
+      .sort(sort)
+      .limit(50)
+      .populate('user', '_id email phone isOnline');
 
     const result = profiles
       .filter((p) => p.user)
-      .map((p) => ({
-        userId: p.user._id || p.user,
-        displayName: p.displayName || 'Rubaru User',
-        username: p.username || '',
-        avatarUri: p.avatarUri || '',
-        bio: p.bio || '',
-        locationName: p.locationName || '',
-      }));
+      .map((p) => {
+        const uid = (p.user._id || p.user).toString();
+        return {
+          id: uid,
+          _id: uid,
+          userId: uid,
+          displayName: p.displayName || 'Rubaru User',
+          username: p.username || '',
+          avatarUri: p.avatarUri || '',
+          bio: p.bio || '',
+          locationName: p.locationName || '',
+          dateOfBirth: p.dateOfBirth,
+          gender: p.gender || 'Other',
+          photos: p.photos || [],
+          interests: p.interests || [],
+          followersCount: p.followersCount || 0,
+          likesCount: p.likesCount || 0,
+          isOnline: p.user?.isOnline !== undefined ? Boolean(p.user.isOnline) : false,
+          createdAt: p.createdAt,
+        };
+      });
 
     res.status(200).json(result);
   } catch (error) {

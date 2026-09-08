@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const followService = require('../services/followService');
 
 // @desc    Follow a user (or request to follow if private)
@@ -5,6 +6,13 @@ const followService = require('../services/followService');
 // @access  Private
 const followUser = async (req, res) => {
   try {
+    if (!req.params.userId || !mongoose.Types.ObjectId.isValid(req.params.userId)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_USER_ID',
+        message: 'Invalid target user ID provided.',
+      });
+    }
     const result = await followService.followUser(req.user._id, req.params.userId);
     return res.status(200).json({
       success: true,
@@ -25,6 +33,13 @@ const followUser = async (req, res) => {
 // @access  Private
 const unfollowUser = async (req, res) => {
   try {
+    if (!req.params.userId || !mongoose.Types.ObjectId.isValid(req.params.userId)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_USER_ID',
+        message: 'Invalid target user ID provided.',
+      });
+    }
     const result = await followService.unfollowUser(req.user._id, req.params.userId);
     return res.status(200).json({
       success: true,
@@ -165,6 +180,12 @@ const getFollowingList = async (req, res) => {
 // @access  Private
 const getFollowStatus = async (req, res) => {
   try {
+    if (!req.params.userId || !mongoose.Types.ObjectId.isValid(req.params.userId)) {
+      return res.status(200).json({
+        success: true,
+        data: { status: 'NONE' },
+      });
+    }
     const result = await followService.getFollowStatus(req.user._id, req.params.userId);
     return res.status(200).json({
       success: true,

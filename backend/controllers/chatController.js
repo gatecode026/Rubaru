@@ -2,6 +2,7 @@ const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const Profile = require('../models/Profile');
 const User = require('../models/User');
+const imagekitService = require('../services/imagekitService');
 
 // @desc    Get all chats / conversations of logged-in user
 // @route   GET /api/chats
@@ -182,12 +183,35 @@ const sendMessage = async (req, res) => {
     let messageType = type;
 
     if (req.file) {
-      if (req.file.mimetype.startsWith('image/')) {
-        attachmentUri = `/uploads/images/${req.file.filename}`;
-        messageType = 'image';
-      } else if (req.file.mimetype.startsWith('audio/')) {
-        attachmentUri = `/uploads/audio/${req.file.filename}`;
-        messageType = 'voice';
+      try {
+        if (req.file.mimetype.startsWith('image/')) {
+          const uploaded = await imagekitService.uploadLocalFile(
+            req.file.path,
+            req.file.filename,
+            imagekitService.FOLDERS.CHAT,
+            ['chat', 'image', targetChatId.toString()]
+          );
+          attachmentUri = uploaded.url;
+          messageType = 'image';
+        } else if (req.file.mimetype.startsWith('audio/')) {
+          const uploaded = await imagekitService.uploadLocalFile(
+            req.file.path,
+            req.file.filename,
+            imagekitService.FOLDERS.CHAT,
+            ['chat', 'voice', targetChatId.toString()]
+          );
+          attachmentUri = uploaded.url;
+          messageType = 'voice';
+        }
+      } catch (uploadErr) {
+        console.warn('[CHAT ATTACHMENT IMAGEKIT FALLBACK]', uploadErr.message);
+        if (req.file.mimetype.startsWith('image/')) {
+          attachmentUri = `/uploads/images/${req.file.filename}`;
+          messageType = 'image';
+        } else if (req.file.mimetype.startsWith('audio/')) {
+          attachmentUri = `/uploads/audio/${req.file.filename}`;
+          messageType = 'voice';
+        }
       }
     }
 

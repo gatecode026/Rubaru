@@ -10,8 +10,20 @@
  */
 
 import { io } from 'socket.io-client';
+import Constants from 'expo-constants';
 
-const SOCKET_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || 'http://192.168.1.6:5000';
+const getSocketUrl = () => {
+  const debuggerHost = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost || Constants.manifest?.debuggerHost;
+  if (debuggerHost) {
+    const ip = debuggerHost.split(':')[0];
+    if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
+      return `http://${ip}:5000`;
+    }
+  }
+  return process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || 'http://192.168.1.5:5000';
+};
+
+const SOCKET_URL = getSocketUrl();
 
 let socket = null;
 
@@ -27,6 +39,7 @@ export function connectSocket(token) {
     transports: ['polling', 'websocket'],
     reconnectionAttempts: 5,
     reconnectionDelay: 2000,
+    timeout: 5000,
   });
 
   socket.on('connect', () => {

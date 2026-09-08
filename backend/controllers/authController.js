@@ -2,11 +2,12 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Profile = require('../models/Profile');
+const imagekitService = require('../services/imagekitService');
 
-// Helper: Generate JWT
+// Helper: Generate JWT (Long-lived for persistent login: 10 years)
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '30d',
+    expiresIn: '3650d',
   });
 };
 
@@ -30,7 +31,7 @@ const registerEmail = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create OTP
-    const otpCode = '1234'; // Default mock OTP for developer ease, or Math.floor(1000 + Math.random() * 9000).toString()
+    const otpCode = '1234'; // Default mock OTP for developer ease
     const otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
 
     const user = await User.create({
@@ -248,7 +249,18 @@ const profileSetup = async (req, res) => {
     // Check if avatar is uploaded
     let avatarUri = 'https://i.pravatar.cc/150?img=60';
     if (req.file) {
-      avatarUri = `/uploads/images/${req.file.filename}`;
+      try {
+        const uploadedAvatar = await imagekitService.uploadLocalFile(
+          req.file.path,
+          req.file.filename,
+          imagekitService.FOLDERS.AVATARS,
+          ['avatar', req.user._id.toString()]
+        );
+        avatarUri = uploadedAvatar.url;
+      } catch (avatarErr) {
+        console.warn('[AUTH SETUP AVATAR IMAGEKIT FALLBACK]', avatarErr.message);
+        avatarUri = `/uploads/images/${req.file.filename}`;
+      }
     }
 
     // Upsert profile
@@ -275,8 +287,7 @@ const profileSetup = async (req, res) => {
       });
     }
 
-    user.isProfileSetup = true;
-    await user.save();
+    await User.findByIdAndUpdate(req.user._id, { isProfileSetup: true });
 
     res.status(201).json({
       message: 'Profile setup completed',
@@ -368,6 +379,31 @@ const setPassword = async (req, res) => {
   }
 };
 
+// @desc    Get current authenticated user status
+// @route   GET /api/auth/me
+// @access  Private
+const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    const profile = await Profile.findOne({ user: user._id });
+    res.status(200).json({
+      _id: user._id,
+      email: user.email,
+      phone: user.phone,
+      points: user.points,
+      isActive: user.isActive,
+      isProfileSetup: user.isProfileSetup,
+      accountStatus: user.accountStatus,
+      profile: profile || null,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   registerEmail,
   registerPhone,
@@ -376,4 +412,5 @@ module.exports = {
   login,
   profileSetup,
   setPassword,
+  getMe,
 };

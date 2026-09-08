@@ -92,9 +92,10 @@ export default function SearchUsersScreen() {
 
   const navigateToProfile = (user) => {
     Keyboard.dismiss();
+    const rawId = user.userId || user.id || user._id;
     router.push({
       pathname: '/user-profile',
-      params: { userId: user.userId },
+      params: { userId: rawId ? String(rawId) : undefined },
     });
   };
 

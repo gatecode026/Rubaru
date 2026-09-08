@@ -64,6 +64,11 @@ for (let i = 0; i < testFiles.length; i++) {
       cwd: path.join(__dirname, '..'),
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        IS_TEST_SUITE: 'true',
+      },
     });
 
     const elapsed = Date.now() - startTime;

@@ -13,6 +13,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { ActivityIndicator } from 'react-native';
 import api from '@services/api';
+import storage from '@services/storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -61,46 +62,56 @@ export default function InterestsSelectionScreen() {
         }
       }
 
-      if (params.token) {
-        api.defaults.headers.common['Authorization'] = `Bearer ${params.token}`;
+      const activeToken = params.token || (await storage.getToken());
+      if (activeToken) {
+        api.defaults.headers.common['Authorization'] = `Bearer ${activeToken}`;
       }
 
+      let profileSaved = false;
+
       if (params.avatarUri) {
-        // Send as FormData for multipart avatar file setup
-        const formData = new FormData();
-        formData.append('displayName', displayName);
-        formData.append('dateOfBirth', parsedDate.toISOString());
-        formData.append('gender', params.gender || 'Female');
-        formData.append('interests', JSON.stringify(interestsToSave));
-        formData.append('bio', 'Hello, I am new on Rubaru!');
-        formData.append('locationName', params.location || '');
+        try {
+          const formData = new FormData();
+          formData.append('displayName', displayName);
+          formData.append('dateOfBirth', parsedDate.toISOString());
+          formData.append('gender', params.gender || 'Female');
+          formData.append('interests', JSON.stringify(interestsToSave));
+          formData.append('bio', 'Hello, I am new on Rubaru!');
+          formData.append('locationName', params.location || '');
 
-        const localUri = params.avatarUri;
-        const filename = localUri.split('/').pop() || 'avatar.jpg';
-        const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : 'image/jpeg';
+          const localUri = params.avatarUri;
+          const filename = localUri.split('/').pop() || 'avatar.jpg';
+          const match = /\.(\w+)$/.exec(filename);
+          const type = match ? `image/${match[1]}` : 'image/jpeg';
 
-        formData.append('avatar', {
-          uri: localUri,
-          name: filename,
-          type,
-        });
+          formData.append('avatar', {
+            uri: localUri,
+            name: filename,
+            type,
+          });
 
-        await api.post('/auth/profile-setup', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          transformRequest: (data, headers) => {
-            if (headers && headers.delete) {
-              headers.delete('Content-Type');
-            } else if (headers) {
-              delete headers['Content-Type'];
-            }
-            return data;
-          },
-        });
-      } else {
-        // Send as standard JSON payload
+          const baseURL = api.defaults.baseURL || 'http://192.168.1.5:5000/api';
+          const res = await fetch(`${baseURL}/auth/profile-setup`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${activeToken}`,
+              'Accept': 'application/json',
+            },
+            body: formData,
+          });
+
+          if (res.ok) {
+            profileSaved = true;
+          } else {
+            console.warn('[AVATAR MULTIPART FAILED, RETRYING WITH JSON]', res.status);
+          }
+        } catch (uploadErr) {
+          console.warn('[AVATAR UPLOAD ERROR, RETRYING WITH JSON]', uploadErr.message);
+        }
+      }
+
+      // If no avatar was provided or multipart upload encountered network issue, use JSON
+      if (!profileSaved) {
         const payload = {
           displayName,
           dateOfBirth: parsedDate.toISOString(),
@@ -111,6 +122,9 @@ export default function InterestsSelectionScreen() {
         };
         await api.post('/auth/profile-setup', payload);
       }
+
+      // Update persistent session
+      await storage.saveSession(activeToken, { isActive: true, isProfileSetup: true });
 
       setLoading(false);
       router.replace('/(tabs)');

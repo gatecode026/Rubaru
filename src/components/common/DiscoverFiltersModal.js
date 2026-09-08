@@ -493,6 +493,18 @@ export default function DiscoverFiltersModal({
                 )}
               </TouchableOpacity>
 
+              {/* Country Selection (Exclusively India) */}
+              <View style={{ marginTop: 12, marginBottom: 4 }}>
+                <Text style={styles.inputSubLabel}>Country</Text>
+                <View style={[styles.inputContainer, { backgroundColor: isDarkMode ? '#1F2937' : '#F9FAFB', borderColor: '#E5E7EB' }]}>
+                  <Text style={{ fontSize: 16, marginRight: 8 }}>🇮🇳</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: isDarkMode ? '#FFFFFF' : '#111827', flex: 1 }}>India</Text>
+                  <View style={{ backgroundColor: '#DEF7EC', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#03543F' }}>India Only</Text>
+                  </View>
+                </View>
+              </View>
+
               <View style={styles.locationInputsGrid}>
                 <View style={styles.inputCol}>
                   <Text style={styles.inputSubLabel}>Select City</Text>

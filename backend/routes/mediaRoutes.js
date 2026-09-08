@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/auth');
+const upload = require('../middleware/upload');
 const {
   createUploadSession,
   finalizeUploadSession,
@@ -11,12 +12,14 @@ const {
   deleteMediaAsset,
   handleDirectUpload,
   getMediaDeliveryAccess,
+  uploadMultipartMedia,
 } = require('../controllers/mediaController');
 
 // Direct upload destination for local/test driver (PUT /v1/media/upload-direct/:objectKey)
 router.put('/upload-direct/:objectKey(*)', handleDirectUpload);
 
 // Authenticated Media Management Routes
+router.post('/upload', protect, upload.single('file'), uploadMultipartMedia);
 router.post('/upload-sessions', protect, createUploadSession);
 router.get('/upload-sessions/:sessionId', protect, getUploadSessionStatus);
 router.post('/upload-sessions/:sessionId/finalize', protect, finalizeUploadSession);

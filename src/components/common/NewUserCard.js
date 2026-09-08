@@ -3,14 +3,22 @@ import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../theme';
 
-export default function NewUserCard({ item }) {
+export default function NewUserCard({ item, onPress }) {
   const { isDarkMode } = useTheme();
   const { name, age, city, distance, imageUri, isNew = true, isOnline = false } = item;
 
+  const displayImageUri = (imageUri && typeof imageUri === 'string' && imageUri.trim().length > 0)
+    ? imageUri
+    : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
+
   return (
-    <TouchableOpacity style={styles.cardContainer} activeOpacity={0.9}>
+    <TouchableOpacity
+      style={styles.cardContainer}
+      activeOpacity={0.85}
+      onPress={onPress}
+    >
       {/* Background Image */}
-      <Image source={{ uri: imageUri }} style={styles.cardImage} resizeMode="cover" />
+      <Image source={{ uri: displayImageUri }} style={styles.cardImage} resizeMode="cover" />
 
       {/* "NEW" Badge */}
       {isNew && (

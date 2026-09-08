@@ -28,7 +28,10 @@ export default function ActiveCallScreen() {
 
   const contactName = params.contactName || 'User';
   const phoneNumber = params.phoneNumber || '';
-  const avatarUri = params.avatarUri || '';
+  const rawAvatar = params.avatarUri;
+  const avatarUri = (rawAvatar && typeof rawAvatar === 'string' && rawAvatar.trim().length > 0)
+    ? rawAvatar.trim()
+    : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
   const receiverId = params.receiverId || '';
   const initialStatus = params.initialStatus || 'calling';
   const initialCallType = params.callType === 'video';
@@ -242,8 +245,8 @@ export default function ActiveCallScreen() {
       }
     }
 
-    // Save call log to database
-    if (receiverId) {
+    // Save call log to database if receiverId is a valid ObjectId
+    if (receiverId && /^[0-9a-fA-F]{24}$/.test(String(receiverId))) {
       try {
         const duration = secondsElapsed > 0
           ? `${String(Math.floor(secondsElapsed / 60)).padStart(2, '0')}:${String(secondsElapsed % 60).padStart(2, '0')}`
