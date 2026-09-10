@@ -15,10 +15,10 @@ const STATUSBAR_HEIGHT = Platform.OS === 'android' ? (RNStatusBar.currentHeight 
 
 export default function IncomingCallBanner({
   visible,
-  contactName = 'Rahul Kumawat',
-  avatarUri = 'https://i.pravatar.cc/150?img=11',
+  contactName = 'Rubaru User',
+  avatarUri = '',
   callType = 'voice',
-  isPaid = false,
+  isPaid = true,
   ratePerMinute = 5,
   communicationType = 'AUDIO',
   onAccept,
@@ -30,6 +30,11 @@ export default function IncomingCallBanner({
   const isVid = communicationType === 'VIDEO' || callType === 'video';
   const typeTitle = isMsg ? 'Paid Chat Request' : isVid ? 'Incoming Video Call' : 'Incoming Voice Call';
   const typeIcon = isMsg ? 'chatbubbles' : isVid ? 'videocam' : 'call';
+  const defaultRate = isMsg ? 1 : isVid ? 10 : 5;
+  const effectiveRate = Number(ratePerMinute) || defaultRate;
+  const earningLabel = isMsg
+    ? `Earn +${effectiveRate} Coins / msg`
+    : `Earn +${effectiveRate} Coins / min`;
 
   return (
     <Modal
@@ -40,10 +45,16 @@ export default function IncomingCallBanner({
     >
       <View style={styles.overlay}>
         <View style={styles.bannerCard}>
-          <Image
-            source={{ uri: avatarUri || 'https://i.pravatar.cc/150?img=11' }}
-            style={styles.avatar}
-          />
+          {avatarUri ? (
+            <Image
+              source={{ uri: avatarUri }}
+              style={styles.avatar}
+            />
+          ) : (
+            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+              <Ionicons name="person" size={22} color="#8E8E93" />
+            </View>
+          )}
 
           <View style={styles.infoColumn}>
             <View style={styles.titleRow}>
@@ -51,11 +62,11 @@ export default function IncomingCallBanner({
               <Text style={styles.callTypeLabel}>{typeTitle}</Text>
             </View>
             <Text style={styles.contactName} numberOfLines={1}>
-              {contactName}
+              {contactName || 'Rubaru User'}
             </Text>
             {isPaid && (
               <Text style={styles.earningBadge}>
-                Earn +{ratePerMinute} Coins / started min
+                {earningLabel}
               </Text>
             )}
           </View>
@@ -116,6 +127,11 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     marginRight: 12,
     backgroundColor: '#E5E5EA',
+  },
+  avatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
   },
   infoColumn: {
     flex: 1,

@@ -160,7 +160,7 @@ export default function EditProfileScreen() {
 
   const handleRemoveAvatar = () => {
     setAvatarAsset(null);
-    setAvatarUri('https://i.pravatar.cc/150?img=60');
+    setAvatarUri(null);
     setRemoveAvatar(true);
   };
 
@@ -348,9 +348,9 @@ export default function EditProfileScreen() {
   };
 
   const getFullUrl = (uri) => {
-    if (!uri) return 'https://i.pravatar.cc/150?img=60';
+    if (!uri) return null;
     if (uri.startsWith('http') || uri.startsWith('file://') || uri.startsWith('content://')) return uri;
-    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.70:5000/api';
+    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.33:5000/api';
     const host = apiBase.replace('/api', '');
     return `${host}${uri}`;
   };
@@ -418,7 +418,7 @@ export default function EditProfileScreen() {
             {/* Profile Picture Avatar Section */}
             <View style={styles.avatarSection}>
               <View style={styles.avatarRing}>
-                {(!avatarUri || avatarUri.includes('pravatar.cc')) ? (
+                {(!avatarUri || avatarUri.includes('pravatar.cc') || !avatarUri.startsWith('http')) ? (
                   <View style={[styles.avatarImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
                     <Ionicons name="person-outline" size={32} color="#9CA3AF" />
                   </View>

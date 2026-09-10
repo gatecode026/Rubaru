@@ -50,12 +50,13 @@ export default function InterestsSelectionScreen() {
   const saveProfileToDb = async (interestsToSave) => {
     setLoading(true);
     try {
-      const displayName = `${params.firstName} ${params.lastName}`;
+      const rawName = `${params.firstName || ''} ${params.lastName || ''}`.trim();
+      const displayName = rawName.length > 0 ? rawName : (params.displayName || 'Rubaru User');
       
-      let dobStr = params.dob;
+      let dobStr = params.dob || params.selectedDob;
       let parsedDate = new Date(dobStr);
-      if (isNaN(parsedDate.getTime())) {
-        const cleanStr = dobStr.replace(',', '');
+      if (!dobStr || isNaN(parsedDate.getTime())) {
+        const cleanStr = typeof dobStr === 'string' ? dobStr.replace(',', '') : '';
         parsedDate = new Date(cleanStr);
         if (isNaN(parsedDate.getTime())) {
           parsedDate = new Date('1998-01-01');
@@ -69,7 +70,7 @@ export default function InterestsSelectionScreen() {
 
       let profileSaved = false;
 
-      if (params.avatarUri) {
+      if (params.avatarUri && typeof params.avatarUri === 'string' && params.avatarUri.trim() !== '') {
         try {
           const formData = new FormData();
           formData.append('displayName', displayName);
@@ -90,7 +91,7 @@ export default function InterestsSelectionScreen() {
             type,
           });
 
-          const baseURL = api.defaults.baseURL || 'http://192.168.1.5:5000/api';
+          const baseURL = api.defaults.baseURL || 'http://192.168.1.33:5000/api';
           const res = await fetch(`${baseURL}/auth/profile-setup`, {
             method: 'POST',
             headers: {

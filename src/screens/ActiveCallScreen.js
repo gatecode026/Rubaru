@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,10 @@ import {
   Pressable,
   Share,
   AppState,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCallController } from '../hooks/useCallController';
@@ -56,11 +58,15 @@ export default function ActiveCallScreen() {
     cleanup,
   } = callController;
 
-  const contactName = params.contactName || peerName || 'User';
-  const phoneNumber = params.phoneNumber || '';
-  const avatarUri = (params.avatarUri || peerAvatar)
-    ? String(params.avatarUri || peerAvatar).trim()
-    : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
+  const rawContactName = params.contactName || peerName;
+  const contactName = rawContactName && rawContactName !== 'User' && rawContactName !== 'Rubaru User'
+    ? rawContactName
+    : (peerName || params.contactName || 'Rubaru Member');
+
+  const rawAvatar = params.avatarUri || peerAvatar;
+  const avatarUri = rawAvatar && typeof rawAvatar === 'string' && rawAvatar.trim().startsWith('http')
+    ? rawAvatar.trim()
+    : '';
 
   const balance = usePointsStore((state) => state.balance);
   const errorMessage = useCallStore((state) => state.errorMessage);
@@ -71,6 +77,7 @@ export default function ActiveCallScreen() {
   const [enteredDigits, setEnteredDigits] = useState('');
   const [hasFilter, setHasFilter] = useState(false);
   const [isAppBackgrounded, setIsAppBackgrounded] = useState(false);
+  const hasInitiatedRef = useRef(false);
 
   // AppState listener for background/foreground video suspension & audio preservation
   useEffect(() => {
@@ -89,9 +96,48 @@ export default function ActiveCallScreen() {
     };
   }, [callType]);
 
+  // Mark screen un-minimized when entered
+  useEffect(() => {
+    useCallStore.getState().setMinimized(false);
+  }, []);
+
+  const exitScreen = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  }, [router]);
+
+  const handleMinimize = useCallback(() => {
+    const status = useCallStore.getState().callStatus;
+    if (status === 'ENDED' || status === 'IDLE') {
+      useCallStore.getState().resetToIdle();
+      exitScreen();
+      return;
+    }
+    useCallStore.getState().setMinimized(true);
+    exitScreen();
+  }, [exitScreen]);
+
+  // Android hardware back press support -> minimize call
+  useEffect(() => {
+    const onBackPress = () => {
+      handleMinimize();
+      return true;
+    };
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backSub.remove();
+  }, [handleMinimize]);
+
   // If initiated from screen params and not yet active
   useEffect(() => {
-    if (params.receiverId && callStatus === 'IDLE') {
+    if (params.receiverId && params.isInitiator !== 'false' && !hasInitiatedRef.current) {
+      hasInitiatedRef.current = true;
+      const currentStatus = useCallStore.getState().callStatus;
+      if (currentStatus === 'ENDED') {
+        useCallStore.getState().resetToIdle();
+      }
       initiateCall({
         receiverId: params.receiverId,
         callType: params.callType === 'video' ? 'video' : 'audio',
@@ -99,7 +145,7 @@ export default function ActiveCallScreen() {
         avatarUri: params.avatarUri || '',
       });
     }
-  }, [params.receiverId, callStatus, initiateCall, params.callType, params.contactName, params.avatarUri]);
+  }, [params.receiverId, initiateCall, params.callType, params.contactName, params.avatarUri, params.isInitiator]);
 
   // Handle call completion / receipt modal
   useEffect(() => {
@@ -107,18 +153,39 @@ export default function ActiveCallScreen() {
       if (billingSummary) {
         setShowReceiptModal(true);
       } else {
-        const delay = errorMessage ? 3500 : 1200;
+        const delay = errorMessage ? 1800 : 600;
         const timeout = setTimeout(() => {
-          if (router.canGoBack()) router.back();
-          else router.push('/call-logs');
+          useCallStore.getState().resetToIdle();
+          exitScreen();
         }, delay);
         return () => clearTimeout(timeout);
       }
     }
-  }, [callStatus, billingSummary, errorMessage, router]);
+  }, [callStatus, billingSummary, errorMessage, exitScreen]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      const status = useCallStore.getState().callStatus;
+      if (status === 'ENDED') {
+        useCallStore.getState().resetToIdle();
+      }
+    };
+  }, []);
 
   const handleEndCall = () => {
+    if (callStatus === 'ENDED' || callStatus === 'IDLE') {
+      useCallStore.getState().resetToIdle();
+      exitScreen();
+      return;
+    }
     hangupCall('USER_HUNG_UP');
+    setTimeout(() => {
+      if (!useCallStore.getState().billingSummary) {
+        useCallStore.getState().resetToIdle();
+        exitScreen();
+      }
+    }, 400);
   };
 
   const getSubStatusText = () => {
@@ -173,11 +240,17 @@ export default function ActiveCallScreen() {
             objectFit="cover"
             mirror={false}
           />
-        ) : (
+        ) : avatarUri ? (
           <Image
             source={{ uri: avatarUri }}
-            style={StyleSheet.absoluteFillObject}
+            style={[StyleSheet.absoluteFillObject, { opacity: 0.35 }]}
+            blurRadius={20}
             resizeMode="cover"
+          />
+        ) : (
+          <LinearGradient
+            colors={['#0B141B', '#1E293B']}
+            style={StyleSheet.absoluteFillObject}
           />
         )}
 
@@ -190,8 +263,8 @@ export default function ActiveCallScreen() {
           <TouchableOpacity
             style={[styles.headerCircleBtn, { top: Math.max(insets.top + 8, 20) }]}
             activeOpacity={0.7}
-            onPress={handleEndCall}
-            accessibilityLabel="End call"
+            onPress={handleMinimize}
+            accessibilityLabel="Minimize call"
           >
             <Ionicons name="chevron-down" size={24} color="#E9EDEF" />
           </TouchableOpacity>
@@ -214,9 +287,9 @@ export default function ActiveCallScreen() {
             {callStatus === 'ACTIVE' && (
               <PaidSessionLiveBadge
                 isInitiator={callController.isInitiator}
-                ratePerMinute={ratePerMinute || 5}
+                ratePerMinute={ratePerMinute || (isVideoCall ? 10 : 5)}
                 billedMinutes={Math.max(1, Math.ceil(durationSeconds / 60))}
-                totalCoins={Math.max(1, Math.ceil(durationSeconds / 60)) * (ratePerMinute || 5)}
+                totalCoins={Math.max(1, Math.ceil(durationSeconds / 60)) * (ratePerMinute || (isVideoCall ? 10 : 5))}
                 currentBalance={balance}
               />
             )}
@@ -270,11 +343,9 @@ export default function ActiveCallScreen() {
                 mirror={isFrontCamera}
               />
             ) : (
-              <Image
-                source={{ uri: 'https://i.pravatar.cc/150?img=60' }}
-                style={styles.pipThumbnailImage}
-                resizeMode="cover"
-              />
+              <View style={[styles.pipThumbnailImage, styles.avatarPlaceholderSmall]}>
+                <Ionicons name="person" size={28} color="#94A3B8" />
+              </View>
             )}
             <View style={styles.pipBorderRing} />
           </View>
@@ -284,13 +355,24 @@ export default function ActiveCallScreen() {
         {!isVideoCall && (
           <View style={styles.centerAvatarContainer}>
             <View style={styles.avatarRingOuter}>
-              <Image
-                source={{ uri: avatarUri }}
-                style={styles.avatarImage}
-                resizeMode="cover"
-              />
+              {avatarUri ? (
+                <Image
+                  source={{ uri: avatarUri }}
+                  style={styles.avatarImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.avatarImage, styles.avatarPlaceholderLarge]}>
+                  <Text style={styles.avatarInitialLarge}>
+                    {contactName ? contactName.charAt(0).toUpperCase() : 'R'}
+                  </Text>
+                </View>
+              )}
             </View>
             <Text style={styles.callerDisplayName}>{contactName}</Text>
+            {callStatus === 'ACTIVE' && (
+              <Text style={styles.callDurationTimer}>{formatDuration(durationSeconds)}</Text>
+            )}
           </View>
         )}
 
@@ -469,12 +551,13 @@ export default function ActiveCallScreen() {
         onClose={() => {
           setShowReceiptModal(false);
           cleanup('COMPLETED');
-          if (router.canGoBack()) router.back();
-          else router.push('/call-logs');
+          useCallStore.getState().resetToIdle();
+          exitScreen();
         }}
         onViewTransactions={() => {
           setShowReceiptModal(false);
           cleanup('COMPLETED');
+          useCallStore.getState().resetToIdle();
           router.push('/transactions');
         }}
       />
@@ -615,10 +698,32 @@ const styles = StyleSheet.create({
     height: 116,
     borderRadius: 58,
   },
+  avatarPlaceholderLarge: {
+    backgroundColor: '#FF2E63',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitialLarge: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  avatarPlaceholderSmall: {
+    backgroundColor: '#334155',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   callerDisplayName: {
     fontSize: 22,
     fontWeight: '700',
     color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  callDurationTimer: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#10B981',
+    letterSpacing: 0.5,
   },
   bottomCapsuleWrapper: {
     position: 'absolute',

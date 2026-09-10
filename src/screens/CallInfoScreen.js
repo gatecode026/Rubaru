@@ -10,10 +10,12 @@ import {
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { Alert } from 'react-native';
 import SegmentedNotifCallsHeader from '../components/common/SegmentedNotifCallsHeader';
 import HistoryRow from '../components/common/HistoryRow';
 import BottomTabBar from '../components/common/BottomTabBar';
 import api from '../services/api';
+import { useCallStore } from '../store/callStore';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -62,6 +64,18 @@ export default function CallInfoScreen() {
   }, [contactName, params.contactId]);
 
   const handlePressCall = (callType) => {
+    const currentStatus = useCallStore.getState().callStatus;
+    if (currentStatus !== 'IDLE' && currentStatus !== 'ENDED') {
+      Alert.alert(
+        'Call in Progress',
+        'You are already in an active call. Please finish your current call first.'
+      );
+      return;
+    }
+    if (currentStatus === 'ENDED') {
+      useCallStore.getState().resetToIdle();
+    }
+
     router.push({
       pathname: '/active-call',
       params: {
@@ -91,7 +105,13 @@ export default function CallInfoScreen() {
           <View>
             {/* Contact Header Row */}
             <View style={styles.contactRow}>
-              <Image source={{ uri: avatarUri }} style={styles.contactAvatar} />
+              {avatarUri && avatarUri.trim() !== '' ? (
+                <Image source={{ uri: avatarUri }} style={styles.contactAvatar} />
+              ) : (
+                <View style={[styles.contactAvatar, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                  <Ionicons name="person" size={28} color="#9CA3AF" />
+                </View>
+              )}
 
               <View style={styles.contactInfo}>
                 <Text style={styles.contactName}>{contactName}</Text>

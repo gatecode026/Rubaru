@@ -26,6 +26,7 @@ export default function HomeScreen({ isNestedInPager }) {
   const flatListRef = React.useRef(null);
   const insets = useSafeAreaInsets();
   const balance = usePointsStore((state) => state.balance);
+  const fetchBalance = usePointsStore((state) => state.fetchBalance);
   const [profile, setProfile] = React.useState(null);
   const [feedItems, setFeedItems] = React.useState([]);
   const [storyTray, setStoryTray] = React.useState([]);
@@ -106,11 +107,16 @@ export default function HomeScreen({ isNestedInPager }) {
   useFocusEffect(
     React.useCallback(() => {
       let isMounted = true;
+      if (fetchBalance) fetchBalance();
       const fetchMyProfile = async () => {
         try {
           const res = await api.get('/profiles/me');
           if (isMounted && res.data) {
             setProfile(res.data);
+            const userPts = res.data.user?.points ?? res.data.points;
+            if (userPts !== undefined && balance === 0) {
+              usePointsStore.getState().setBalance(userPts);
+            }
           }
         } catch (err) {
           console.log('[HOME PROFILE FETCH ERROR]', err.message);
@@ -126,11 +132,11 @@ export default function HomeScreen({ isNestedInPager }) {
   );
 
   const getFullUrl = (uri) => {
-    if (!uri) return 'https://i.pravatar.cc/150?img=60';
+    if (!uri || typeof uri !== 'string' || uri.trim() === '') return null;
     if (uri.startsWith('http') || uri.startsWith('file://') || uri.startsWith('content://')) return uri;
-    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.70:5000/api';
+    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.33:5000/api';
     const host = apiBase.replace('/api', '');
-    return `${host}${uri}`;
+    return `${host}${uri.startsWith('/') ? '' : '/'}${uri}`;
   };
 
   const renderFixedHeader = () => (
@@ -141,7 +147,7 @@ export default function HomeScreen({ isNestedInPager }) {
         style={styles.avatarGradientBorder}
         onPress={() => router.push('/user-profile')}
       >
-        {(!profile?.avatarUri || profile.avatarUri.includes('pravatar.cc')) ? (
+        {(!profile?.avatarUri || profile.avatarUri.includes('pravatar.cc') || !profile.avatarUri.startsWith('http')) ? (
           <View style={[styles.headerAvatarImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
             <Ionicons name="person" size={20} color="#9CA3AF" />
           </View>
@@ -271,7 +277,7 @@ export default function HomeScreen({ isNestedInPager }) {
                 const selfItem = {
                   id: 'self_story',
                   name: 'Your story',
-                  imageUrl: profile?.avatarUri || selfGroup?.author?.avatarUri || 'https://i.pravatar.cc/150?img=60',
+                  imageUrl: profile?.avatarUri || selfGroup?.author?.avatarUri || null,
                   isSelf: true,
                   hasActiveStories: Boolean(selfGroup && selfGroup.stories && selfGroup.stories.length > 0),
                   hasUnviewed: Boolean(selfGroup && selfGroup.stories && selfGroup.stories.length > 0 && selfGroup.hasUnviewed),
@@ -281,7 +287,7 @@ export default function HomeScreen({ isNestedInPager }) {
                 const friendItems = friendGroups.map((g) => ({
                   id: g.authorId,
                   name: g.author?.displayName || g.author?.username || 'User',
-                  imageUrl: g.author?.avatarUri || g.previewThumbnail || 'https://i.pravatar.cc/150?img=32',
+                  imageUrl: g.author?.avatarUri || g.previewThumbnail || null,
                   isSelf: false,
                   hasActiveStories: true,
                   hasUnviewed: Boolean(g.hasUnviewed),

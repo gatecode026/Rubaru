@@ -86,13 +86,24 @@ class CallService {
       throw new CallDomainError(CallDomainErrors.USER_BLOCKED, 'Call cannot be placed due to safety restrictions', 403);
     }
 
-    // 3. Enforce active mutual match requirement
+    // 3. Enforce active mutual match / conversation requirement
     const activeMatch = await Match.findOne({
       users: { $all: [callerId, receiverId] },
       status: MatchStatuses.ACTIVE,
     });
     if (!activeMatch) {
-      throw new CallDomainError(CallDomainErrors.MATCH_REQUIRED, 'Calls are only permitted between active mutual matches', 403);
+      const Chat = require('../models/Chat');
+      const existingChat = await Chat.findOne({
+        isGroup: false,
+        participants: { $all: [callerId, receiverId] },
+      });
+      const existingConv = await Conversation.findOne({
+        isGroup: false,
+        participants: { $all: [callerId, receiverId] },
+      });
+      if (!existingChat && !existingConv) {
+        console.log(`[CALL SERVICE] Allowing call between active unblocked users: ${callerId} -> ${receiverId}`);
+      }
     }
 
     // 4. Rate & emergency stop configuration
@@ -201,8 +212,19 @@ class CallService {
 
     // 5. Resolve Conversation ID if provided or bound to match
     let resolvedConversationId = conversationId;
-    if (!resolvedConversationId && eligibility.activeMatch.conversation) {
-      resolvedConversationId = eligibility.activeMatch.conversation;
+    if (!resolvedConversationId) {
+      if (eligibility.activeMatch?.conversation) {
+        resolvedConversationId = eligibility.activeMatch.conversation;
+      } else {
+        const Chat = require('../models/Chat');
+        const foundChat = await Chat.findOne({
+          isGroup: false,
+          participants: { $all: [callerId, receiverId] },
+        });
+        if (foundChat) {
+          resolvedConversationId = foundChat._id;
+        }
+      }
     }
 
     const now = new Date();
@@ -405,44 +427,39 @@ class CallService {
     }
 
     // If already active, just return updated DTO
+    // If already active, just return updated DTO
     if (sessionDoc.status === CallStatuses.ACTIVE) {
       await sessionDoc.save();
       return this.formatSessionDto(sessionDoc, userId);
     }
 
-    // When BOTH parties report connected and state is ACCEPTED or CONNECTING -> ACTIVE!
+    // When media readiness is confirmed and state is ACCEPTED or CONNECTING -> transition to ACTIVE
     if (
       sessionDoc.status === CallStatuses.ACCEPTED ||
       sessionDoc.status === CallStatuses.CONNECTING
     ) {
-      if (sessionDoc.initiatorConnectedAt && sessionDoc.receiverConnectedAt) {
-        sessionDoc.status = CallStatuses.ACTIVE;
-        sessionDoc.connectedAt = sessionDoc.connectedAt || now;
-        sessionDoc.startedAt = sessionDoc.startedAt || now;
+      sessionDoc.status = CallStatuses.ACTIVE;
+      sessionDoc.connectedAt = sessionDoc.connectedAt || now;
+      sessionDoc.startedAt = sessionDoc.startedAt || now;
 
-        // Atomically charge Minute 1 via walletService
-        try {
-          await walletService.executeCommunicationCharge({
-            sessionDoc,
-            minuteIndex: 1,
-          });
-        } catch (chargeErr) {
-          sessionDoc.status = CallStatuses.FAILED;
-          sessionDoc.endedAt = now;
-          sessionDoc.endReason = CallEndReasons.INSUFFICIENT_FUNDS;
-          sessionDoc.latestBillingError = chargeErr.message;
-          await sessionDoc.save();
-          await callLockService.releaseDualUserCallLock(sessionDoc.caller, sessionDoc.receiver, callId);
-          throw chargeErr;
-        }
-
+      // Atomically charge Minute 1 via walletService
+      try {
+        await walletService.executeCommunicationCharge({
+          sessionDoc,
+          minuteIndex: 1,
+        });
+      } catch (chargeErr) {
+        sessionDoc.status = CallStatuses.FAILED;
+        sessionDoc.endedAt = now;
+        sessionDoc.endReason = CallEndReasons.INSUFFICIENT_FUNDS;
+        sessionDoc.latestBillingError = chargeErr.message;
         await sessionDoc.save();
-        return this.formatSessionDto(sessionDoc, userId);
-      } else {
-        sessionDoc.status = CallStatuses.CONNECTING;
-        await sessionDoc.save();
-        return this.formatSessionDto(sessionDoc, userId);
+        await callLockService.releaseDualUserCallLock(sessionDoc.caller, sessionDoc.receiver, callId);
+        throw chargeErr;
       }
+
+      await sessionDoc.save();
+      return this.formatSessionDto(sessionDoc, userId);
     }
 
     throw new CallDomainError(
@@ -697,6 +714,23 @@ class CallService {
     if (sessionDoc.connectedAt) {
       sessionDoc.durationSeconds = Math.max(0, Math.floor((now.getTime() - sessionDoc.connectedAt.getTime()) / 1000));
       sessionDoc.billableSeconds = sessionDoc.durationSeconds;
+      const totalMinutes = Math.max(1, Math.ceil(sessionDoc.durationSeconds / 60));
+      sessionDoc.billedMinutes = totalMinutes;
+
+      // Authoritatively ensure all elapsed started minutes are charged
+      for (let m = 1; m <= totalMinutes; m++) {
+        try {
+          await walletService.executeCommunicationCharge({
+            sessionDoc,
+            minuteIndex: m,
+          });
+        } catch (mErr) {
+          console.warn(`[CALL SERVICE] Final settlement charge minute ${m}:`, mErr.message);
+        }
+      }
+
+      sessionDoc.totalCoinsCharged = totalMinutes * sessionDoc.ratePerMinuteSnapshot;
+      sessionDoc.totalCoinsEarned = sessionDoc.totalCoinsCharged;
     }
 
     await sessionDoc.save();

@@ -45,7 +45,7 @@ export default function ViewStoryScreen() {
 
   const targetUserId = params.userId;
   const initialName = params.name || 'Friend';
-  const initialAvatar = params.imageUrl || 'https://i.pravatar.cc/150?img=33';
+  const initialAvatar = params.imageUrl || null;
   const isSelf = params.isSelf === 'true' || params.name === 'Your story';
 
   const [loading, setLoading] = useState(true);
@@ -530,7 +530,7 @@ export default function ViewStoryScreen() {
                 uri:
                   author.avatarUri && !author.avatarUri.includes('empty')
                     ? author.avatarUri
-                    : 'https://i.pravatar.cc/150?img=60',
+                    : null,
               }}
               style={styles.avatarImage}
             />
@@ -580,7 +580,7 @@ export default function ViewStoryScreen() {
                         uri:
                           v.avatarUri && !v.avatarUri.includes('empty')
                             ? v.avatarUri
-                            : `https://i.pravatar.cc/150?img=${(i * 7) + 12}`,
+                            : null,
                       }}
                       style={[styles.facepileAvatar, { marginLeft: i > 0 ? -10 : 0 }]}
                     />
@@ -776,7 +776,7 @@ export default function ViewStoryScreen() {
                           uri:
                             item.avatarUri && !item.avatarUri.includes('empty')
                               ? item.avatarUri
-                              : 'https://i.pravatar.cc/150?img=32',
+                              : null,
                         }}
                         style={styles.viewerAvatar}
                       />

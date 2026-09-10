@@ -22,15 +22,16 @@ export default function StoryAvatar({
   const showViewedRing = hasActiveStories && !hasUnviewed;
 
   const renderAvatarContent = () => (
-    <Image
-      source={{
-        uri:
-          imageUrl && !imageUrl.includes('empty')
-            ? imageUrl
-            : 'https://i.pravatar.cc/150?img=60',
-      }}
-      style={styles.avatarImage}
-    />
+    imageUrl && !imageUrl.includes('empty') && imageUrl.startsWith('http') ? (
+      <Image
+        source={{ uri: imageUrl }}
+        style={styles.avatarImage}
+      />
+    ) : (
+      <View style={[styles.avatarImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+        <Ionicons name="person" size={20} color="#9CA3AF" />
+      </View>
+    )
   );
 
   return (

@@ -23,7 +23,7 @@ const getSocketUrl = () => {
       return `http://${ip}:5000`;
     }
   }
-  return 'http://192.168.1.42:5000';
+  return 'http://192.168.1.33:5000';
 };
 
 const SOCKET_URL = getSocketUrl();

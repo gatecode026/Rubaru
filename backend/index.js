@@ -4,6 +4,7 @@ const http = require('http');
 const socketio = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const socketHandler = require('./socket/socketHandler');
 
@@ -207,4 +208,12 @@ const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  try {
+    const { defaultWorker } = require('./services/paidBillingWorker');
+    if (defaultWorker && typeof defaultWorker.start === 'function') {
+      defaultWorker.start();
+    }
+  } catch (workerErr) {
+    console.warn('[PAID BILLING] Failed to start background worker:', workerErr.message);
+  }
 });

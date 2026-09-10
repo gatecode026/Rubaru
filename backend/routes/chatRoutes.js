@@ -6,6 +6,7 @@ const {
   createPoll,
   votePoll,
   reactMessage,
+  markAsRead,
 } = require('../controllers/chatController');
 const { protect } = require('../middleware/auth');
 const upload = require('../middleware/upload');
@@ -16,6 +17,7 @@ router.use(protect);
 
 router.get('/', getChats);
 router.get('/:chatId/messages', getMessages);
+router.put('/:chatId/read', markAsRead);
 
 router.post('/message', upload.single('attachment'), sendMessage);
 router.post('/poll', createPoll);

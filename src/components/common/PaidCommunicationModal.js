@@ -126,21 +126,22 @@ export function PaidSessionLiveBadge({
   totalCoins = 1,
   currentBalance = 0,
 }) {
-  const isLowBalance = isInitiator && currentBalance < ratePerMinute * 2;
+  const remainingCoins = Math.max(0, isInitiator ? (currentBalance - totalCoins) : (currentBalance + totalCoins));
+  const isLowBalance = isInitiator && remainingCoins < ratePerMinute * 2;
 
   return (
     <View style={[styles.liveBadgeContainer, isLowBalance && styles.lowBalanceGlow]}>
       <View style={styles.liveDot} />
       <Text style={styles.liveBadgeText}>
-        {isInitiator ? `Spent: ${totalCoins} Coin${totalCoins !== 1 ? 's' : ''}` : `Earned: +${totalCoins} Coin${totalCoins !== 1 ? 's' : ''}`}
+        {isInitiator ? `Deducted: -${totalCoins}` : `Earned: +${totalCoins}`}
       </Text>
       <Text style={styles.liveBadgeDivider}>•</Text>
       <Text style={styles.liveBadgeSubText}>
-        Min {billedMinutes} ({ratePerMinute} c/m)
+        Bal: {remainingCoins} Coins
       </Text>
       {isLowBalance && (
         <View style={styles.lowBalancePill}>
-          <Text style={styles.lowBalanceText}>Low Balance</Text>
+          <Text style={styles.lowBalanceText}>Low</Text>
         </View>
       )}
     </View>
@@ -167,12 +168,15 @@ export function PaidSessionReceiptModal({
     isInitiator = true,
     counterpartyName = 'Rubaru User',
     endReason = 'NORMAL_COMPLETION',
+    walletBalance,
+    remainingBalance,
   } = sessionData;
 
   const mins = Math.floor(durationSeconds / 60);
   const secs = durationSeconds % 60;
   const durationStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   const coinsAmount = isInitiator ? totalCoinsCharged : totalCoinsEarned;
+  const finalRemaining = remainingBalance ?? walletBalance;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -208,6 +212,16 @@ export function PaidSessionReceiptModal({
                 {isInitiator ? `-${coinsAmount}` : `+${coinsAmount}`} Coins
               </Text>
             </View>
+
+            {finalRemaining !== null && finalRemaining !== undefined && (
+              <View style={[styles.receiptRow, styles.remainingRowBox]}>
+                <View style={styles.remainingLeft}>
+                  <Ionicons name="wallet-outline" size={16} color="#10B981" style={{ marginRight: 6 }} />
+                  <Text style={styles.remainingLabel}>Remaining Balance:</Text>
+                </View>
+                <Text style={styles.remainingValue}>{finalRemaining} Coins</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.receiptActions}>
@@ -489,6 +503,27 @@ const styles = StyleSheet.create({
   receiptTotalAmount: {
     fontSize: 18,
     fontWeight: '800',
+  },
+  remainingRowBox: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+  },
+  remainingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  remainingLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
+  remainingValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#10B981',
   },
   receiptActions: {
     padding: 20,

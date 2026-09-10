@@ -12,20 +12,34 @@ export const usePointsStore = create((set, get) => ({
   fetchBalance: async () => {
     try {
       set({ isLoading: true });
-      const res = await api.get('/v1/wallet');
-      if (res.data && res.data.ok && res.data.data) {
-        set({
-          balance: res.data.data.availableBalance,
-          lifetimeEarned: res.data.data.lifetimeEarned,
-          lifetimeSpent: res.data.data.lifetimeSpent,
-          status: res.data.data.status,
-          isLoading: false,
-          lastUpdated: new Date(),
-        });
-        return res.data.data;
+      try {
+        const res = await api.get('/v1/wallet');
+        if (res.data && res.data.ok && res.data.data) {
+          const bal = res.data.data.availableBalance ?? res.data.data.balance ?? 0;
+          set({
+            balance: bal,
+            lifetimeEarned: res.data.data.lifetimeEarned ?? 0,
+            lifetimeSpent: res.data.data.lifetimeSpent ?? 0,
+            status: res.data.data.status || 'ACTIVE',
+            isLoading: false,
+            lastUpdated: new Date(),
+          });
+          return bal;
+        }
+      } catch (wErr) {
+        // Fallback to /profiles/me
       }
+
+      const pRes = await api.get('/profiles/me');
+      const userPoints = pRes.data?.user?.points ?? pRes.data?.points ?? get().balance;
+      set({
+        balance: userPoints,
+        isLoading: false,
+        lastUpdated: new Date(),
+      });
+      return userPoints;
     } catch (err) {
-      console.warn('[WALLET STORE] Failed to fetch wallet balance:', err.message);
+      console.warn('[WALLET STORE] Failed to fetch balance:', err.message);
       set({ isLoading: false });
     }
   },

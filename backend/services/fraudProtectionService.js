@@ -11,12 +11,12 @@ class FraudProtectionService {
   constructor(options = {}) {
     // Configurable thresholds
     const isProd = process.env.NODE_ENV === 'production';
-    this.maxInitiationsPerMinute = options.maxInitiationsPerMinute || 5;
-    this.maxConcurrentActiveSessions = options.maxConcurrentActiveSessions || 10;
+    this.maxInitiationsPerMinute = options.maxInitiationsPerMinute || (isProd ? 5 : 120);
+    this.maxConcurrentActiveSessions = options.maxConcurrentActiveSessions || (isProd ? 10 : 50);
     this.dailySpendThresholdCoins = options.dailySpendThresholdCoins || 50000;
     this.dailyEarningThresholdCoins = options.dailyEarningThresholdCoins || 50000;
     this.shortSessionThresholdSeconds = options.shortSessionThresholdSeconds || 10;
-    this.repeatedPairVelocityLimitPerHour = options.repeatedPairVelocityLimitPerHour || 10;
+    this.repeatedPairVelocityLimitPerHour = options.repeatedPairVelocityLimitPerHour || (isProd ? 10 : 300);
   }
 
   /**

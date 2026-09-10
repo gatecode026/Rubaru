@@ -85,19 +85,29 @@ function registerCallingHandlers(io, socket, userSocketMap) {
       callMetrics.increment('incoming_calls');
       io.to(`user:${recipientId}`).emit(SocketEvents.CALL_INCOMING, {
         callId: session.callId,
+        sessionId: session.callId,
         caller: callerInfo,
+        callerId: userId,
+        callerName: callerInfo.displayName,
+        callerAvatar: callerInfo.avatarUrl || '',
+        initiatorId: userId,
+        initiatorName: callerInfo.displayName,
+        initiatorAvatar: callerInfo.avatarUrl || '',
         callType: session.callType,
-        ratePerMinute: session.ratePerMinute,
+        communicationType: (session.callType || 'AUDIO').toUpperCase(),
+        ratePerMinute: session.ratePerMinute || (session.callType === 'video' ? 10 : 5),
         expiresAt: session.requestExpiresAt,
+        requestExpiresAt: session.requestExpiresAt,
       });
 
       // Also emit legacy incoming_call for backward-compatible clients
       io.to(`user:${recipientId}`).emit(SocketEvents.LEGACY_INCOMING_CALL, {
         callerId: userId,
         callerName: callerInfo.displayName,
-        callerAvatar: callerInfo.avatarUrl || 'https://i.pravatar.cc/150?img=60',
+        callerAvatar: callerInfo.avatarUrl || '',
         callType: session.callType,
         callSessionId: session.callId,
+        ratePerMinute: session.ratePerMinute || (session.callType === 'video' ? 10 : 5),
       });
 
       // 6. Transition to RINGING and emit call:ringing to caller's room
@@ -647,12 +657,14 @@ function registerCallingHandlers(io, socket, userSocketMap) {
       const callerPayload = {
         ...endPayloadBase,
         walletBalance: callerWalletBalance,
+        remainingBalance: callerWalletBalance,
         isInitiator: true,
       };
 
       const receiverPayload = {
         ...endPayloadBase,
         walletBalance: receiverWalletBalance,
+        remainingBalance: receiverWalletBalance,
         isInitiator: false,
       };
 
@@ -723,7 +735,7 @@ function registerCallingHandlers(io, socket, userSocketMap) {
       io.to(`user:${recipientId}`).emit(SocketEvents.LEGACY_INCOMING_CALL, {
         callerId: userId,
         callerName: callerProfile ? callerProfile.displayName : 'Rubaru Caller',
-        callerAvatar: callerProfile ? callerProfile.avatarUri : 'https://i.pravatar.cc/150?img=60',
+        callerAvatar: callerProfile ? callerProfile.avatarUri : null,
         callType: session.callType,
         callSessionId: session.callId,
       });

@@ -25,15 +25,25 @@ function registerPaidCommunicationHandlers(io, socket) {
 
       socket.join(`paid_session:${session.sessionId}`);
 
-      // Emit to receiver's user room
-      io.to(`user:${receiverId}`).emit('paid_session.requested', {
-        sessionId: session.sessionId,
-        initiatorId: userId,
-        receiverId,
-        communicationType,
-        ratePerMinute: session.ratePerMinuteSnapshot,
-        requestExpiresAt: session.requestExpiresAt,
-      });
+      // Emit to receiver's user room (only voice/video calls trigger call request)
+      if (communicationType === 'AUDIO' || communicationType === 'VIDEO') {
+        io.to(`user:${receiverId}`).emit('paid_session.requested', {
+          sessionId: session.sessionId,
+          initiatorId: userId,
+          receiverId,
+          communicationType,
+          ratePerMinute: session.ratePerMinuteSnapshot,
+          requestExpiresAt: session.requestExpiresAt,
+        });
+      } else {
+        io.to(`user:${receiverId}`).emit('paid_chat:session_started', {
+          sessionId: session.sessionId,
+          initiatorId: userId,
+          receiverId,
+          communicationType: 'MESSAGE',
+          ratePerMinute: session.ratePerMinuteSnapshot,
+        });
+      }
 
       if (typeof callback === 'function') {
         callback({ ok: true, data: session });

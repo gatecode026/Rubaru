@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,11 @@ import {
   Platform,
   Image,
   StatusBar,
+  ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Audio from '../../src/services/audioHelper';
@@ -32,6 +34,7 @@ import { useTheme } from '../../src/theme';
 import api from '../../src/services/api';
 import { getSocket } from '../../src/services/socket';
 import { usePointsStore } from '../../src/store/pointsStore';
+import { useCallStore } from '../../src/store/callStore';
 import paidCommunicationClient from '../../src/services/paidCommunicationService';
 import {
   PaidCommunicationConfirmModal,
@@ -46,163 +49,95 @@ function getFullUrl(uri) {
   return `${BASE_URL}${uri}`;
 }
 
-const initialMessages = [
-  { id: '1', text: 'Hi ! Rahul', time: '4:56 pm', isSent: true, isRead: true, type: 'text' },
-  { id: '2', text: 'Pooja this side.', time: '4:56 pm', isSent: true, isRead: true, type: 'text' },
-  {
-    id: '3',
-    text: 'I saw your profile and wanted to say hello. You look amazing!',
-    time: '4:56 pm',
-    isSent: false,
-    type: 'text',
-  },
-  {
-    id: '4',
-    text: "Hi Rahul! Thank you, that's really sweet of you. 🙂",
-    time: '4:56 pm',
-    isSent: true,
-    isRead: true,
-    type: 'text',
-  },
-  { id: '5', text: 'Thank you!', time: '4:56 pm', isSent: false, type: 'text' },
-  {
-    id: '6',
-    type: 'image',
-    imageUri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop',
-    time: '4:56 pm',
-    isSent: true,
-    isRead: true,
-  },
-  {
-    id: '7',
-    type: 'image',
-    imageUri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop',
-    time: '4:56 pm',
-    isSent: true,
-    isRead: false,
-  },
-  {
-    id: 'poll-sent-1',
-    type: 'poll',
-    question: 'Are you available for a call?',
-    options: [
-      {
-        id: 'opt-1',
-        label: 'Morning (4am-12pm)',
-        votes: 3,
-        voters: [
-          { id: 'v1', name: 'Rahul Kumawat', avatarUri: 'https://i.pravatar.cc/150?img=11' },
-          { id: 'v2', name: 'Pooja', avatarUri: 'https://i.pravatar.cc/150?img=5' },
-          { id: 'v3', name: 'Amit', avatarUri: 'https://i.pravatar.cc/150?img=12' },
-        ],
-        isSelected: false,
-      },
-      {
-        id: 'opt-2',
-        label: 'Day Time (12pm-6pm)',
-        votes: 7,
-        voters: [
-          { id: 'v1', name: 'Rahul Kumawat', avatarUri: 'https://i.pravatar.cc/150?img=11' },
-          { id: 'v2', name: 'Pooja', avatarUri: 'https://i.pravatar.cc/150?img=5' },
-          { id: 'v3', name: 'Amit', avatarUri: 'https://i.pravatar.cc/150?img=12' },
-        ],
-        isSelected: true,
-      },
-      {
-        id: 'opt-3',
-        label: 'Night Time (7pm-3pm)',
-        votes: 2,
-        voters: [
-          { id: 'v8', name: 'Neha', avatarUri: 'https://i.pravatar.cc/150?img=20' },
-          { id: 'v9', name: 'Karan', avatarUri: 'https://i.pravatar.cc/150?img=21' },
-        ],
-        isSelected: false,
-      },
-    ],
-    time: '4:56 pm',
-    isSent: true,
-    isRead: true,
-  },
-  {
-    id: 'poll-rec-1',
-    type: 'poll',
-    question: 'Are you available for a call?',
-    options: [
-      {
-        id: 'opt-1',
-        label: 'Morning (4am-12pm)',
-        votes: 3,
-        voters: [
-          { id: 'v1', name: 'Rahul Kumawat', avatarUri: 'https://i.pravatar.cc/150?img=11' },
-          { id: 'v2', name: 'Pooja', avatarUri: 'https://i.pravatar.cc/150?img=5' },
-          { id: 'v3', name: 'Amit', avatarUri: 'https://i.pravatar.cc/150?img=12' },
-        ],
-        isSelected: false,
-      },
-      {
-        id: 'opt-2',
-        label: 'Day Time (12pm-6pm)',
-        votes: 7,
-        voters: [
-          { id: 'v1', name: 'Rahul Kumawat', avatarUri: 'https://i.pravatar.cc/150?img=11' },
-          { id: 'v2', name: 'Pooja', avatarUri: 'https://i.pravatar.cc/150?img=5' },
-          { id: 'v3', name: 'Amit', avatarUri: 'https://i.pravatar.cc/150?img=12' },
-        ],
-        isSelected: true,
-      },
-      {
-        id: 'opt-3',
-        label: 'Night Time (7pm-3pm)',
-        votes: 2,
-        voters: [
-          { id: 'v8', name: 'Neha', avatarUri: 'https://i.pravatar.cc/150?img=20' },
-          { id: 'v9', name: 'Karan', avatarUri: 'https://i.pravatar.cc/150?img=21' },
-        ],
-        isSelected: false,
-      },
-    ],
-    time: '4:56 pm',
-    isSent: false,
-  },
-  {
-    id: 'voice-sent-1',
-    type: 'voice',
-    duration: '00:32',
-    time: '4:56 pm',
-    isSent: true,
-    isRead: true,
-  },
-  {
-    id: 'voice-rec-1',
-    type: 'voice',
-    duration: '00:32',
-    time: '4:55 pm',
-    isSent: false,
-  },
-  {
-    id: 'reply-sample-1',
-    type: 'text',
-    text: 'Sounds great! I will call you during Day Time.',
-    time: '4:57 pm',
-    isSent: true,
-    isRead: true,
-    replyTo: {
-      senderName: 'Rahul Kumawat',
-      text: 'Are you available for a call?',
-    },
-  },
-];
+function formatTime(dateInput) {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase();
+}
+
+function getDateLabel(dateInput) {
+  if (!dateInput) return 'Today';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return 'Today';
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffMs = today.getTime() - msgDay.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (today.getFullYear() === d.getFullYear()) {
+    return d.toLocaleDateString([], { day: 'numeric', month: 'long' });
+  }
+  return d.toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function sortMessagesChronologically(msgList) {
+  return [...msgList].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+function formatServerMessage(m, currentUserId) {
+  const senderIdStr = String(m.senderId?._id || m.senderId || m.sender?._id || m.sender || '');
+  const isSent = Boolean(currentUserId && senderIdStr && senderIdStr === String(currentUserId));
+  const createdAt = m.createdAt || new Date().toISOString();
+
+  let optionsList = [];
+  if (m.isPoll && Array.isArray(m.pollOptions)) {
+    optionsList = m.pollOptions.map((opt, idx) => ({
+      id: `opt-${idx}`,
+      label: opt.optionText || opt.label || '',
+      votes: Array.isArray(opt.voterIds) ? opt.voterIds.length : (opt.votes || 0),
+      isSelected: Array.isArray(opt.voterIds) && currentUserId ? opt.voterIds.some(id => String(id) === String(currentUserId)) : false,
+      voters: [],
+    }));
+  }
+
+  return {
+    id: String(m.id || m._id),
+    clientMessageId: m.clientMessageId || undefined,
+    type: (m.type || 'text').toLowerCase(),
+    text: m.text || '',
+    attachmentUri: m.attachmentUri ? getFullUrl(m.attachmentUri) : '',
+    imageUri: (m.type === 'image' || m.attachmentUri) ? getFullUrl(m.attachmentUri) : undefined,
+    voiceUri: (m.type === 'voice' || m.type === 'audio') ? getFullUrl(m.attachmentUri) : undefined,
+    duration: m.duration || (m.type === 'voice' ? '00:15' : undefined),
+    createdAt,
+    time: formatTime(createdAt),
+    isSent,
+    isRead: Boolean(m.isRead),
+    status: isSent ? (m.isRead ? 'read' : 'sent') : 'sent',
+    replyTo: m.replyTo ? {
+      senderName: m.replyTo.senderName || 'User',
+      text: m.replyTo.text || '',
+    } : null,
+    isPoll: Boolean(m.isPoll),
+    question: m.pollQuestion || m.question || '',
+    options: optionsList.length > 0 ? optionsList : m.options,
+    sticker: m.stickerId || m.sticker || '',
+    reactions: m.reactions || [],
+  };
+}
 
 export default function ChatDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const { isDarkMode, colors } = useTheme();
+
   const [inputText, setInputText] = useState('');
+  // Standard Chronological order: index 0 = oldest (top), index last = newest (bottom)
   const [messages, setMessages] = useState([]);
   const [myUserId, setMyUserId] = useState(null);
   const [activeChatId, setActiveChatId] = useState(null);
   const [loadingMsgs, setLoadingMsgs] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [isScrolledUp, setIsScrolledUp] = useState(false);
+  const [newIncomingCount, setNewIncomingCount] = useState(0);
+
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -213,6 +148,8 @@ export default function ChatDetailScreen() {
   const [isReactionMode, setIsReactionMode] = useState(false);
   const [createPollVisible, setCreatePollVisible] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
+  const [selectedPollForResults, setSelectedPollForResults] = useState(null);
+  const [pollResultsVisible, setPollResultsVisible] = useState(false);
 
   // Audio Recording States
   const [recording, setRecording] = useState(null);
@@ -225,7 +162,7 @@ export default function ChatDetailScreen() {
   const balance = usePointsStore((state) => state.balance);
   const fetchBalance = usePointsStore((state) => state.fetchBalance);
   const [showPaidModal, setShowPaidModal] = useState(false);
-  const [paidModalType, setPaidModalType] = useState('MESSAGE'); // 'MESSAGE', 'AUDIO', 'VIDEO'
+  const [paidModalType, setPaidModalType] = useState('MESSAGE');
   const [isPaidActive, setIsPaidActive] = useState(false);
   const [activePaidSession, setActivePaidSession] = useState(null);
   const [billedMinutes, setBilledMinutes] = useState(1);
@@ -235,198 +172,313 @@ export default function ChatDetailScreen() {
   const [receiptData, setReceiptData] = useState(null);
   const [paidLoading, setPaidLoading] = useState(false);
 
-  // id = chatId OR userId depending on entry point
   const routeId = params.id;
-  const recipientId = params.recipientId; // set when coming from user profile
-  const displayName = params.name || 'User';
-  const displayAvatar = params.avatarUrl ? getFullUrl(params.avatarUrl) : '';
+  const recipientId = params.recipientId;
+  const [otherUserId, setOtherUserId] = useState(params.recipientId || null);
+  const [chatUserDisplayName, setChatUserDisplayName] = useState(
+    params.name && params.name !== 'User' && params.name !== 'Rubaru User' ? params.name : ''
+  );
+  const [chatUserAvatarUrl, setChatUserAvatarUrl] = useState(params.avatarUrl || '');
+
+  const displayName = chatUserDisplayName || (params.name && params.name !== 'User' && params.name !== 'Rubaru User' ? params.name : (params.name || 'User'));
+  const displayAvatar = chatUserAvatarUrl
+    ? getFullUrl(chatUserAvatarUrl)
+    : (params.avatarUrl ? getFullUrl(params.avatarUrl) : null);
 
   const getTargetUserId = () => {
-    if (recipientId) return recipientId;
-    return routeId;
+    if (otherUserId && /^[0-9a-fA-F]{24}$/.test(String(otherUserId))) return String(otherUserId);
+    if (recipientId && /^[0-9a-fA-F]{24}$/.test(String(recipientId))) return String(recipientId);
+    if (routeId && /^[0-9a-fA-F]{24}$/.test(String(routeId))) return String(routeId);
+    return otherUserId || recipientId || routeId;
   };
 
-  const handleOpenPaidConfirm = (type) => {
-    setPaidModalType(type);
-    setShowPaidModal(true);
-    if (fetchBalance) fetchBalance();
-  };
-
-  const handleConfirmPaidSession = async () => {
+  // Mark chat as read
+  const markAsRead = useCallback(async (chatIdToMark) => {
+    if (!chatIdToMark) return;
     try {
-      setPaidLoading(true);
-      const targetUserId = getTargetUserId();
-      const session = await paidCommunicationClient.initiateSession({
-        receiverId: targetUserId,
-        communicationType: paidModalType,
-        conversationId: activeChatId,
-      });
+      await Promise.allSettled([
+        api.put(`/chats/${chatIdToMark}/read`),
+        api.post(`/v1/conversations/${chatIdToMark}/receipts/read`, { watermark: 999999 }),
+      ]);
+    } catch (err) {
+      // Non-blocking read receipt update
+    }
+  }, []);
 
-      setShowPaidModal(false);
-      setPaidLoading(false);
-
-      if (paidModalType === 'AUDIO' || paidModalType === 'VIDEO') {
-        router.push({
-          pathname: '/active-call',
-          params: {
-            contactName: displayName,
-            avatarUri: displayAvatar,
-            receiverId: targetUserId,
-            callType: paidModalType === 'VIDEO' ? 'video' : 'voice',
-            initialStatus: 'calling',
-            isPaid: 'true',
-            paidSessionId: session.sessionId,
-            ratePerMinute: session.ratePerMinuteSnapshot,
-            isInitiator: 'true',
-          },
-        });
-      } else {
-        // Paid Chat Session
-        setActivePaidSession(session);
-        setIsPaidActive(true);
-        setBilledMinutes(1);
-        setCoinsCharged(session.ratePerMinuteSnapshot || 1);
-        if (fetchBalance) fetchBalance();
+  useFocusEffect(
+    useCallback(() => {
+      const target = activeChatId || routeId;
+      if (target) {
+        markAsRead(target);
       }
-    } catch (err) {
-      setPaidLoading(false);
-      alert(err.response?.data?.error || err.message || 'Failed to initiate paid session');
-    }
-  };
+      if (routeId && routeId !== activeChatId) {
+        markAsRead(routeId);
+      }
+    }, [activeChatId, routeId, markAsRead])
+  );
 
-  const handleEndPaidChat = async () => {
-    if (!activePaidSession) {
-      setIsPaidActive(false);
-      return;
-    }
-    try {
-      const ended = await paidCommunicationClient.endSession(activePaidSession.sessionId, 'NORMAL_COMPLETION');
-      setIsPaidActive(false);
-      setReceiptData({
-        communicationType: 'MESSAGE',
-        durationSeconds: (ended?.billedMinutes || billedMinutes) * 60,
-        billedMinutes: ended?.billedMinutes || billedMinutes,
-        totalCoinsCharged: ended?.totalCoinsCharged || coinsCharged,
-        totalCoinsEarned: ended?.totalCoinsEarned || coinsEarned,
-        isInitiator: true,
-        counterpartyName: displayName,
-        endReason: ended?.endReason || 'NORMAL_COMPLETION',
-      });
-      setShowReceiptModal(true);
-      setActivePaidSession(null);
-      if (fetchBalance) fetchBalance();
-    } catch (err) {
-      console.warn('[PAID CHAT] End error:', err.message);
-      setIsPaidActive(false);
-      setActivePaidSession(null);
-    }
-  };
-
-  // Load messages from API
+  // --- Initial Load: Profile & Messages ---
   useEffect(() => {
+    let isMounted = true;
+
     const loadMessages = async () => {
       try {
-        // Get my profile to know my userId
+        setLoadingMsgs(true);
+        // 1. Resolve logged-in User ID string
         const meRes = await api.get('/profiles/me');
-        setMyUserId(meRes.data.user || meRes.data._id);
+        const rawUser = meRes.data?.user;
+        const resolvedMyId = (typeof rawUser === 'object' && rawUser?._id)
+          ? String(rawUser._id)
+          : (rawUser ? String(rawUser) : (meRes.data?._id ? String(meRes.data._id) : ''));
+        
+        if (isMounted) setMyUserId(resolvedMyId);
 
         let chatId = routeId;
-
-        // Fetch chats to determine if routeId is a chatId or a userId
         const chatsRes = await api.get('/chats');
-        
-        // Check if routeId matches the other participant's userId of any existing chat
         const existing = chatsRes.data.find(
           (c) => !c.isGroup && c.otherParticipant?.userId?.toString() === routeId.toString()
         );
 
+        let resolvedOtherUserId = recipientId;
+
         if (existing) {
-          // If we have an existing chat with this user, resolve to the correct chatId
           chatId = existing.id;
+          if (existing.otherParticipant) {
+            resolvedOtherUserId = existing.otherParticipant.userId;
+            if (existing.otherParticipant.displayName && existing.otherParticipant.displayName !== 'Rubaru User' && isMounted) {
+              setChatUserDisplayName(existing.otherParticipant.displayName);
+            }
+            if (existing.otherParticipant.avatarUri && isMounted) {
+              setChatUserAvatarUrl(existing.otherParticipant.avatarUri);
+            }
+          }
         } else {
-          // If not found, check if routeId is already a valid chatId in our list
           const isChatId = chatsRes.data.some((c) => c.id?.toString() === routeId.toString());
-          if (!isChatId) {
-            // It's a new chat with a user we've never chatted with before
+          if (isChatId) {
+            const currentChat = chatsRes.data.find((c) => c.id?.toString() === routeId.toString());
+            if (currentChat?.otherParticipant?.displayName && currentChat.otherParticipant.displayName !== 'Rubaru User' && isMounted) {
+              setChatUserDisplayName(currentChat.otherParticipant.displayName);
+            }
+            if (currentChat?.otherParticipant?.avatarUri && isMounted) {
+              setChatUserAvatarUrl(currentChat.otherParticipant.avatarUri);
+            }
+            if (currentChat?.otherParticipant?.userId) {
+              resolvedOtherUserId = currentChat.otherParticipant.userId;
+            }
+          } else {
             chatId = null;
+            resolvedOtherUserId = routeId;
           }
         }
 
-        setActiveChatId(chatId);
+        if (resolvedOtherUserId && isMounted) {
+          setOtherUserId(String(resolvedOtherUserId));
+        }
+
+        // Fetch other user profile directly if display name is still missing
+        const targetUserId = resolvedOtherUserId || (routeId !== chatId ? routeId : null);
+        if (targetUserId) {
+          try {
+            const profileRes = await api.get(`/profiles/${targetUserId}`);
+            if (profileRes.data?.displayName && profileRes.data.displayName !== 'Rubaru User' && isMounted) {
+              setChatUserDisplayName(profileRes.data.displayName);
+            }
+            if (profileRes.data?.avatarUri && isMounted) {
+              setChatUserAvatarUrl(profileRes.data.avatarUri);
+            }
+          } catch (pErr) {
+            // Ignore if profile lookup fails
+          }
+        }
+
+        if (isMounted) setActiveChatId(chatId);
 
         if (chatId) {
-          const msgsRes = await api.get(`/chats/${chatId}/messages`);
-          // Map API messages to the format expected by MessageBubble
-          const mapped = msgsRes.data.map((m) => ({
-            id: m.id,
-            type: m.type || 'text',
-            text: m.text || '',
-            attachmentUri: m.attachmentUri ? getFullUrl(m.attachmentUri) : '',
-            time: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
-            isSent: m.senderId?.toString() === (meRes.data.user || meRes.data._id)?.toString(),
-            isRead: m.isRead,
-            replyTo: m.replyTo ? {
-              senderName: m.replyTo.senderName || 'User',
-              text: m.replyTo.text || '',
-            } : null,
-          }));
-          setMessages(mapped);
+          const msgsRes = await api.get(`/chats/${chatId}/messages?page=1&limit=50`);
+          const serverMsgs = Array.isArray(msgsRes.data) ? msgsRes.data : [];
+          
+          // Chronological sort: oldest at top (index 0), newest at bottom (index last)
+          const formatted = serverMsgs.map((m) => formatServerMessage(m, resolvedMyId));
+          const sorted = sortMessagesChronologically(formatted);
+
+          if (isMounted) {
+            setMessages(sorted);
+            setHasMore(serverMsgs.length >= 50);
+            setPage(1);
+          }
+
+          // Mark conversation messages as read
+          markAsRead(chatId);
+        } else {
+          if (isMounted) {
+            setMessages([]);
+            setHasMore(false);
+          }
         }
       } catch (e) {
         console.log('[LOAD MESSAGES ERROR]', e.message);
       } finally {
-        setLoadingMsgs(false);
+        if (isMounted) setLoadingMsgs(false);
       }
     };
+
     loadMessages();
-  }, [routeId, recipientId]);
 
-  // --- SOCKET: Join room + listen for real-time messages ---
+    return () => {
+      isMounted = false;
+    };
+  }, [routeId, recipientId, markAsRead]);
+
+  // Scroll to bottom on initial load
   useEffect(() => {
-    if (!activeChatId) return;
+    if (!loadingMsgs && messages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: false });
+      }, 50);
+    }
+  }, [loadingMsgs]);
 
+  // --- Upward Pagination: Load Older Messages ---
+  const handleLoadMore = async () => {
+    if (!activeChatId || !hasMore || loadingMore || loadingMsgs) return;
+    try {
+      setLoadingMore(true);
+      const nextPage = page + 1;
+      const msgsRes = await api.get(`/chats/${activeChatId}/messages?page=${nextPage}&limit=40`);
+      const olderList = Array.isArray(msgsRes.data) ? msgsRes.data : [];
+      if (olderList.length === 0) {
+        setHasMore(false);
+      } else {
+        const formattedOlder = olderList.map((m) => formatServerMessage(m, myUserId));
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => String(m.id)));
+          const filtered = formattedOlder.filter((m) => !existingIds.has(String(m.id)));
+          if (filtered.length === 0) {
+            setHasMore(false);
+            return prev;
+          }
+          return sortMessagesChronologically([...filtered, ...prev]);
+        });
+        setPage(nextPage);
+        setHasMore(olderList.length >= 40);
+      }
+    } catch (err) {
+      console.warn('[LOAD MORE ERROR]', err.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // --- Real-Time Socket Connection ---
+  useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
 
-    // Join both legacy and V1 chat room
-    socket.emit('join_chat', activeChatId);
-    socket.emit('conversation.subscribe', { conversationId: activeChatId });
-    console.log('[SOCKET] Joined chat room:', activeChatId);
+    if (activeChatId) {
+      socket.emit('join_chat', activeChatId);
+      socket.emit('conversation.subscribe', { conversationId: activeChatId });
+      console.log('[SOCKET] Joined chat room:', activeChatId);
+    }
 
-    const onReceiveMessage = (msg) => {
-      // Only add if not already in list (avoid duplicates from our own optimistic update)
+    const onReceiveMessage = (rawMsg) => {
+      if (!rawMsg) return;
+      const msg = rawMsg.data?.message || rawMsg.message || rawMsg;
+      const msgChatId = msg.chatId || msg.conversationId || msg.chat;
+      const msgSenderId = String(msg.senderId?._id || msg.senderId || msg.sender?._id || msg.sender || msg.from || '');
+      const targetOtherId = recipientId || routeId;
+
+      const isMatchingChat = activeChatId && msgChatId && String(msgChatId) === String(activeChatId);
+      const isFromRecipient = targetOtherId && msgSenderId && String(msgSenderId) === String(targetOtherId);
+
+      if (!activeChatId && msgChatId && isFromRecipient) {
+        setActiveChatId(String(msgChatId));
+      }
+
+      if (activeChatId && !isMatchingChat && !isFromRecipient) {
+        return;
+      }
+
+      const msgId = String(msg.id || msg._id || Date.now());
+      const isSentByMe = Boolean(myUserId && msgSenderId && msgSenderId === String(myUserId));
+      const rawClientMsgId = msg.clientMessageId || rawMsg.clientMessageId;
+
+      const newFormatted = formatServerMessage(msg, myUserId);
+
       setMessages((prev) => {
-        const alreadyExists = prev.some(
-          (m) => m.id === (msg.id || msg._id) || (m.isSent && m.text === msg.text && !msg.senderId?.toString().includes(myUserId?.toString()))
-        );
-        if (alreadyExists) return prev;
-        return [
-          ...prev,
-          {
-            id: msg.id || msg._id || String(Date.now()),
-            type: msg.type || 'text',
-            text: msg.text || msg.content || '',
-            attachmentUri: msg.attachmentUri ? getFullUrl(msg.attachmentUri) : '',
-            time: new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
-            isSent: msg.senderId?.toString() === myUserId?.toString(),
-            isRead: false,
-            replyTo: msg.replyTo ? { senderName: msg.senderName || 'User', text: msg.replyTo.text || '' } : null,
-          },
-        ];
+        // 1. Direct ID match
+        const existsById = prev.some((m) => String(m.id) === msgId);
+        if (existsById) return prev;
+
+        // 2. Reconcile optimistic sending message
+        if (isSentByMe) {
+          const optIdx = prev.findIndex((m) =>
+            (rawClientMsgId && m.clientMessageId === rawClientMsgId) ||
+            (m.status === 'sending' && m.text === newFormatted.text && (Date.now() - new Date(m.createdAt).getTime() < 30000))
+          );
+          if (optIdx > -1) {
+            const copy = [...prev];
+            copy[optIdx] = {
+              ...newFormatted,
+              status: 'sent',
+            };
+            return sortMessagesChronologically(copy);
+          }
+        }
+
+        // 3. Append to chronological list (appears at bottom)
+        return sortMessagesChronologically([...prev, newFormatted]);
       });
+
+      // If viewing incoming message, mark as read and handle auto-scroll
+      if (!isSentByMe) {
+        if (activeChatId) markAsRead(activeChatId);
+        if (isScrolledUp) {
+          setNewIncomingCount((c) => c + 1);
+        } else {
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
+      }
+    };
+
+    const onMessagesRead = (payload) => {
+      const readChatId = payload?.chatId || payload?.conversationId;
+      const readerId = payload?.readerId || payload?.actorUserId;
+      const targetOtherId = recipientId || routeId;
+      const isMatchingChat = activeChatId && readChatId && String(readChatId) === String(activeChatId);
+      const isFromOtherUser = targetOtherId && readerId && String(readerId) === String(targetOtherId);
+
+      if (isMatchingChat || isFromOtherUser) {
+        setMessages((prev) =>
+          prev.map((m) => (m.isSent ? { ...m, isRead: true, status: 'read' } : m))
+        );
+      }
     };
 
     socket.on('receive_message', onReceiveMessage);
+    socket.on('message.created', onReceiveMessage);
+    socket.on('new_message', onReceiveMessage);
     socket.on('conversation.message.created', onReceiveMessage);
+    socket.on('messages_read', onMessagesRead);
+    socket.on('message_read', onMessagesRead);
+    socket.on('receipt.read', onMessagesRead);
 
     return () => {
       socket.off('receive_message', onReceiveMessage);
+      socket.off('message.created', onReceiveMessage);
+      socket.off('new_message', onReceiveMessage);
       socket.off('conversation.message.created', onReceiveMessage);
-      socket.emit('leave_chat', activeChatId);
-      socket.emit('conversation.unsubscribe', { conversationId: activeChatId });
-      console.log('[SOCKET] Left chat room:', activeChatId);
+      socket.off('messages_read', onMessagesRead);
+      socket.off('message_read', onMessagesRead);
+      socket.off('receipt.read', onMessagesRead);
+      if (activeChatId) {
+        socket.emit('leave_chat', activeChatId);
+        socket.emit('conversation.unsubscribe', { conversationId: activeChatId });
+        console.log('[SOCKET] Left chat room:', activeChatId);
+      }
     };
-  }, [activeChatId, myUserId]);
+  }, [activeChatId, myUserId, recipientId, routeId, isScrolledUp, markAsRead]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -436,15 +488,6 @@ export default function ChatDetailScreen() {
     }
   };
 
-  // Auto-scroll when messages update
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [messages]);
-
   // Clean up recording timer on unmount
   useEffect(() => {
     return () => {
@@ -452,113 +495,183 @@ export default function ChatDetailScreen() {
     };
   }, []);
 
+  // --- Send Text Message ---
   const handleSend = async () => {
     if (inputText.trim() === '') return;
-    const text = inputText;
+
+    // Enforce Paid Chat: cannot send if paid chat is off
+    if (!isPaidActive) {
+      handleOpenPaidConfirm('MESSAGE');
+      return;
+    }
+
+    const text = inputText.trim();
     setInputText('');
 
     const replyData = replyingTo
       ? {
           senderName: replyingTo.isSent ? 'You' : displayName,
-          text:
-            replyingTo.text ||
-            replyingTo.question ||
-            (replyingTo.type === 'image'
-              ? '📷 Photo'
-              : replyingTo.type === 'voice'
-              ? '🎤 Voice message'
-              : 'Message'),
+          text: replyingTo.text || replyingTo.question || (replyingTo.type === 'image' ? '📷 Photo' : 'Message'),
         }
       : null;
 
-    // Optimistic UI update
-    const tempId = Date.now().toString();
-    const newMsg = {
+    const clientMsgId = `cmsg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const tempId = `temp_${Date.now()}`;
+    const nowIso = new Date().toISOString();
+
+    const optimisticMsg = {
       id: tempId,
+      clientMessageId: clientMsgId,
       type: 'text',
       text,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+      createdAt: nowIso,
+      time: formatTime(nowIso),
       isSent: true,
       isRead: false,
+      status: 'sending',
       replyTo: replyData,
     };
-    setMessages((prev) => [...prev, newMsg]);
+
+    // Append to chronological list (appears at bottom)
+    setMessages((prev) => [...prev, optimisticMsg]);
     setReplyingTo(null);
 
-    // Send via socket if we already have a chatId (fast path)
-    // Otherwise use REST to create the chat first, then join room
+    // Keep scrolled to bottom
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+
     try {
       if (activeChatId) {
-        // Emit via socket — server saves to DB and broadcasts to room
         const socket = getSocket();
         if (socket && socket.connected) {
-          socket.emit('send_message', {
+          socket.emit(
+            'send_message',
+            {
+              chatId: activeChatId,
+              text,
+              type: 'text',
+              clientMessageId: clientMsgId,
+              replyTo: replyingTo?.id || undefined,
+            },
+            (ack) => {
+              if (ack && ack.ok && ack.data?.message) {
+                const confirmed = formatServerMessage(ack.data.message, myUserId);
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === tempId || m.clientMessageId === clientMsgId ? { ...confirmed, status: 'sent' } : m))
+                );
+              }
+            }
+          );
+        } else {
+          const res = await api.post('/chats/message', {
             chatId: activeChatId,
             text,
             type: 'text',
             replyTo: replyingTo?.id || undefined,
           });
-        } else {
-          // Socket not available, fall back to REST
-          await api.post('/chats/message', { chatId: activeChatId, text, type: 'text' });
+          const serverMsg = res.data;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === tempId ? { ...formatServerMessage(serverMsg, myUserId), status: 'sent' } : m))
+          );
         }
       } else {
-        // First message in a new chat — use REST to create chat
+        // First message in a new conversation
         const targetRecipientId = recipientId || routeId;
-        const res = await api.post('/chats/message', { recipientId: targetRecipientId, text, type: 'text' });
-        const newChatId = String(res.data.chat);
+        const res = await api.post('/chats/message', {
+          recipientId: targetRecipientId,
+          text,
+          type: 'text',
+        });
+        const newChatId = String(res.data.chat || res.data._id);
         setActiveChatId(newChatId);
-        // Update temp msg id
         setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? { ...m, id: res.data._id || tempId } : m))
+          prev.map((m) => (m.id === tempId ? { ...formatServerMessage(res.data, myUserId), status: 'sent' } : m))
         );
       }
     } catch (e) {
       console.log('[SEND MESSAGE ERROR]', e.message);
+      // Mark optimistic message as failed
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m))
+      );
     }
   };
 
-  const uploadAttachment = async (uri, type, duration = '') => {
-    if (!uri) {
-      alert(`${type.charAt(0).toUpperCase() + type.slice(1)} is not supported or failed to resolve in this environment.`);
+  const handleRetrySend = async (failedMsg) => {
+    if (!isPaidActive) {
+      handleOpenPaidConfirm('MESSAGE');
       return;
     }
-    const tempId = Date.now().toString();
-    
-    // Add optimistic UI message
+    setMessages((prev) =>
+      prev.map((m) => (m.id === failedMsg.id ? { ...m, status: 'sending' } : m))
+    );
+    try {
+      const res = await api.post('/chats/message', {
+        chatId: activeChatId,
+        recipientId: !activeChatId ? getTargetUserId() : undefined,
+        text: failedMsg.text,
+        type: failedMsg.type || 'text',
+      });
+      setMessages((prev) =>
+        prev.map((m) => (m.id === failedMsg.id ? { ...formatServerMessage(res.data, myUserId), status: 'sent' } : m))
+      );
+    } catch (err) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === failedMsg.id ? { ...m, status: 'failed' } : m))
+      );
+    }
+  };
+
+  // --- Attachment Upload (Photos / Audio) ---
+  const uploadAttachment = async (uri, type, duration = '') => {
+    if (!uri) return;
+
+    if (!isPaidActive) {
+      handleOpenPaidConfirm('MESSAGE');
+      return;
+    }
+
+    const tempId = `temp_${Date.now()}`;
+    const nowIso = new Date().toISOString();
+
     const tempMsg = {
       id: tempId,
-      type: type,
+      type,
       text: '',
-      attachmentUri: uri, // local preview
+      attachmentUri: uri,
+      imageUri: type === 'image' ? uri : undefined,
       voiceUri: type === 'voice' ? uri : undefined,
       duration: type === 'voice' ? duration : undefined,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+      createdAt: nowIso,
+      time: formatTime(nowIso),
       isSent: true,
       isRead: false,
+      status: 'sending',
     };
+
     setMessages((prev) => [...prev, tempMsg]);
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 50);
 
     try {
-      // 1. Resolve chatId if activeChatId is null
       let targetChatId = activeChatId;
       if (!targetChatId) {
-        // Create chat first with placeholder text to obtain chatId
         const targetRecipientId = recipientId || routeId;
         const chatRes = await api.post('/chats/message', {
           recipientId: targetRecipientId,
           text: `Sent a ${type}`,
           type: 'text',
         });
-        targetChatId = String(chatRes.data.chat);
+        targetChatId = String(chatRes.data.chat || chatRes.data._id);
         setActiveChatId(targetChatId);
       }
 
-      // 2. Upload the file
       const formData = new FormData();
       formData.append('chatId', targetChatId);
       formData.append('type', type);
-      
+
       const fileExtension = uri.split('.').pop() || (type === 'image' ? 'jpg' : 'm4a');
       const mimeType = type === 'image' ? 'image/jpeg' : 'audio/m4a';
 
@@ -574,99 +687,125 @@ export default function ChatDetailScreen() {
           type: mimeType,
         };
       }
-
       formData.append('attachment', fileToUpload);
 
       const res = await api.post('/chats/message', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      // 3. Update the temporary message in local state with the saved DB message details
-      const dbMsg = res.data;
-      const finalMsg = {
-        id: dbMsg._id || dbMsg.id || tempId,
-        type: type,
-        text: dbMsg.text || '',
-        attachmentUri: getFullUrl(dbMsg.attachmentUri),
-        voiceUri: type === 'voice' ? getFullUrl(dbMsg.attachmentUri) : undefined,
-        duration: type === 'voice' ? duration : undefined,
-        time: new Date(dbMsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
-        isSent: true,
-        isRead: false,
-      };
-
+      const confirmed = formatServerMessage(res.data, myUserId);
       setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? finalMsg : m))
+        prev.map((m) => (m.id === tempId ? { ...confirmed, status: 'sent' } : m))
       );
-
-      // 4. Relay the final message payload via socket so the other party gets it in real-time
-      const socket = getSocket();
-      if (socket && socket.connected) {
-        socket.emit('relay_message', {
-          chatId: targetChatId,
-          message: {
-            id: dbMsg._id || dbMsg.id,
-            chatId: targetChatId,
-            senderId: myUserId,
-            senderName: displayName,
-            type: type,
-            text: '',
-            attachmentUri: dbMsg.attachmentUri,
-            isRead: false,
-            createdAt: dbMsg.createdAt,
-          },
-        });
-      }
     } catch (e) {
       console.log('[ATTACHMENT UPLOAD ERROR]', e.message);
-      // Remove optimistic message on failure
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      alert(`Failed to send ${type}. Please try again.`);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m))
+      );
     }
   };
 
-  const handleSendImage = (uri) => {
-    uploadAttachment(uri, 'image');
-  };
+  const handleSendImage = (uri) => uploadAttachment(uri, 'image');
 
-  const handleSendSticker = (emoji) => {
+  const handleSendSticker = async (emoji) => {
+    if (!isPaidActive) {
+      handleOpenPaidConfirm('MESSAGE');
+      return;
+    }
+
+    const tempId = `temp_${Date.now()}`;
+    const nowIso = new Date().toISOString();
     const newMsg = {
-      id: Date.now().toString(),
+      id: tempId,
       type: 'sticker',
       sticker: emoji,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+      createdAt: nowIso,
+      time: formatTime(nowIso),
       isSent: true,
       isRead: false,
+      status: 'sending',
     };
     setMessages((prev) => [...prev, newMsg]);
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+
+    try {
+      if (activeChatId) {
+        const res = await api.post('/chats/message', {
+          chatId: activeChatId,
+          type: 'sticker',
+          stickerId: emoji,
+          text: emoji,
+        });
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...formatServerMessage(res.data, myUserId), status: 'sent' } : m))
+        );
+      }
+    } catch (err) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m))
+      );
+    }
   };
 
-  const handleCreatePoll = (pollData) => {
-    const newMsg = {
-      id: `poll-${Date.now()}`,
-      type: 'poll',
-      question: pollData.question,
-      options: pollData.options,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
-      isSent: true,
-      isRead: false,
-    };
-    setMessages((prev) => [...prev, newMsg]);
+  const handleCreatePoll = async (pollData) => {
+    if (!isPaidActive) {
+      handleOpenPaidConfirm('MESSAGE');
+      return;
+    }
+
+    try {
+      if (activeChatId) {
+        const res = await api.post('/chats/poll', {
+          chatId: activeChatId,
+          pollQuestion: pollData.question,
+          options: pollData.options.map((o) => o.label || o),
+        });
+        const formatted = formatServerMessage(res.data, myUserId);
+        setMessages((prev) => [...prev, formatted]);
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 50);
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to create poll');
+    }
   };
 
+  const handleVote = async (messageId, optionId) => {
+    const optIndex = parseInt(optionId.replace('opt-', ''), 10);
+    try {
+      const res = await api.post(`/chats/poll/${messageId}/vote`, { optionIndex });
+      const updated = formatServerMessage(res.data, myUserId);
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? updated : m)));
+    } catch (err) {
+      console.warn('[VOTE ERROR]', err.message);
+    }
+  };
+
+  const handleViewAllPoll = (poll) => {
+    setSelectedPollForResults(poll);
+    setPollResultsVisible(true);
+  };
+
+  // --- Audio Recording Handlers ---
   const startRecording = async () => {
+    if (!isPaidActive) {
+      handleOpenPaidConfirm('MESSAGE');
+      return;
+    }
+
     try {
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
         alert('Permission to access microphone was denied');
         return;
       }
-
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
-
       const { recording: newRecording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
@@ -691,31 +830,36 @@ export default function ChatDetailScreen() {
       const uri = recording.getURI();
       setRecording(null);
 
-      const formatTime = (secs) => {
+      const formatRecordingSecs = (secs) => {
         const m = Math.floor(secs / 60);
         const s = secs % 60;
         return `${m}:${s < 10 ? '0' : ''}${s}`;
       };
-
-      const duration = formatTime(recordingTime);
-      uploadAttachment(uri, 'voice', duration);
+      uploadAttachment(uri, 'voice', formatRecordingSecs(recordingTime));
     } catch (err) {
       console.error('Failed to stop recording', err);
     }
   };
 
+  // --- Message Options & Reactions ---
   const handleLongPressMessage = (msg) => {
     setSelectedMessage(msg);
     setOptionsVisible(true);
   };
 
-  const handleSelectReaction = (emoji) => {
+  const handleSelectReaction = async (emoji) => {
     if (!selectedMessage) return;
-    setMessages(
-      messages.map((m) =>
-        m.id === selectedMessage.id ? { ...m, reaction: emoji } : m
-      )
-    );
+    const msgId = selectedMessage.id;
+    try {
+      await api.post(`/chats/message/${msgId}/react`, { emoji });
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msgId ? { ...m, reaction: emoji } : m))
+      );
+    } catch (err) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msgId ? { ...m, reaction: emoji } : m))
+      );
+    }
     setOptionsVisible(false);
     setPickerVisible(false);
     setSelectedMessage(null);
@@ -742,86 +886,153 @@ export default function ChatDetailScreen() {
     }, 100);
   };
 
-  const [selectedPollForResults, setSelectedPollForResults] = useState(null);
-  const [pollResultsVisible, setPollResultsVisible] = useState(false);
-
-  const handleVote = (messageId, optionId) => {
-    setMessages((prevMessages) =>
-      prevMessages.map((msg) => {
-        if (msg.id !== messageId || msg.type !== 'poll') return msg;
-
-        const updatedOptions = msg.options.map((opt) => {
-          const wasSelected = opt.isSelected;
-          const isNowSelected = opt.id === optionId;
-
-          if (wasSelected && !isNowSelected) {
-            return {
-              ...opt,
-              isSelected: false,
-              votes: Math.max(0, opt.votes - 1),
-              voters: opt.voters.filter((v) => v.id !== 'current-user'),
-            };
-          } else if (!wasSelected && isNowSelected) {
-            return {
-              ...opt,
-              isSelected: true,
-              votes: opt.votes + 1,
-              voters: [
-                ...opt.voters,
-                { id: 'current-user', name: 'You', avatarUri: displayAvatar },
-              ],
-            };
-          }
-          return opt;
-        });
-
-        return { ...msg, options: updatedOptions };
-      })
-    );
-  };
-
-  const handleViewAllPoll = (poll) => {
-    setSelectedPollForResults(poll);
-    setPollResultsVisible(true);
-  };
-
   const handleSelectOption = (option) => {
     if (!selectedMessage) return;
-
     if (option === 'delete') {
       setMessages((prev) => prev.filter((m) => m.id !== selectedMessage.id));
-    } else if (option === 'copy') {
-      const copyText =
-        selectedMessage.text ||
-        selectedMessage.question ||
-        (selectedMessage.type === 'image' ? '[Image Message]' : '[Media Message]');
-      setInputText(copyText);
-      alert(`Copied: "${copyText}"`);
-    } else if (option === 'info') {
-      alert(`Message Info\n• Status: ${selectedMessage.isRead ? 'Read' : 'Delivered'}\n• Sent: ${selectedMessage.time || '4:56 pm'}\n• Type: ${selectedMessage.type || 'text'}`);
-    } else if (option === 'edit') {
-      if (selectedMessage.isSent && selectedMessage.text) {
-        setInputText(selectedMessage.text);
-        setMessages((prev) => prev.filter((m) => m.id !== selectedMessage.id));
-      } else {
-        alert('You can only edit text messages sent by you.');
-      }
     } else if (option === 'reply') {
       setReplyingTo(selectedMessage);
     }
-
     setOptionsVisible(false);
     setSelectedMessage(null);
   };
 
+  // --- Paid Chat Handlers ---
+  const handleOpenPaidConfirm = (type = 'MESSAGE') => {
+    const selectedType = type || 'MESSAGE';
+    if (selectedType === 'AUDIO' || selectedType === 'VIDEO') {
+      const currentCallStatus = useCallStore.getState().callStatus;
+      if (currentCallStatus !== 'IDLE' && currentCallStatus !== 'ENDED') {
+        alert('You are already in an active call. Please finish your current call first.');
+        return;
+      }
+    }
+    setPaidModalType(selectedType);
+    setShowPaidModal(true);
+    if (fetchBalance) fetchBalance();
+  };
 
+  const handleConfirmPaidSession = async () => {
+    const targetUserId = getTargetUserId();
+    if (!targetUserId) {
+      alert('Unable to identify the recipient user');
+      return;
+    }
 
-  const renderMessageItem = (item) => {
+    if (paidModalType === 'AUDIO' || paidModalType === 'VIDEO') {
+      const currentCallStatus = useCallStore.getState().callStatus;
+      if (currentCallStatus !== 'IDLE' && currentCallStatus !== 'ENDED') {
+        alert('You are already in an active call. Please finish your current call first.');
+        setShowPaidModal(false);
+        setPaidModalType('MESSAGE');
+        return;
+      }
+      if (currentCallStatus === 'ENDED') {
+        useCallStore.getState().resetToIdle();
+      }
+
+      const callTypeToPush = paidModalType === 'VIDEO' ? 'video' : 'voice';
+      const rateToPush = String(paidModalType === 'VIDEO' ? 10 : 5);
+
+      setShowPaidModal(false);
+      setPaidLoading(false);
+      setPaidModalType('MESSAGE');
+      router.push({
+        pathname: '/active-call',
+        params: {
+          contactName: displayName || 'User',
+          avatarUri: displayAvatar || '',
+          receiverId: targetUserId,
+          callType: callTypeToPush,
+          initialStatus: 'calling',
+          isPaid: 'true',
+          ratePerMinute: rateToPush,
+          isInitiator: 'true',
+        },
+      });
+      return;
+    }
+
+    try {
+      setPaidLoading(true);
+      const session = await paidCommunicationClient.initiateSession({
+        receiverId: targetUserId,
+        communicationType: 'MESSAGE',
+        conversationId: activeChatId,
+      });
+      setShowPaidModal(false);
+      setPaidLoading(false);
+      setPaidModalType('MESSAGE');
+
+      setActivePaidSession(session);
+      setIsPaidActive(true);
+      setBilledMinutes(1);
+      setCoinsCharged(session?.ratePerMinuteSnapshot || 1);
+      if (fetchBalance) fetchBalance();
+    } catch (err) {
+      setPaidLoading(false);
+      setPaidModalType('MESSAGE');
+      const errMsg = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to initiate session';
+      alert(errMsg);
+    }
+  };
+
+  const handleEndPaidChat = async () => {
+    if (!activePaidSession) {
+      setIsPaidActive(false);
+      return;
+    }
+    try {
+      const ended = await paidCommunicationClient.endSession(activePaidSession.sessionId, 'NORMAL_COMPLETION');
+      setIsPaidActive(false);
+      setReceiptData({
+        communicationType: 'MESSAGE',
+        durationSeconds: (ended?.billedMinutes || billedMinutes) * 60,
+        billedMinutes: ended?.billedMinutes || billedMinutes,
+        totalCoinsCharged: ended?.totalCoinsCharged || coinsCharged,
+        totalCoinsEarned: ended?.totalCoinsEarned || coinsEarned,
+        isInitiator: true,
+        counterpartyName: displayName,
+        endReason: ended?.endReason || 'NORMAL_COMPLETION',
+      });
+      setShowReceiptModal(true);
+      setActivePaidSession(null);
+      if (fetchBalance) fetchBalance();
+    } catch (err) {
+      setIsPaidActive(false);
+      setActivePaidSession(null);
+    }
+  };
+
+  // --- Render Single Message Item in Chronological Order ---
+  const renderMessageItem = ({ item, index }) => {
+    // Chronological order: index 0 is oldest (top), index + 1 is newer message (below on screen)
+    const prevMsg = messages[index - 1]; // older message above
+    const nextMsg = messages[index + 1]; // newer message below
+
+    // Show date separator header ABOVE item if it's the first message or date changed
+    const itemDate = getDateLabel(item.createdAt);
+    const prevDate = prevMsg ? getDateLabel(prevMsg.createdAt) : null;
+    const showDateHeader = !prevMsg || itemDate !== prevDate;
+
+    // Consecutive message grouping
+    const isGroupedAbove = Boolean(
+      prevMsg &&
+      prevMsg.isSent === item.isSent &&
+      Math.abs(new Date(item.createdAt).getTime() - new Date(prevMsg.createdAt).getTime()) < 120000
+    );
+    const isGroupedBelow = Boolean(
+      nextMsg &&
+      nextMsg.isSent === item.isSent &&
+      Math.abs(new Date(nextMsg.createdAt).getTime() - new Date(item.createdAt).getTime()) < 120000
+    );
+
+    let bubbleContent = null;
     switch (item.type) {
       case 'image':
-        return (
+        bubbleContent = (
           <ImageBubble
-            imageUri={item.imageUri}
+            imageUri={item.imageUri || item.attachmentUri}
             time={item.time}
             isSent={item.isSent}
             isRead={item.isRead}
@@ -829,10 +1040,12 @@ export default function ChatDetailScreen() {
             onLongPress={() => handleLongPressMessage(item)}
           />
         );
+        break;
       case 'voice':
-        return (
+      case 'audio':
+        bubbleContent = (
           <VoiceMessageBubble
-            uri={item.voiceUri}
+            uri={item.voiceUri || item.attachmentUri}
             duration={item.duration}
             time={item.time}
             isSent={item.isSent}
@@ -841,15 +1054,17 @@ export default function ChatDetailScreen() {
             onLongPress={() => handleLongPressMessage(item)}
           />
         );
+        break;
       case 'sticker':
-        return (
+        bubbleContent = (
           <View style={item.isSent ? styles.sentStickerContainer : styles.receivedStickerContainer}>
             <Text style={styles.stickerEmojiText}>{item.sticker}</Text>
             <Text style={styles.stickerTimeText}>{item.time}</Text>
           </View>
         );
+        break;
       case 'poll':
-        return (
+        bubbleContent = (
           <PollBubble
             poll={item}
             onVote={(optionId) => handleVote(item.id, optionId)}
@@ -857,104 +1072,89 @@ export default function ChatDetailScreen() {
             onLongPress={() => handleLongPressMessage(item)}
           />
         );
+        break;
       default:
-        return (
+        bubbleContent = (
           <MessageBubble
             text={item.text}
             time={item.time}
             isSent={item.isSent}
             isRead={item.isRead}
+            status={item.status || (item.isSent ? 'sent' : undefined)}
             reaction={item.reaction}
             replyTo={item.replyTo}
             onLongPress={() => handleLongPressMessage(item)}
+            onRetry={() => handleRetrySend(item)}
+            isGroupedAbove={isGroupedAbove}
+            isGroupedBelow={isGroupedBelow}
           />
         );
+        break;
     }
+
+    return (
+      <View key={item.id}>
+        {/* Date header rendered directly ABOVE the first message of each day */}
+        {showDateHeader && (
+          <View style={styles.dateSeparatorContainer}>
+            <View style={[styles.dateSeparator, { backgroundColor: isDarkMode ? '#27272A' : '#FFFFFF' }]}>
+              <Text style={[styles.dateSeparatorText, { color: colors.textSecondary || '#8E8E93' }]}>
+                {itemDate}
+              </Text>
+            </View>
+          </View>
+        )}
+        {bubbleContent}
+      </View>
+    );
   };
 
   return (
-    <View style={[styles.safeContainer, { backgroundColor: '#FFF5F5' }]}>
+    <View style={[styles.safeContainer, { backgroundColor: colors.headerBg || colors.cardBackground || '#FFFFFF' }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle="dark-content" />
-      <LinearGradient
-        colors={['#FFF5F5', '#FFEBF0', '#FFD9E0']}
-        style={styles.gradientBackground}
-      >
-        {/* Scattered faint watermark hearts */}
-        <View style={styles.watermarkContainer} pointerEvents="none">
-          <Ionicons
-            name="heart"
-            size={48}
-            color="#FFC9D4"
-            style={[styles.heart, { top: 60, left: 10, transform: [{ rotate: '-15deg' }], opacity: 0.15 }]}
-          />
-          <Ionicons
-            name="heart"
-            size={24}
-            color="#FFC9D4"
-            style={[styles.heart, { top: 120, left: 8, transform: [{ rotate: '20deg' }], opacity: 0.1 }]}
-          />
-          <Ionicons
-            name="heart"
-            size={32}
-            color="#FFC9D4"
-            style={[styles.heart, { top: 80, left: 80, transform: [{ rotate: '-5deg' }], opacity: 0.12 }]}
-          />
-          <Ionicons
-            name="heart"
-            size={16}
-            color="#FFC9D4"
-            style={[styles.heart, { top: 180, left: 60, transform: [{ rotate: '45deg' }], opacity: 0.08 }]}
-          />
-        </View>
+      <StatusBar
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.headerBg || colors.cardBackground || '#FFFFFF'}
+      />
 
-        {/* Top Header */}
-        <View style={[styles.header, { backgroundColor: colors.headerBg, borderBottomColor: colors.border, paddingTop: Math.max(insets.top + 6, 16) }]}>
+      {/* Clean Solid Header */}
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: colors.headerBg || colors.cardBackground || '#FFFFFF',
+            borderBottomColor: colors.border || '#F2F2F7',
+            paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 8 : 12),
+          },
+        ]}
+      >
+        {/* Main Header Top Row */}
+        <View style={styles.headerTopRow}>
           <View style={styles.headerLeft}>
             <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-              <Ionicons name="chevron-back" size={28} color={colors.textPrimary} />
+              <Ionicons name="chevron-back" size={28} color={colors.textPrimary || '#000000'} />
             </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => router.push('/user-profile')}
-              style={{ flexDirection: 'row', alignItems: 'center' }}
+              style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
             >
               <Image source={{ uri: displayAvatar }} style={styles.avatar} />
               <View style={styles.headerMeta}>
-                <Text style={[styles.nameText, { color: colors.textPrimary }]} numberOfLines={1}>{displayName}</Text>
+                <Text style={[styles.nameText, { color: colors.textPrimary || '#000000' }]} numberOfLines={1}>
+                  {displayName}
+                </Text>
                 <Text style={[styles.statusText, { color: colors.statusOnline || '#10B981' }]}>Online</Text>
               </View>
             </TouchableOpacity>
           </View>
+
           <View style={styles.headerRight}>
-            <TouchableOpacity
-              style={[styles.paidChatBtn, isPaidActive && styles.paidChatActiveBtn]}
-              activeOpacity={0.7}
-              onPress={isPaidActive ? handleEndPaidChat : () => handleOpenPaidConfirm('MESSAGE')}
-            >
-              <Ionicons
-                name={isPaidActive ? 'stop-circle' : 'flash'}
-                size={16}
-                color="#FFFFFF"
-                style={{ marginRight: 4 }}
-              />
-              <Text style={styles.paidChatBtnText}>
-                {isPaidActive ? 'End Paid' : 'Paid Chat'}
-              </Text>
+            <TouchableOpacity style={styles.headerIcon} activeOpacity={0.7} onPress={() => handleOpenPaidConfirm('VIDEO')}>
+              <Ionicons name="videocam-outline" size={24} color={colors.textPrimary || '#000000'} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.headerIcon}
-              activeOpacity={0.7}
-              onPress={() => handleOpenPaidConfirm('VIDEO')}
-            >
-              <Ionicons name="videocam-outline" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.headerIcon}
-              activeOpacity={0.7}
-              onPress={() => handleOpenPaidConfirm('AUDIO')}
-            >
-              <Ionicons name="call-outline" size={22} color={colors.textPrimary} />
+            <TouchableOpacity style={styles.headerIcon} activeOpacity={0.7} onPress={() => handleOpenPaidConfirm('AUDIO')}>
+              <Ionicons name="call-outline" size={22} color={colors.textPrimary || '#000000'} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.headerIcon}
@@ -962,59 +1162,170 @@ export default function ChatDetailScreen() {
               onPress={() =>
                 router.push({
                   pathname: '/call-info/1',
-                  params: {
-                    contactId: '1',
-                    contactName: displayName,
-                    avatarUri: displayAvatar,
-                  },
+                  params: { contactId: '1', contactName: displayName, avatarUri: displayAvatar },
                 })
               }
             >
-              <Ionicons name="information-circle-outline" size={24} color={colors.textPrimary} />
+              <Ionicons name="information-circle-outline" size={24} color={colors.textPrimary || '#000000'} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* In-Chat Paid Session Live Status Bar */}
-        {isPaidActive && (
-          <View style={styles.paidChatBanner}>
-            <PaidSessionLiveBadge
-              isInitiator={true}
-              ratePerMinute={activePaidSession?.ratePerMinuteSnapshot || 1}
-              billedMinutes={billedMinutes}
-              totalCoins={coinsCharged}
-              currentBalance={balance}
+        {/* Compact Paid Chat Pill Badge along bottom border */}
+        <View style={styles.headerBadgeWrapper}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => {
+              if (isPaidActive) {
+                handleEndPaidChat();
+              } else {
+                handleOpenPaidConfirm('MESSAGE');
+              }
+            }}
+            style={[styles.headerPaidPill, isPaidActive && styles.headerPaidPillActive]}
+          >
+            <View style={styles.paidPillLeft}>
+              <Ionicons
+                name={isPaidActive ? 'flash' : 'sparkles'}
+                size={13}
+                color={isPaidActive ? '#FF2E63' : '#F59E0B'}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.paidPillTitle, isPaidActive && styles.paidPillTitleActive]}>
+                Paid Chat
+              </Text>
+              <View style={[styles.paidPillStatus, isPaidActive ? styles.paidPillStatusOn : styles.paidPillStatusOff]}>
+                <Text style={[styles.paidPillStatusText, isPaidActive ? styles.paidPillStatusTextOn : styles.paidPillStatusTextOff]}>
+                  {isPaidActive ? 'ON' : 'OFF'}
+                </Text>
+              </View>
+              <Text style={styles.paidPillDivider}>•</Text>
+              <Text style={[styles.paidPillRate, isPaidActive && styles.paidPillRateActive]}>
+                {isPaidActive
+                  ? `${coinsCharged}c spent (${billedMinutes}m)`
+                  : '1 coin/min'}
+              </Text>
+            </View>
+
+            <View style={styles.paidPillRight}>
+              {isPaidActive && balance < (activePaidSession?.ratePerMinuteSnapshot || 1) * 2 && (
+                <View style={styles.lowBalancePillSmall}>
+                  <Text style={styles.lowBalancePillText}>Low Coins</Text>
+                </View>
+              )}
+              <Switch
+                value={isPaidActive}
+                onValueChange={(val) => {
+                  if (val) {
+                    handleOpenPaidConfirm('MESSAGE');
+                  } else {
+                    handleEndPaidChat();
+                  }
+                }}
+                trackColor={{ false: '#D1D5DB', true: '#FF2E63' }}
+                thumbColor="#FFFFFF"
+                ios_backgroundColor="#D1D5DB"
+                style={{ transform: [{ scaleX: 0.72 }, { scaleY: 0.72 }], marginVertical: -4 }}
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Message Thread & Composer */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <LinearGradient colors={['#FFF5F5', '#FFEBF0', '#FFD9E0']} style={styles.gradientBackground}>
+          {/* Subtle Watermark Hearts */}
+          <View style={styles.watermarkContainer} pointerEvents="none">
+            <Ionicons
+              name="heart"
+              size={48}
+              color="#FFC9D4"
+              style={[styles.heart, { top: 60, left: 10, transform: [{ rotate: '-15deg' }], opacity: 0.15 }]}
+            />
+            <Ionicons
+              name="heart"
+              size={32}
+              color="#FFC9D4"
+              style={[styles.heart, { top: 80, left: 80, transform: [{ rotate: '-5deg' }], opacity: 0.12 }]}
             />
           </View>
-        )}
 
-        {/* Message Thread */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.keyboardView}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-        >
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => renderMessageItem(item)}
-            ListHeaderComponent={
-              <View style={styles.dateSeparatorContainer}>
-                <View style={[styles.dateSeparator, { backgroundColor: isDarkMode ? '#27272A' : '#FFFFFF' }]}>
-                  <Text style={[styles.dateSeparatorText, { color: colors.textSecondary }]}>Today</Text>
-                </View>
+          {loadingMsgs ? (
+            <View style={styles.loaderContainer}>
+              <ActivityIndicator size="large" color="#FF2E63" />
+              <Text style={styles.loadingText}>Loading conversation...</Text>
+            </View>
+          ) : messages.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="chatbubbles-outline" size={40} color="#FF6584" />
               </View>
-            }
-            contentContainerStyle={styles.messageList}
-            showsVerticalScrollIndicator={false}
-          />
+              <Text style={styles.emptyTitle}>Start a conversation</Text>
+              <Text style={styles.emptySubtitle}>Say hello to {displayName} to begin chatting!</Text>
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={renderMessageItem}
+              contentContainerStyle={styles.messageList}
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={() => {
+                if (!isScrolledUp) {
+                  flatListRef.current?.scrollToEnd({ animated: false });
+                }
+              }}
+              onLayout={() => {
+                flatListRef.current?.scrollToEnd({ animated: false });
+              }}
+              onScroll={(e) => {
+                const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+                const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 100;
+                setIsScrolledUp(!isNearBottom);
+                if (isNearBottom) setNewIncomingCount(0);
+                // Trigger load more when user scrolls to top
+                if (contentOffset.y <= 30 && hasMore && !loadingMore) {
+                  handleLoadMore();
+                }
+              }}
+              scrollEventThrottle={100}
+              ListHeaderComponent={
+                loadingMore ? (
+                  <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                    <ActivityIndicator size="small" color="#FF2E63" />
+                  </View>
+                ) : null
+              }
+            />
+          )}
+
+          {/* Floating '↓ New Messages' Pill when Scrolled Up */}
+          {isScrolledUp && (
+            <TouchableOpacity
+              style={styles.floatingScrollBottomBtn}
+              activeOpacity={0.85}
+              onPress={() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+                setNewIncomingCount(0);
+              }}
+            >
+              <Ionicons name="chevron-down" size={18} color="#FFFFFF" />
+              {newIncomingCount > 0 ? (
+                <Text style={styles.floatingBtnText}>
+                  {newIncomingCount} new message{newIncomingCount > 1 ? 's' : ''}
+                </Text>
+              ) : null}
+            </TouchableOpacity>
+          )}
 
           {/* AIAssistMenu Popover */}
-          <AIAssistMenu
-            visible={aiMenuVisible}
-            onClose={() => setAiMenuVisible(false)}
-          />
+          <AIAssistMenu visible={aiMenuVisible} onClose={() => setAiMenuVisible(false)} />
 
           {/* Recording indicator panel */}
           {isRecording && (
@@ -1027,28 +1338,48 @@ export default function ChatDetailScreen() {
 
           {/* WhatsApp-style Quoted Reply Preview Bar */}
           {replyingTo && (
-            <ReplyPreviewBar
-              replyingTo={replyingTo}
-              displayName={displayName}
-              onClose={() => setReplyingTo(null)}
-            />
+            <ReplyPreviewBar replyingTo={replyingTo} displayName={displayName} onClose={() => setReplyingTo(null)} />
           )}
 
-          {/* Bottom Chat Input Bar matching Image 2 */}
-          <View style={styles.inputArea}>
-            <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          {/* Bottom Chat Input Composer */}
+          <View style={[styles.inputArea, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+            {!isPaidActive && (
+              <TouchableOpacity
+                style={styles.paidChatOffBanner}
+                activeOpacity={0.8}
+                onPress={() => handleOpenPaidConfirm('MESSAGE')}
+              >
+                <View style={styles.paidChatOffBannerLeft}>
+                  <Ionicons name="lock-closed" size={13} color="#F59E0B" style={{ marginRight: 6 }} />
+                  <Text style={styles.paidChatOffBannerText}>
+                    Paid Chat is OFF • Turn ON to send messages (1 coin/min)
+                  </Text>
+                </View>
+                <View style={styles.paidChatOffStartBtn}>
+                  <Text style={styles.paidChatOffStartBtnText}>Turn ON</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            <View style={[styles.inputContainer, { backgroundColor: colors.surface || '#FFFFFF', borderColor: colors.border || '#F2F2F7' }]}>
               <View style={styles.inputLeftColumn}>
                 <TextInput
-                  placeholder="Type your message..."
+                  placeholder={isPaidActive ? 'Type your message...' : 'Turn ON Paid Chat to message...'}
                   placeholderTextColor={colors.inputPlaceholder || '#AEAEB2'}
-                  style={[styles.textInput, { color: colors.inputText || colors.textPrimary }]}
+                  style={[styles.textInput, { color: colors.inputText || colors.textPrimary || '#000000' }]}
                   value={inputText}
                   onChangeText={setInputText}
                   multiline
                   maxHeight={100}
                 />
                 <View style={[styles.iconRow, { borderTopColor: isDarkMode ? '#3F3F46' : '#F3F4F6' }]}>
-                  <TouchableOpacity style={styles.inputIcon} onPress={() => setAttachmentVisible(true)}>
+                  <TouchableOpacity style={styles.inputIcon} onPress={() => {
+                    if (!isPaidActive) {
+                      handleOpenPaidConfirm('MESSAGE');
+                      return;
+                    }
+                    setAttachmentVisible(true);
+                  }}>
                     <Ionicons name="add-circle-outline" size={22} color={colors.inputIcon || '#8E8E93'} />
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -1061,7 +1392,13 @@ export default function ChatDetailScreen() {
                   <TouchableOpacity style={styles.inputIcon} onPress={handlePressSmileyInInput}>
                     <Ionicons name="happy-outline" size={22} color={colors.inputIcon || '#8E8E93'} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.inputIcon} onPress={() => setStickerVisible(true)}>
+                  <TouchableOpacity style={styles.inputIcon} onPress={() => {
+                    if (!isPaidActive) {
+                      handleOpenPaidConfirm('MESSAGE');
+                      return;
+                    }
+                    setStickerVisible(true);
+                  }}>
                     <Ionicons name="copy-outline" size={20} color={colors.inputIcon || '#8E8E93'} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.inputIcon} onPress={() => setAiMenuVisible(true)}>
@@ -1072,34 +1409,35 @@ export default function ChatDetailScreen() {
               <TouchableOpacity
                 style={[
                   styles.sendButton,
-                  { backgroundColor: inputText.trim() === '' ? (colors.sendButtonEmptyBg || '#F2F2F7') : (colors.sendButtonBg || '#1C1C1E') }
+                  { backgroundColor: inputText.trim() === '' ? (colors.sendButtonEmptyBg || '#F2F2F7') : (!isPaidActive ? '#F59E0B' : (colors.sendButtonBg || '#1C1C1E')) },
                 ]}
                 activeOpacity={0.8}
                 onPress={handleSend}
+                disabled={inputText.trim() === ''}
               >
                 <Ionicons
-                  name="send"
-                  size={20}
+                  name={!isPaidActive && inputText.trim() !== '' ? 'lock-closed' : 'send'}
+                  size={!isPaidActive && inputText.trim() !== '' ? 17 : 20}
                   color={inputText.trim() === '' ? (colors.inputIcon || '#8E8E93') : '#FFFFFF'}
                 />
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </LinearGradient>
+      </KeyboardAvoidingView>
 
-        {/* Message Options Overlay Menu */}
-        <MessageOptionsMenu
-          visible={optionsVisible}
-          onClose={() => {
-            setOptionsVisible(false);
-            setSelectedMessage(null);
-          }}
-          onSelectReaction={handleSelectReaction}
-          onPressPlus={handlePressPlus}
-          onSelectOption={handleSelectOption}
-          message={selectedMessage}
-        />
-      </LinearGradient>
+      {/* Message Options Overlay Menu */}
+      <MessageOptionsMenu
+        visible={optionsVisible}
+        onClose={() => {
+          setOptionsVisible(false);
+          setSelectedMessage(null);
+        }}
+        onSelectReaction={handleSelectReaction}
+        onPressPlus={handlePressPlus}
+        onSelectOption={handleSelectOption}
+        message={selectedMessage}
+      />
 
       {/* Full Emoji Picker Sheet */}
       <EmojiPickerSheet
@@ -1140,7 +1478,7 @@ export default function ChatDetailScreen() {
         poll={selectedPollForResults}
       />
 
-      {/* Paid Communication Initiation Confirmation Modal */}
+      {/* Paid Communication Confirmation Modal */}
       <PaidCommunicationConfirmModal
         visible={showPaidModal}
         communicationType={paidModalType}
@@ -1148,7 +1486,10 @@ export default function ChatDetailScreen() {
         currentBalance={balance}
         recipientName={displayName}
         onConfirm={handleConfirmPaidSession}
-        onCancel={() => setShowPaidModal(false)}
+        onCancel={() => {
+          setShowPaidModal(false);
+          setPaidModalType('MESSAGE');
+        }}
         loading={paidLoading}
       />
 
@@ -1167,32 +1508,9 @@ export default function ChatDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  paidChatBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FF2E63',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 4,
-  },
-  paidChatActiveBtn: {
-    backgroundColor: '#EF4444',
-  },
-  paidChatBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  paidChatBanner: {
-    backgroundColor: 'rgba(255, 46, 99, 0.08)',
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 46, 99, 0.2)',
-  },
   safeContainer: {
     flex: 1,
-    backgroundColor: '#FFF5F5',
+    backgroundColor: '#FFFFFF',
   },
   gradientBackground: {
     flex: 1,
@@ -1205,20 +1523,108 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 6,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F2F2F7',
     zIndex: 10,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.04,
     shadowRadius: 3,
     elevation: 3,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 6,
+  },
+  headerBadgeWrapper: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    paddingTop: 0,
+  },
+  headerPaidPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  headerPaidPillActive: {
+    backgroundColor: '#FFF1F2',
+    borderColor: '#FECDD3',
+  },
+  paidPillLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  paidPillTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+    marginRight: 6,
+  },
+  paidPillTitleActive: {
+    color: '#E11D48',
+  },
+  paidPillStatus: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  paidPillStatusOff: {
+    backgroundColor: '#E2E8F0',
+  },
+  paidPillStatusOn: {
+    backgroundColor: '#10B981',
+  },
+  paidPillStatusText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  paidPillStatusTextOff: {
+    color: '#64748B',
+  },
+  paidPillStatusTextOn: {
+    color: '#FFFFFF',
+  },
+  paidPillDivider: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginHorizontal: 6,
+  },
+  paidPillRate: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  paidPillRateActive: {
+    color: '#BE123C',
+    fontWeight: '600',
+  },
+  paidPillRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  lowBalancePillSmall: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginRight: 4,
+  },
+  lowBalancePillText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#DC2626',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -1230,13 +1636,13 @@ const styles = StyleSheet.create({
     marginLeft: -4,
   },
   avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#E1E1E1',
   },
   headerMeta: {
-    marginLeft: 12,
+    marginLeft: 10,
     justifyContent: 'center',
     flex: 1,
   },
@@ -1247,102 +1653,207 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
-    color: '#8E8E93',
-    marginTop: 2,
+    color: '#10B981',
+    marginTop: 1,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   headerIcon: {
-    padding: 8,
-    marginLeft: 8,
+    padding: 6,
+    marginLeft: 6,
   },
   keyboardView: {
     flex: 1,
     zIndex: 1,
   },
   messageList: {
-    paddingTop: 16,
-    paddingBottom: 24,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 13,
+    color: '#8E8E93',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#FFE5EC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#8E8E93',
+    textAlign: 'center',
   },
   dateSeparatorContainer: {
     alignItems: 'center',
-    marginVertical: 16,
+    marginVertical: 14,
   },
   dateSeparator: {
-    backgroundColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingVertical: 5,
+    borderRadius: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
   dateSeparatorText: {
     fontSize: 12,
     color: '#8E8E93',
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  floatingScrollBottomBtn: {
+    position: 'absolute',
+    bottom: 90,
+    right: 16,
+    backgroundColor: '#FF2E63',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 99,
+  },
+  floatingBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 4,
   },
   inputArea: {
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 8,
     backgroundColor: 'transparent',
+  },
+  paidChatOffBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  paidChatOffBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  paidChatOffBannerText: {
+    fontSize: 11.5,
+    color: '#92400E',
+    fontWeight: '600',
+    flex: 1,
+  },
+  paidChatOffStartBtn: {
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  paidChatOffStartBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 3,
     elevation: 2,
   },
   inputLeftColumn: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 10,
   },
   textInput: {
     fontSize: 15,
     color: '#000000',
     minHeight: 24,
-    padding: 0, // clears standard android padding
+    padding: 0,
   },
   iconRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 8,
     borderTopWidth: 0.5,
-    borderTopColor: '#E5E5EA',
-    paddingTop: 8,
+    borderTopColor: '#F2F2F7',
+    paddingTop: 6,
   },
   inputIcon: {
-    padding: 4,
-    marginRight: 16,
+    padding: 3,
+    marginRight: 14,
   },
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#E5E5EA', // Very light grey / off-white matching reference image
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1C1C1E',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 2,
   },
   sentStickerContainer: {
     alignSelf: 'flex-end',
-    marginBottom: 10,
+    marginBottom: 8,
     marginRight: 16,
     alignItems: 'flex-end',
   },
   receivedStickerContainer: {
     alignSelf: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 8,
     marginLeft: 16,
     alignItems: 'flex-start',
   },
   stickerEmojiText: {
-    fontSize: 72,
+    fontSize: 64,
   },
   stickerTimeText: {
     fontSize: 10,
@@ -1374,14 +1885,13 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   recordingText: {
-    flex: 1,
     fontSize: 14,
     fontWeight: '600',
-    color: '#000000',
+    color: '#FF3B30',
+    flex: 1,
   },
   recordingCancel: {
     fontSize: 12,
     color: '#8E8E93',
-    fontWeight: '500',
   },
 });

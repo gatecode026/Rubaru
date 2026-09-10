@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { getSocket } from '../services/socket';
 import webRTCService from '../services/webRTCService';
 import callSoundService from '../services/callSoundService';
+import paidCommunicationClient from '../services/paidCommunicationService';
+import { usePointsStore } from './pointsStore';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -34,11 +36,15 @@ export const useCallStore = create((set, get) => ({
   localStream: null,
   remoteStream: null,
 
+  // Minimization / PiP State
+  isCallMinimized: false,
+
   // Idempotency tracking
   activeRequestId: null,
   isHandlingAction: false,
 
   // Actions
+  setMinimized: (minimized) => set({ isCallMinimized: Boolean(minimized) }),
   setStreams: ({ localStream, remoteStream }) => set((state) => ({
     localStream: localStream !== undefined ? localStream : state.localStream,
     remoteStream: remoteStream !== undefined ? remoteStream : state.remoteStream,
@@ -48,14 +54,22 @@ export const useCallStore = create((set, get) => ({
    * Set incoming call event from server
    */
   handleIncomingCall: (data) => {
+    if (!data) return;
+    const commType = (data.communicationType || data.callType || '').toUpperCase();
+    if (commType === 'MESSAGE') {
+      console.log('[CALL STORE] Ignoring incoming call for MESSAGE communication type');
+      return;
+    }
     const current = get();
-    // If already in a call, ignore incoming to prevent multi-call overlap
+    // If already in an active or outgoing call, ignore
     if (current.callStatus !== 'IDLE' && current.callStatus !== 'ENDED') {
       return;
     }
 
-    const type = data.callType === 'video' || data.communicationType === 'VIDEO' ? 'video' : 'audio';
-    const rate = data.ratePerMinute || (type === 'video' ? 10 : 5);
+    const type = data.callType === 'video' || data.callType === 'VIDEO' || data.communicationType === 'VIDEO' ? 'video' : 'audio';
+    const rate = Number(data.ratePerMinute) || (type === 'video' ? 10 : 5);
+    const callerName = data.caller?.displayName || data.callerName || data.initiatorName || data.contactName || 'Rubaru User';
+    const callerAvatar = data.caller?.avatarUrl || data.callerAvatar || data.initiatorAvatar || data.avatarUri || '';
 
     callSoundService.playRingtone();
 
@@ -63,9 +77,9 @@ export const useCallStore = create((set, get) => ({
       callId: data.callId || data.sessionId,
       callStatus: 'INCOMING',
       callType: type,
-      peerId: data.callerId || data.initiatorId,
-      peerName: data.callerName || data.initiatorName || 'Rubaru User',
-      peerAvatar: data.callerAvatar || data.initiatorAvatar || '',
+      peerId: data.callerId || data.initiatorId || data.caller?.id,
+      peerName: callerName,
+      peerAvatar: callerAvatar,
       isInitiator: false,
       ratePerMinute: rate,
       connectedAt: null,
@@ -193,6 +207,9 @@ export const useCallStore = create((set, get) => ({
             const isOk = ack?.ok === true || ack?.success === true;
             if (isOk) {
               console.log('[CALL STORE] Call accept acknowledged by server');
+              setTimeout(() => {
+                get().emitMediaReady();
+              }, 400);
               resolve({ success: true });
             } else {
               const errMsg = ack?.error?.message || 'Accept failed';
@@ -226,6 +243,10 @@ export const useCallStore = create((set, get) => ({
       });
     }
 
+    if (callId) {
+      paidCommunicationClient.declineSession(callId, reason).catch(() => {});
+    }
+
     get().cleanup(reason);
   },
 
@@ -245,6 +266,10 @@ export const useCallStore = create((set, get) => ({
       });
     }
 
+    if (callId) {
+      paidCommunicationClient.cancelSession(callId).catch(() => {});
+    }
+
     get().cleanup(reason);
   },
 
@@ -262,6 +287,10 @@ export const useCallStore = create((set, get) => ({
         reason,
         requestId: uuidv4(),
       });
+    }
+
+    if (callId) {
+      paidCommunicationClient.endSession(callId, reason).catch(() => {});
     }
 
     get().cleanup(reason);
@@ -301,6 +330,9 @@ export const useCallStore = create((set, get) => ({
             requestId: uuidv4(),
           });
         }
+        setTimeout(() => {
+          get().emitMediaReady();
+        }, 500);
       } catch (err) {
         console.error('[CALL STORE] Create offer error:', err);
       }
@@ -324,6 +356,9 @@ export const useCallStore = create((set, get) => ({
           requestId: uuidv4(),
         });
       }
+      setTimeout(() => {
+        get().emitMediaReady();
+      }, 300);
     } catch (err) {
       console.error('[CALL STORE] Handle offer and create answer error:', err);
     }
@@ -338,6 +373,9 @@ export const useCallStore = create((set, get) => ({
 
     try {
       await webRTCService.handleAnswer(data.sdp);
+      setTimeout(() => {
+        get().emitMediaReady();
+      }, 300);
     } catch (err) {
       console.error('[CALL STORE] Handle answer error:', err);
     }
@@ -494,8 +532,44 @@ export const useCallStore = create((set, get) => ({
    */
   handleCallEnded: (data) => {
     const state = get();
-    if (state.callId === data.callId || !state.callId) {
-      get().cleanup(data.reason || 'CALL_ENDED', data.billingSummary || null);
+    const commType = (data?.communicationType || data?.callType || '').toUpperCase();
+    if (commType === 'MESSAGE') {
+      if (data?.remainingBalance !== undefined && data?.remainingBalance !== null) {
+        usePointsStore.getState().setBalance(data.remainingBalance);
+      } else if (data?.walletBalance !== undefined && data?.walletBalance !== null) {
+        usePointsStore.getState().setBalance(data.walletBalance);
+      } else {
+        usePointsStore.getState().fetchBalance();
+      }
+      return;
+    }
+
+    if (state.callStatus === 'IDLE') {
+      return;
+    }
+
+    const eventCallId = data?.callId || data?.sessionId;
+    if (state.callId && eventCallId && state.callId !== eventCallId) {
+      return;
+    }
+
+    if (!eventCallId || !state.callId || state.callId === eventCallId) {
+      if (data?.remainingBalance !== undefined && data?.remainingBalance !== null) {
+        usePointsStore.getState().setBalance(data.remainingBalance);
+      } else if (data?.walletBalance !== undefined && data?.walletBalance !== null) {
+        usePointsStore.getState().setBalance(data.walletBalance);
+      } else {
+        usePointsStore.getState().fetchBalance();
+      }
+
+      const summary = data?.billingSummary || (data && (data.totalCoinsCharged !== undefined || data.totalCoinsEarned !== undefined) ? data : null);
+
+      if (state.callStatus === 'INCOMING') {
+        callSoundService.stopAll();
+        get().resetToIdle();
+      } else {
+        get().cleanup(data?.reason || data?.endReason || 'CALL_ENDED', summary);
+      }
     }
   },
 
@@ -562,6 +636,7 @@ export const useCallStore = create((set, get) => ({
       localStream: null,
       remoteStream: null,
       isHandlingAction: false,
+      isCallMinimized: false,
     }));
 
     console.log(`[CALL STORE] Cleaned up with reason: ${reason}`);
@@ -586,6 +661,7 @@ export const useCallStore = create((set, get) => ({
       localStream: null,
       remoteStream: null,
       reconnectGraceExpiresAt: null,
+      isCallMinimized: false,
     });
   },
 }));

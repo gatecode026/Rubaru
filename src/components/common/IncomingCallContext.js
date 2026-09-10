@@ -3,6 +3,7 @@ import { Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import IncomingCallBanner from './IncomingCallBanner';
+import MiniCallOverlay from './MiniCallOverlay';
 import { connectSocket, getSocket } from '../../services/socket';
 import { useCallStore } from '../../store/callStore';
 import callPushClientService from '../../services/callPushClientService';
@@ -78,37 +79,66 @@ export function IncomingCallProvider({ children }) {
         socket._incomingCallRegistered = true;
         console.log('[SOCKET] Registering canonical call:incoming & paid_session.requested listeners');
 
+        const handleEndOrCancel = (data) => {
+          const commType = (data?.communicationType || data?.callType || '').toUpperCase();
+          if (commType === 'MESSAGE') {
+            return;
+          }
+          console.log('[SOCKET] Incoming call ended/cancelled event received:', data);
+          useCallStore.getState().handleCallEnded(data);
+        };
+
         // Canonical call:incoming
         socket.on('call:incoming', (data) => {
+          const commType = (data?.communicationType || data?.callType || '').toUpperCase();
+          if (commType === 'MESSAGE') return;
           console.log('[SOCKET] Canonical call:incoming received:', data);
-          callStore.handleIncomingCall(data);
+          useCallStore.getState().handleIncomingCall(data);
         });
 
-        // Legacy / Paid Session Request
+        // Legacy incoming_call
+        socket.on('incoming_call', (data) => {
+          const commType = (data?.communicationType || data?.callType || '').toUpperCase();
+          if (commType === 'MESSAGE') return;
+          console.log('[SOCKET] Legacy incoming_call received:', data);
+          useCallStore.getState().handleIncomingCall(data);
+        });
+
+        // Paid Session Request
         socket.on('paid_session.requested', (data) => {
           console.log('[SOCKET] paid_session.requested received:', data);
-          const commType = data.communicationType || 'AUDIO';
-          callStore.handleIncomingCall({
-            callId: data.sessionId,
-            sessionId: data.sessionId,
-            callerId: data.initiatorId,
-            callerName: data.initiatorName || 'Rubaru User',
-            callerAvatar: data.initiatorAvatar || '',
+          const commType = (data.communicationType || 'AUDIO').toUpperCase();
+          if (commType === 'MESSAGE') {
+            console.log('[SOCKET] paid_session.requested is MESSAGE type - not a voice/video call, ignoring in IncomingCallContext');
+            return;
+          }
+          useCallStore.getState().handleIncomingCall({
+            callId: data.sessionId || data.callId,
+            sessionId: data.sessionId || data.callId,
+            callerId: data.initiatorId || data.callerId,
+            callerName: data.caller?.displayName || data.initiatorName || data.callerName || 'Rubaru User',
+            callerAvatar: data.caller?.avatarUrl || data.initiatorAvatar || data.callerAvatar || '',
             callType: commType === 'VIDEO' ? 'video' : 'audio',
             communicationType: commType,
             ratePerMinute: data.ratePerMinute || (commType === 'VIDEO' ? 10 : 5),
           });
         });
 
-        socket.on('call:cancelled', (data) => {
-          console.log('[SOCKET] Call cancelled by caller or answered elsewhere:', data);
-          callStore.handleCallEnded(data);
+        // Cancellation & End Events across protocols
+        socket.on('call:cancelled', handleEndOrCancel);
+        socket.on('call.cancelled', handleEndOrCancel);
+        socket.on('call:ended', handleEndOrCancel);
+        socket.on('call.ended', handleEndOrCancel);
+        socket.on('call_hungup', handleEndOrCancel);
+        socket.on('call:rejected', handleEndOrCancel);
+        socket.on('call_declined', handleEndOrCancel);
+        socket.on('call:dismissed', (data) => {
+          console.log('[SOCKET] Call dismissed event:', data);
+          useCallStore.getState().handleDismissed(data);
         });
-
-        socket.on('call:ended', (data) => {
-          console.log('[SOCKET] Call ended event received:', data);
-          callStore.handleCallEnded(data);
-        });
+        socket.on('paid_session.ended', handleEndOrCancel);
+        socket.on('paid_session.cancelled', handleEndOrCancel);
+        socket.on('paid_session.declined', handleEndOrCancel);
       }
     }, 1000);
 
@@ -158,6 +188,7 @@ export function IncomingCallProvider({ children }) {
         onAccept={handleAccept}
         onDecline={handleDecline}
       />
+      <MiniCallOverlay />
     </IncomingCallContext.Provider>
   );
 }

@@ -28,7 +28,7 @@ const ProfileSchema = new mongoose.Schema(
     },
     avatarUri: {
       type: String,
-      default: 'https://i.pravatar.cc/150?img=60', // Fallback default avatar
+      default: null,
     },
     photos: {
       type: [String],

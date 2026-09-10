@@ -7,11 +7,12 @@ const receiptService = require('../services/receiptService');
  */
 const markDelivered = async (req, res) => {
   try {
-    const { throughSequence } = req.body || {};
+    const { throughSequence, watermark } = req.body || {};
+    const seq = throughSequence !== undefined ? throughSequence : watermark;
     const result = await receiptService.advanceDeliveryWatermark({
       actorUserId: req.user._id,
       conversationId: req.params.conversationId,
-      throughSequence,
+      throughSequence: seq,
     });
     return res.status(200).json({
       success: true,
@@ -34,11 +35,12 @@ const markDelivered = async (req, res) => {
  */
 const markRead = async (req, res) => {
   try {
-    const { throughSequence } = req.body || {};
+    const { throughSequence, watermark } = req.body || {};
+    const seq = throughSequence !== undefined ? throughSequence : watermark;
     const result = await receiptService.advanceReadWatermark({
       actorUserId: req.user._id,
       conversationId: req.params.conversationId,
-      throughSequence,
+      throughSequence: seq,
     });
     return res.status(200).json({
       success: true,

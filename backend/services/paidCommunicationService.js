@@ -9,6 +9,7 @@ const Match = require('../models/Match');
 const Conversation = require('../models/Conversation');
 const ConversationMember = require('../models/ConversationMember');
 const OutboxEvent = require('../models/OutboxEvent');
+const Profile = require('../models/Profile');
 const walletService = require('./walletService');
 const fraudProtectionService = require('./fraudProtectionService');
 const featureFlagService = require('./featureFlagService');
@@ -77,31 +78,35 @@ async function initiatePaidSession({ initiatorId, receiverId, conversationId = n
   // 3. Conversation & match validation if applicable
   let resolvedConversationId = null;
   if (conversationId) {
-    const conv = await Conversation.findById(conversationId);
+    const Chat = require('../models/Chat');
+    let conv = await Conversation.findById(conversationId);
+    let isFromChatModel = false;
     if (!conv) {
-      throw new PaidSessionError('CONVERSATION_NOT_FOUND', 'Conversation not found', 404);
+      conv = await Chat.findById(conversationId);
+      isFromChatModel = true;
     }
-    if (conv.type === ConversationTypes.GROUP || conv.isGroup) {
-      throw new PaidSessionError(
-        'GROUP_PAID_COMMUNICATION_NOT_SUPPORTED',
-        'Paid communication is only supported for one-to-one direct matches',
-        400
-      );
+    if (conv) {
+      if (conv.type === ConversationTypes.GROUP || conv.isGroup) {
+        throw new PaidSessionError(
+          'GROUP_PAID_COMMUNICATION_NOT_SUPPORTED',
+          'Paid communication is only supported for one-to-one direct matches',
+          400
+        );
+      }
+      const members = isFromChatModel ? [] : await ConversationMember.find({
+        conversationId: conv._id,
+        state: MemberStates.ACTIVE,
+      });
+      const memberUserIds = members.map((m) => (m.userId ? m.userId.toString() : m.user?.toString()));
+      const isParticipant =
+        (Array.isArray(conv.participants) &&
+          conv.participants.some((p) => (p._id ? p._id.toString() : p.toString()) === initiatorId.toString())) ||
+        memberUserIds.includes(initiatorId.toString());
+      if (!isParticipant) {
+        throw new PaidSessionError('CONVERSATION_ACCESS_DENIED', 'Initiator is not part of this conversation', 403);
+      }
+      resolvedConversationId = conv._id;
     }
-    const members = await ConversationMember.find({
-      conversationId: conv._id,
-      state: MemberStates.ACTIVE,
-    });
-    const memberUserIds = members.map((m) => (m.userId ? m.userId.toString() : m.user?.toString()));
-    const isParticipant =
-      (Array.isArray(conv.participants) &&
-        conv.participants.some((p) => p.toString() === initiatorId.toString()) &&
-        conv.participants.some((p) => p.toString() === receiverId.toString())) ||
-      (memberUserIds.includes(initiatorId.toString()) && memberUserIds.includes(receiverId.toString()));
-    if (!isParticipant) {
-      throw new PaidSessionError('CONVERSATION_ACCESS_DENIED', 'Participants are not part of this conversation', 403);
-    }
-    resolvedConversationId = conv._id;
   }
 
   // 4. Fraud and Abuse Protection Validation
@@ -158,12 +163,29 @@ async function initiatePaidSession({ initiatorId, receiverId, conversationId = n
   });
 
   if (existingActiveSession) {
-    throw new PaidSessionError(
-      'ACTIVE_SESSION_EXISTS',
-      'An active or pending session already exists between these participants',
-      409,
-      { sessionId: existingActiveSession.sessionId, status: existingActiveSession.status }
-    );
+    const isSameInitiator = existingActiveSession.initiatorId.toString() === initiatorId.toString();
+    const isSameType = existingActiveSession.communicationType === communicationType;
+    const isPendingOrConnecting = [
+      PaidSessionStatuses.PENDING,
+      PaidSessionStatuses.ACCEPTED,
+      PaidSessionStatuses.CONNECTING,
+    ].includes(existingActiveSession.status);
+
+    if (existingActiveSession.status === PaidSessionStatuses.ACTIVE && isSameInitiator && isSameType) {
+      return existingActiveSession;
+    }
+
+    if (isPendingOrConnecting || !isSameType) {
+      existingActiveSession.status = PaidSessionStatuses.CANCELLED;
+      existingActiveSession.endReason = 'SUPERSEDED_BY_NEW_REQUEST';
+      existingActiveSession.endedAt = new Date();
+      await existingActiveSession.save();
+    } else {
+      existingActiveSession.status = PaidSessionStatuses.CANCELLED;
+      existingActiveSession.endReason = 'SUPERSEDED_BY_NEW_REQUEST';
+      existingActiveSession.endedAt = new Date();
+      await existingActiveSession.save();
+    }
   }
 
   // 7. Balance Pre-Check: Initiator must be able to afford at least the first minute
@@ -202,6 +224,25 @@ async function initiatePaidSession({ initiatorId, receiverId, conversationId = n
 
   await sessionDoc.save();
 
+  // If communicationType is MESSAGE (Paid Chat), immediately activate and charge Minute 1 atomically
+  if (communicationType === CommunicationTypes.MESSAGE) {
+    const activatedSession = await activatePaidSession(sessionDoc);
+    const ioMsg = getSocketIO();
+    if (ioMsg) {
+      const chatActivatedPayload = {
+        sessionId,
+        initiatorId: initiatorId.toString(),
+        receiverId: receiverId.toString(),
+        communicationType: 'MESSAGE',
+        ratePerMinute: rate,
+        status: PaidSessionStatuses.ACTIVE,
+      };
+      ioMsg.to(`user:${initiatorId}`).emit('paid_chat:session_started', chatActivatedPayload);
+      ioMsg.to(`user:${receiverId}`).emit('paid_chat:session_started', chatActivatedPayload);
+    }
+    return activatedSession;
+  }
+
   // 9. Enqueue Outbox Event for Socket Dispatch
   await OutboxEvent.create({
     eventType: 'paid_session.requested',
@@ -222,6 +263,10 @@ async function initiatePaidSession({ initiatorId, receiverId, conversationId = n
   });
 
   // 10. Multi-Device Native Background Push Dispatch for Calls
+  const initiatorProfile = await Profile.findOne({ user: initiatorId });
+  const callerDisplayName = initiatorProfile?.displayName || initiator.displayName || initiator.email || initiator.phone || 'Rubaru User';
+  const callerAvatarUrl = initiatorProfile?.avatarUri || initiatorProfile?.avatar || '';
+
   if (communicationType === CommunicationTypes.AUDIO || communicationType === CommunicationTypes.VIDEO) {
     try {
       await pushAdapter.sendIncomingCallPush({
@@ -229,7 +274,8 @@ async function initiatePaidSession({ initiatorId, receiverId, conversationId = n
         sessionId,
         caller: {
           id: initiatorId.toString(),
-          displayName: initiator.email || initiator.phone || 'Rubaru User',
+          displayName: callerDisplayName,
+          avatarUrl: callerAvatarUrl,
         },
         callType: communicationType,
         ratePerMinute: rate,
@@ -243,18 +289,37 @@ async function initiatePaidSession({ initiatorId, receiverId, conversationId = n
   // 11. Immediate Real-Time Socket.io Dispatch to Online Receiver Devices
   const io = getSocketIO();
   if (io) {
-    io.to(`user:${receiverId}`).emit('paid_session.requested', {
+    const incomingPayload = {
       sessionId,
+      callId: sessionId,
       initiatorId: initiatorId.toString(),
       receiverId: receiverId.toString(),
+      callerId: initiatorId.toString(),
+      initiatorName: callerDisplayName,
+      initiatorAvatar: callerAvatarUrl,
       communicationType,
+      callType: communicationType === CommunicationTypes.VIDEO ? 'video' : 'audio',
       ratePerMinute: rate,
       requestExpiresAt,
       caller: {
         id: initiatorId.toString(),
-        displayName: initiator.email || initiator.phone || 'Rubaru User',
+        displayName: callerDisplayName,
+        avatarUrl: callerAvatarUrl,
       },
-    });
+    };
+
+    if (communicationType === CommunicationTypes.AUDIO || communicationType === CommunicationTypes.VIDEO) {
+      io.to(`user:${receiverId}`).emit('paid_session.requested', incomingPayload);
+      io.to(`user:${receiverId}`).emit('call:incoming', incomingPayload);
+    } else {
+      io.to(`user:${receiverId}`).emit('paid_chat:session_started', {
+        sessionId,
+        initiatorId: initiatorId.toString(),
+        receiverId: receiverId.toString(),
+        communicationType: 'MESSAGE',
+        ratePerMinute: rate,
+      });
+    }
   }
 
   return sessionDoc;
@@ -380,16 +445,26 @@ async function declinePaidSession({ receiverId, sessionId, reason = null }) {
 
   const ioDecline = getSocketIO();
   if (ioDecline) {
-    ioDecline.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.initiatorId}`).to(`user:${sessionDoc.receiverId}`).emit('paid_session.declined', {
+    const declinePayload = {
       sessionId,
+      callId: sessionId,
       initiatorId: sessionDoc.initiatorId.toString(),
       receiverId: sessionDoc.receiverId.toString(),
       endReason: sessionDoc.endReason,
-    });
-    ioDecline.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.initiatorId}`).to(`user:${sessionDoc.receiverId}`).emit('call.cancelled', {
-      sessionId,
       reason: sessionDoc.endReason,
-    });
+      status: sessionDoc.status,
+    };
+    if (sessionDoc.communicationType === CommunicationTypes.AUDIO || sessionDoc.communicationType === CommunicationTypes.VIDEO) {
+      ioDecline.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.initiatorId}`).to(`user:${sessionDoc.receiverId}`).emit('paid_session.declined', declinePayload);
+      ioDecline.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.initiatorId}`).to(`user:${sessionDoc.receiverId}`).emit('paid_session.ended', declinePayload);
+      ioDecline.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.initiatorId}`).to(`user:${sessionDoc.receiverId}`).emit('call.cancelled', declinePayload);
+      ioDecline.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.initiatorId}`).to(`user:${sessionDoc.receiverId}`).emit('call:cancelled', declinePayload);
+      ioDecline.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.initiatorId}`).to(`user:${sessionDoc.receiverId}`).emit('call:rejected', declinePayload);
+      ioDecline.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.initiatorId}`).to(`user:${sessionDoc.receiverId}`).emit('call:ended', declinePayload);
+      ioDecline.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.initiatorId}`).to(`user:${sessionDoc.receiverId}`).emit('call_declined', declinePayload);
+    } else {
+      ioDecline.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.initiatorId}`).to(`user:${sessionDoc.receiverId}`).emit('paid_chat:session_ended', declinePayload);
+    }
   }
 
   return sessionDoc;
@@ -450,15 +525,22 @@ async function cancelPaidSession({ initiatorId, sessionId, reason = null }) {
 
   const ioCancel = getSocketIO();
   if (ioCancel) {
-    ioCancel.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.receiverId}`).emit('call.cancelled', {
+    const cancelPayload = {
       sessionId,
-      reason: sessionDoc.endReason,
-    });
-    ioCancel.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.receiverId}`).emit('paid_session.ended', {
-      sessionId,
+      callId: sessionId,
       status: sessionDoc.status,
       endReason: sessionDoc.endReason,
-    });
+      reason: sessionDoc.endReason,
+    };
+    if (sessionDoc.communicationType === CommunicationTypes.AUDIO || sessionDoc.communicationType === CommunicationTypes.VIDEO) {
+      ioCancel.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.receiverId}`).to(`user:${sessionDoc.initiatorId}`).emit('call.cancelled', cancelPayload);
+      ioCancel.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.receiverId}`).to(`user:${sessionDoc.initiatorId}`).emit('call:cancelled', cancelPayload);
+      ioCancel.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.receiverId}`).to(`user:${sessionDoc.initiatorId}`).emit('call:ended', cancelPayload);
+      ioCancel.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.receiverId}`).to(`user:${sessionDoc.initiatorId}`).emit('paid_session.ended', cancelPayload);
+      ioCancel.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.receiverId}`).to(`user:${sessionDoc.initiatorId}`).emit('paid_session.cancelled', cancelPayload);
+    } else {
+      ioCancel.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.receiverId}`).to(`user:${sessionDoc.initiatorId}`).emit('paid_chat:session_ended', cancelPayload);
+    }
   }
 
   return sessionDoc;
@@ -654,9 +736,28 @@ async function endPaidSession({ actorUserId, sessionId, endReason = null }) {
     return sessionDoc; // Idempotent
   }
 
-  sessionDoc.status = PaidSessionStatuses.ENDED;
   sessionDoc.endedAt = new Date();
   sessionDoc.endReason = endReason || PaidSessionEndReasons.USER_HANGUP;
+
+  if (sessionDoc.connectedAt) {
+    sessionDoc.durationSeconds = Math.max(0, Math.floor((sessionDoc.endedAt.getTime() - sessionDoc.connectedAt.getTime()) / 1000));
+    const totalMinutes = Math.max(1, Math.ceil(sessionDoc.durationSeconds / 60));
+    sessionDoc.billedMinutes = totalMinutes;
+
+    for (let m = 1; m <= totalMinutes; m++) {
+      try {
+        await walletService.executeCommunicationCharge({
+          sessionDoc,
+          minuteIndex: m,
+        });
+      } catch (mErr) {
+        console.warn(`[PAID COMM] Final settlement charge minute ${m}:`, mErr.message);
+      }
+    }
+    sessionDoc.totalCoinsCharged = totalMinutes * sessionDoc.ratePerMinuteSnapshot;
+    sessionDoc.totalCoinsEarned = sessionDoc.totalCoinsCharged;
+  }
+
   await sessionDoc.save();
 
   // Run anomaly inspection asynchronously
@@ -686,13 +787,57 @@ async function endPaidSession({ actorUserId, sessionId, endReason = null }) {
 
   const ioEnd = getSocketIO();
   if (ioEnd) {
-    ioEnd.to(`paid_session:${sessionId}`).to(`user:${sessionDoc.initiatorId}`).to(`user:${sessionDoc.receiverId}`).emit('paid_session.ended', {
-      sessionId,
+    let initiatorWalletBalance = null;
+    let receiverWalletBalance = null;
+    try {
+      const initWallet = await walletService.getOrCreateWallet(sessionDoc.initiatorId);
+      initiatorWalletBalance = initWallet?.availableBalance ?? null;
+      const recWallet = await walletService.getOrCreateWallet(sessionDoc.receiverId);
+      receiverWalletBalance = recWallet?.availableBalance ?? null;
+    } catch (e) {}
+
+    const endPayloadBase = {
+      sessionId: sessionDoc.sessionId,
+      callId: sessionDoc.sessionId,
       status: sessionDoc.status,
       endReason: sessionDoc.endReason,
-      billedMinutes: sessionDoc.billedMinutes,
-      totalCoinsCharged: sessionDoc.totalCoinsCharged,
-    });
+      reason: sessionDoc.endReason,
+      billedMinutes: sessionDoc.billedMinutes || 0,
+      totalCoinsCharged: sessionDoc.totalCoinsCharged || 0,
+      totalCoinsEarned: sessionDoc.totalCoinsEarned || sessionDoc.totalCoinsCharged || 0,
+      durationSeconds: sessionDoc.durationSeconds || 0,
+    };
+
+    const initiatorPayload = {
+      ...endPayloadBase,
+      walletBalance: initiatorWalletBalance,
+      remainingBalance: initiatorWalletBalance,
+      isInitiator: true,
+    };
+
+    const receiverPayload = {
+      ...endPayloadBase,
+      walletBalance: receiverWalletBalance,
+      remainingBalance: receiverWalletBalance,
+      isInitiator: false,
+    };
+
+    if (sessionDoc.communicationType === CommunicationTypes.AUDIO || sessionDoc.communicationType === CommunicationTypes.VIDEO) {
+      ioEnd.to(`paid_session:${sessionId}`).emit('paid_session.ended', endPayloadBase);
+      ioEnd.to(`user:${sessionDoc.initiatorId}`).emit('paid_session.ended', initiatorPayload);
+      ioEnd.to(`user:${sessionDoc.receiverId}`).emit('paid_session.ended', receiverPayload);
+      ioEnd.to(`user:${sessionDoc.initiatorId}`).emit('call:ended', initiatorPayload);
+      ioEnd.to(`user:${sessionDoc.receiverId}`).emit('call:ended', receiverPayload);
+      ioEnd.to(`user:${sessionDoc.initiatorId}`).emit('call.ended', initiatorPayload);
+      ioEnd.to(`user:${sessionDoc.receiverId}`).emit('call.ended', receiverPayload);
+      ioEnd.to(`user:${sessionDoc.initiatorId}`).emit('call_hungup', initiatorPayload);
+      ioEnd.to(`user:${sessionDoc.receiverId}`).emit('call_hungup', receiverPayload);
+    } else {
+      ioEnd.to(`user:${sessionDoc.initiatorId}`).emit('paid_chat.ended', initiatorPayload);
+      ioEnd.to(`user:${sessionDoc.receiverId}`).emit('paid_chat.ended', receiverPayload);
+      ioEnd.to(`user:${sessionDoc.initiatorId}`).emit('wallet.balance_updated', { walletBalance: initiatorWalletBalance });
+      ioEnd.to(`user:${sessionDoc.receiverId}`).emit('wallet.balance_updated', { walletBalance: receiverWalletBalance });
+    }
   }
 
   return sessionDoc;

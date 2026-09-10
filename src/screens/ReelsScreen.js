@@ -258,7 +258,7 @@ export default function ReelsScreen({ isNestedInPager, isTabFocused = true }) {
   const getFullUrl = (uri) => {
     if (!uri || typeof uri !== 'string') return '';
     if (uri.startsWith('http') || uri.startsWith('file://') || uri.startsWith('content://')) return uri;
-    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.6:5000/api';
+    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.33:5000/api';
     const host = apiBase.replace('/api', '');
     return `${host}${uri.startsWith('/') ? uri : `/${uri}`}`;
   };

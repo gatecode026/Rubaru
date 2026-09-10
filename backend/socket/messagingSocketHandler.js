@@ -242,18 +242,40 @@ function registerMessagingHandlers(io, socket) {
         },
       };
 
-      io.to(`conversation:${conversationId}`).emit(SocketEvents.MESSAGE_CREATED, messageCreatedEnvelope);
-      // Also emit on legacy event name for older frontend builds
-      io.to(`chat_${conversationId}`).emit(SocketEvents.LEGACY_RECEIVE_MESSAGE, {
+      const legacyPayload = {
         id: result.message.id,
+        _id: result.message.id,
         chatId: result.message.conversationId,
+        conversationId: result.message.conversationId,
         senderId: result.message.senderId,
         type: result.message.type,
         text: result.message.text,
         attachments: result.message.attachments,
         sequence: result.message.sequence,
         createdAt: result.message.createdAt,
-      });
+      };
+
+      io.to(`conversation:${conversationId}`).emit(SocketEvents.MESSAGE_CREATED, messageCreatedEnvelope);
+      io.to(`conversation:${conversationId}`).emit(SocketEvents.LEGACY_RECEIVE_MESSAGE, legacyPayload);
+      io.to(`chat_${conversationId}`).emit(SocketEvents.LEGACY_RECEIVE_MESSAGE, legacyPayload);
+
+      // Broadcast directly to user rooms so recipients not currently in room get live updates
+      try {
+        const ChatModel = require('../models/Chat');
+        const ConversationModel = require('../models/Conversation');
+        const targetChat = (await ChatModel.findById(conversationId)) || (await ConversationModel.findById(conversationId));
+        if (targetChat && Array.isArray(targetChat.participants)) {
+          targetChat.participants.forEach((p) => {
+            const participantId = (p._id || p).toString();
+            io.to(`user:${participantId}`).emit(SocketEvents.LEGACY_RECEIVE_MESSAGE, legacyPayload);
+            io.to(`user_${participantId}`).emit(SocketEvents.LEGACY_RECEIVE_MESSAGE, legacyPayload);
+            io.to(`user:${participantId}`).emit(SocketEvents.MESSAGE_CREATED, messageCreatedEnvelope);
+            io.to(`user:${participantId}`).emit('new_message', legacyPayload);
+          });
+        }
+      } catch (userBroadcastErr) {
+        console.warn('[USER ROOM BROADCAST NOTE]:', userBroadcastErr.message);
+      }
 
       return cb(ackResp);
     } catch (error) {

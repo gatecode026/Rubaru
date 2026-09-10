@@ -15,13 +15,18 @@ export default function ChatListItem({ item }) {
     onlineStatus, // 'green' | 'orange' | null
     time,
     sender,
-    unreadCount,
+    unreadCount = 0,
     hasMention,
-    messageType, // 'text' | 'video' | 'photo' | 'audio' | 'emoji' | 'thread'
+    messageType, // 'text' | 'video' | 'photo' | 'audio' | 'poll' | 'emoji' | 'thread'
     messageText,
-    mentionUser, // e.g. "Robert"
+    mentionUser,
     hasAlert,
+    isFromMe,
+    status, // 'SENT' | 'DELIVERED' | 'READ'
+    hasLastMessage = true,
   } = item;
+
+  const hasUnread = unreadCount > 0;
 
   const renderAvatar = () => {
     if (isUber) {
@@ -40,7 +45,16 @@ export default function ChatListItem({ item }) {
     }
     return (
       <View style={styles.avatarWrapper}>
-        <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+        {avatarUrl && avatarUrl.trim() !== '' ? (
+          <Image
+            source={{ uri: avatarUrl }}
+            style={styles.avatarImage}
+          />
+        ) : (
+          <View style={[styles.avatarImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+            <Ionicons name="person" size={22} color="#9CA3AF" />
+          </View>
+        )}
         {onlineStatus === 'green' && (
           <View style={[styles.statusDot, styles.greenDot, { borderColor: colors.background }]} />
         )}
@@ -51,10 +65,63 @@ export default function ChatListItem({ item }) {
     );
   };
 
+  const renderStatusTick = () => {
+    if (!isFromMe) return null;
+
+    if (status === 'READ') {
+      return (
+        <Ionicons
+          key="status-tick"
+          name="checkmark-done"
+          size={16}
+          color="#34B7F1"
+          style={styles.inlineTick}
+        />
+      );
+    }
+    if (status === 'DELIVERED') {
+      return (
+        <Ionicons
+          key="status-tick"
+          name="checkmark-done"
+          size={16}
+          color="#8E8E93"
+          style={styles.inlineTick}
+        />
+      );
+    }
+    // SENT or default
+    return (
+      <Ionicons
+        key="status-tick"
+        name="checkmark"
+        size={16}
+        color="#8E8E93"
+        style={styles.inlineTick}
+      />
+    );
+  };
+
   const renderMessageContent = () => {
+    if (!hasLastMessage && !messageText) {
+      return (
+        <View style={styles.messageRow}>
+          <Text style={[styles.emptyPreviewText, { color: colors.textSecondary || '#8E8E93' }]}>
+            Start a conversation
+          </Text>
+        </View>
+      );
+    }
+
     const content = [];
 
-    if (sender) {
+    // Outgoing status tick (Single/Double check)
+    const tickElement = renderStatusTick();
+    if (tickElement) {
+      content.push(tickElement);
+    }
+
+    if (sender && !isFromMe) {
       content.push(
         <Text key="sender" style={[styles.senderText, { color: colors.textSecondary }]}>
           {sender}:{' '}
@@ -67,74 +134,61 @@ export default function ChatListItem({ item }) {
         <Ionicons
           key="alert"
           name="alert-circle"
-          size={16}
+          size={15}
           color="#FF3B30"
           style={styles.inlineIcon}
         />
       );
     }
 
-    if (messageType === 'video') {
+    // Media type icons
+    if (messageType === 'photo' || messageType === 'image') {
+      content.push(
+        <Ionicons
+          key="photo-icon"
+          name="camera"
+          size={15}
+          color="#8E8E93"
+          style={styles.inlineIcon}
+        />
+      );
+    } else if (messageType === 'video') {
       content.push(
         <Ionicons
           key="video-icon"
           name="videocam"
-          size={16}
-          color={colors.textSecondary}
+          size={15}
+          color="#8E8E93"
           style={styles.inlineIcon}
         />
       );
-    } else if (messageType === 'photo') {
-      content.push(
-        <Ionicons
-          key="check-icon"
-          name="checkmark-done"
-          size={16}
-          color="#5856D6" // Indigo read checkmark
-          style={styles.inlineIcon}
-        />
-      );
-      content.push(
-        <Ionicons
-          key="photo-icon"
-          name="image"
-          size={16}
-          color={colors.textSecondary}
-          style={styles.inlineIcon}
-        />
-      );
-    } else if (messageType === 'audio') {
+    } else if (messageType === 'audio' || messageType === 'voice') {
       content.push(
         <Ionicons
           key="mic-icon"
           name="mic"
-          size={16}
-          color={colors.textSecondary}
+          size={15}
+          color="#8E8E93"
           style={styles.inlineIcon}
         />
       );
-    } else if (messageType === 'emoji') {
+    } else if (messageType === 'poll') {
       content.push(
         <Ionicons
-          key="check-icon"
-          name="checkmark-done"
-          size={16}
-          color="#5856D6"
+          key="poll-icon"
+          name="stats-chart"
+          size={14}
+          color="#8E8E93"
           style={styles.inlineIcon}
         />
-      );
-      content.push(
-        <Text key="emoji-face" style={styles.emojiText}>
-          😍{' '}
-        </Text>
       );
     } else if (messageType === 'thread') {
       content.push(
         <Ionicons
           key="thread-icon"
           name="return-down-forward"
-          size={16}
-          color={colors.textSecondary}
+          size={15}
+          color="#8E8E93"
           style={styles.inlineIcon}
         />
       );
@@ -148,9 +202,20 @@ export default function ChatListItem({ item }) {
       );
     }
 
+    const previewColor = hasUnread
+      ? (isDarkMode ? '#F2F2F7' : '#1F2937')
+      : (colors.textSecondary || '#8E8E93');
+
     content.push(
-      <Text key="main-text" style={[styles.messageText, { color: colors.textSecondary }]} numberOfLines={1}>
-        {messageText}
+      <Text
+        key="main-text"
+        style={[
+          styles.messageText,
+          { color: previewColor, fontWeight: hasUnread ? '600' : '400' },
+        ]}
+        numberOfLines={1}
+      >
+        {messageText || (messageType === 'photo' ? 'Photo' : messageType === 'video' ? 'Video' : messageType === 'audio' ? 'Voice message' : 'Start a conversation')}
       </Text>
     );
 
@@ -160,34 +225,50 @@ export default function ChatListItem({ item }) {
   return (
     <TouchableOpacity
       style={[styles.container, { backgroundColor: colors.background }]}
-      activeOpacity={0.7}
+      activeOpacity={0.65}
       onPress={() => {
+        if (typeof item.onOpen === 'function') {
+          item.onOpen(item.id);
+        }
         router.push({
           pathname: `/chat/${item.id}`,
-          params: { name: item.name, avatarUrl: item.avatarUrl || '' },
+          params: {
+            name: item.name,
+            avatarUrl: item.avatarUrl || '',
+            recipientId: item.recipientId ? String(item.recipientId) : '',
+          },
         });
       }}
     >
       {renderAvatar()}
       <View style={styles.middleContainer}>
-        <Text style={[styles.nameText, { color: colors.textPrimary }]} numberOfLines={1}>
-          {name}
-        </Text>
-        {renderMessageContent()}
-      </View>
-      <View style={styles.rightContainer}>
-        <Text style={[styles.timeText, { color: colors.textSecondary }]}>{time}</Text>
-        <View style={styles.badgeRow}>
-          {hasMention && (
-            <View style={[styles.mentionBadge, { backgroundColor: isDarkMode ? '#2B2745' : '#E8E6FF' }]}>
-              <Ionicons name="at" size={14} color="#7C3AED" />
-            </View>
-          )}
-          {unreadCount > 0 && (
-            <View style={[styles.unreadBadge, { backgroundColor: colors.badgeBg || (isDarkMode ? '#FF3B30' : '#FF2E63') }]}>
-              <Text style={styles.unreadText}>{unreadCount}</Text>
-            </View>
-          )}
+        <View style={styles.topNameRow}>
+          <Text style={[styles.nameText, { color: colors.textPrimary }]} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text
+            style={[
+              styles.timeText,
+              { color: hasUnread ? '#25D366' : (colors.textSecondary || '#8E8E93'), fontWeight: hasUnread ? '700' : '400' },
+            ]}
+          >
+            {time}
+          </Text>
+        </View>
+        <View style={styles.bottomRow}>
+          <View style={styles.messageContentWrapper}>{renderMessageContent()}</View>
+          <View style={styles.badgeRow}>
+            {hasMention && (
+              <View style={[styles.mentionBadge, { backgroundColor: isDarkMode ? '#2B2745' : '#E8E6FF' }]}>
+                <Ionicons name="at" size={13} color="#7C3AED" />
+              </View>
+            )}
+            {hasUnread && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -197,27 +278,27 @@ export default function ChatListItem({ item }) {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    alignItems: 'flex-start',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
   },
   avatarWrapper: {
     position: 'relative',
-    width: 56,
-    height: 56,
+    width: 52,
+    height: 52,
   },
   avatarContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#E1E1E1',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#E5E7EB',
   },
   uberAvatar: {
     backgroundColor: '#000000',
@@ -225,42 +306,63 @@ const styles = StyleSheet.create({
   uberText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 15,
   },
   initialsAvatar: {
-    backgroundColor: '#B19FFB', // Soft violet purple matching Image 1
+    backgroundColor: '#B19FFB',
   },
   initialsText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 18,
+    fontSize: 17,
   },
   statusDot: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 2.5,
+    bottom: -1,
+    right: -1,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
     borderColor: '#FFFFFF',
   },
   greenDot: {
-    backgroundColor: '#34C759',
+    backgroundColor: '#25D366',
   },
   orangeDot: {
     backgroundColor: '#FF9500',
   },
   middleContainer: {
     flex: 1,
-    marginLeft: 16,
-    paddingTop: 2,
+    marginLeft: 14,
+    justifyContent: 'center',
+  },
+  topNameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   nameText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 4,
+    flex: 1,
+    marginRight: 8,
+    letterSpacing: -0.2,
+  },
+  timeText: {
+    fontSize: 12,
+    letterSpacing: -0.1,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  messageContentWrapper: {
+    flex: 1,
+    marginRight: 8,
   },
   messageRow: {
     flexDirection: 'row',
@@ -268,21 +370,22 @@ const styles = StyleSheet.create({
   },
   senderText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#8E8E93',
+  },
+  inlineTick: {
+    marginRight: 4,
+    alignSelf: 'center',
   },
   inlineIcon: {
     marginRight: 4,
-  },
-  emojiText: {
-    fontSize: 14,
-    marginRight: 2,
+    alignSelf: 'center',
   },
   mentionPill: {
     backgroundColor: '#FFE8CC',
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingVertical: 1,
+    borderRadius: 5,
     marginRight: 4,
   },
   mentionText: {
@@ -290,52 +393,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  emptyPreviewText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: '#9CA3AF',
+  },
   messageText: {
     flex: 1,
     fontSize: 14,
-    color: '#8E8E93',
-  },
-  rightContainer: {
-    alignItems: 'flex-end',
-    marginLeft: 12,
-    minWidth: 60,
-    paddingTop: 2,
-  },
-  timeText: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginBottom: 6,
+    lineHeight: 18,
   },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginLeft: 4,
   },
   mentionBadge: {
-    marginRight: 6,
+    marginRight: 4,
     backgroundColor: '#E8E6FF',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
   unreadBadge: {
-    backgroundColor: '#FF2E63', // Vibrant pink badge matching Image 1
+    backgroundColor: '#25D366', // WhatsApp green badge
     paddingHorizontal: 6,
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#FF2E63',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 2,
   },
   unreadText: {
     color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
 });

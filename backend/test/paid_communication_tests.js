@@ -87,7 +87,7 @@ async function createTestUser(emailSuffix, initialPoints = 100) {
     username: `user_${emailSuffix}_${Date.now()}_${Math.random().toString(36).substring(7)}`,
     gender: 'Male',
     dateOfBirth: new Date('1998-01-01'),
-    avatarUri: 'https://i.pravatar.cc/150?img=60',
+    avatarUri: null,
   });
 
   await walletService.getOrCreateWallet(user._id);

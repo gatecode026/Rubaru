@@ -100,7 +100,7 @@ export default function NotificationScreen({ isNestedInPager }) {
 
   const mapItemToRow = (item) => {
     const actorName = item.sender?.displayName || item.templateData?.actorName || 'Someone';
-    const avatarUri = item.sender?.avatarUri || item.templateData?.actorAvatar || 'https://i.pravatar.cc/150?img=12';
+    const avatarUri = item.sender?.avatarUri || item.templateData?.actorAvatar || null;
     const message = item.message || 'interacted with your profile.';
     const timeFormatted = item.createdAt
       ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })

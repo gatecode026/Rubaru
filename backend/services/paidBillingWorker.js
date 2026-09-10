@@ -154,27 +154,29 @@ class PaidBillingWorker {
   async processActiveSession(sessionDoc, config, heartbeatTimeoutMs) {
     const now = new Date();
 
-    // 1. Heartbeat Timeout Check
-    const initHeartbeat = sessionDoc.lastInitiatorHeartbeatAt
-      ? sessionDoc.lastInitiatorHeartbeatAt.getTime()
-      : (sessionDoc.connectedAt ? sessionDoc.connectedAt.getTime() : 0);
-    const recvHeartbeat = sessionDoc.lastReceiverHeartbeatAt
-      ? sessionDoc.lastReceiverHeartbeatAt.getTime()
-      : (sessionDoc.connectedAt ? sessionDoc.connectedAt.getTime() : 0);
+    // 1. Heartbeat Timeout Check (only for real-time audio/video calls)
+    if (sessionDoc.communicationType !== 'MESSAGE') {
+      const initHeartbeat = sessionDoc.lastInitiatorHeartbeatAt
+        ? sessionDoc.lastInitiatorHeartbeatAt.getTime()
+        : (sessionDoc.connectedAt ? sessionDoc.connectedAt.getTime() : 0);
+      const recvHeartbeat = sessionDoc.lastReceiverHeartbeatAt
+        ? sessionDoc.lastReceiverHeartbeatAt.getTime()
+        : (sessionDoc.connectedAt ? sessionDoc.connectedAt.getTime() : 0);
 
-    const isInitiatorDead = now.getTime() - initHeartbeat > heartbeatTimeoutMs;
-    const isReceiverDead = now.getTime() - recvHeartbeat > heartbeatTimeoutMs;
+      const isInitiatorDead = now.getTime() - initHeartbeat > heartbeatTimeoutMs;
+      const isReceiverDead = now.getTime() - recvHeartbeat > heartbeatTimeoutMs;
 
-    if (isInitiatorDead || isReceiverDead) {
-      console.log(`[PAID BILLING WORKER] Session ${sessionDoc.sessionId} timed out due to missing heartbeats.`);
-      sessionDoc.billingLeaseExpiresAt = null;
-      await sessionDoc.save();
-      await paidCommunicationService.endPaidSession({
-        actorUserId: 'SYSTEM',
-        sessionId: sessionDoc.sessionId,
-        endReason: PaidSessionEndReasons.HEARTBEAT_TIMEOUT,
-      });
-      return;
+      if (isInitiatorDead || isReceiverDead) {
+        console.log(`[PAID BILLING WORKER] Session ${sessionDoc.sessionId} timed out due to missing heartbeats.`);
+        sessionDoc.billingLeaseExpiresAt = null;
+        await sessionDoc.save();
+        await paidCommunicationService.endPaidSession({
+          actorUserId: 'SYSTEM',
+          sessionId: sessionDoc.sessionId,
+          endReason: PaidSessionEndReasons.HEARTBEAT_TIMEOUT,
+        });
+        return;
+      }
     }
 
     // 2. Due Minute Charging

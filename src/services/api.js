@@ -13,7 +13,7 @@ const getBaseUrl = () => {
       return `http://${ip}:5000/api`;
     }
   }
-  return 'http://192.168.1.42:5000/api';
+  return 'http://192.168.1.33:5000/api';
 };
 
 const api = axios.create({
@@ -46,15 +46,25 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    if (error.response) {
+      console.warn(`[API ERROR ${error.response.status}] ${error.config?.method?.toUpperCase()} ${error.config?.url}:`, error.response.data);
+    } else {
+      console.warn(`[API NETWORK ERROR] ${error.config?.method?.toUpperCase()} ${error.config?.url}:`, error.message);
+    }
     if (error.response && error.response.status === 401) {
       const requestUrl = error.config?.url || '';
       const isAuthEndpoint =
         requestUrl.includes('/auth/login') ||
         requestUrl.includes('/auth/register') ||
         requestUrl.includes('/auth/verify') ||
+        requestUrl.includes('/auth/verify-otp') ||
         requestUrl.includes('/auth/me');
-      if (!isAuthEndpoint) {
-        console.log('[API] 401 Unauthorized. Clearing session and redirecting to sign-in...');
+      
+      const errMsg = error.response?.data?.message || '';
+      const isExplicitAuthFailure = errMsg.includes('token') || errMsg.includes('Not authorized') || errMsg.includes('jwt');
+
+      if (!isAuthEndpoint && isExplicitAuthFailure) {
+        console.log('[API] Explicit 401 Unauthorized. Clearing session and redirecting to sign-in...');
         try {
           const storage = require('./storage').default;
           await storage.clearSession();

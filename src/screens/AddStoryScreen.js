@@ -605,7 +605,7 @@ export default function AddStoryScreen() {
                       uri:
                         userProfile?.avatarUri && !userProfile.avatarUri.includes('empty')
                           ? userProfile.avatarUri
-                          : 'https://i.pravatar.cc/150?img=60',
+                          : null,
                     }}
                     style={styles.capsuleAvatar}
                   />

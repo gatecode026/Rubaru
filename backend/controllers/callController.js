@@ -34,7 +34,7 @@ const getCallLogs = async (req, res) => {
         return {
           id: log._id,
           name: otherProfile ? otherProfile.displayName : 'Rubaru User',
-          avatarUri: otherProfile ? otherProfile.avatarUri : 'https://i.pravatar.cc/150?img=60',
+          avatarUri: otherProfile ? otherProfile.avatarUri : null,
           callType: callTypeUi,
           callIconType: log.callIconType,
           date: log.startedAt,

@@ -1,9 +1,12 @@
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const ConversationMember = require('../models/ConversationMember');
+const Message = require('../models/Message');
 const Match = require('../models/Match');
 const Block = require('../models/Block');
 const User = require('../models/User');
+const Profile = require('../models/Profile');
 const DatingProfile = require('../models/DatingProfile');
 const OutboxEvent = require('../models/OutboxEvent');
 const { ConversationTypes, ConversationStatuses, MemberRoles, MemberStates } = require('../models/enums');
@@ -73,20 +76,23 @@ function verifyConversationCursor(cursorString, currentUserId) {
  * Format privacy-safe other user summary for conversation DTO
  */
 function formatMemberProfileDto(profile, user) {
-  if (!profile) {
-    return {
-      userId: user ? user._id.toString() : '',
-      displayName: 'Rubaru User',
-      avatarUri: '',
-      isVerified: user ? Boolean(user.isAgeVerified) : false,
-    };
+  const rawDisplayName = profile?.displayName;
+  let resolvedName = 'Rubaru User';
+  if (rawDisplayName && rawDisplayName.trim() !== '' && !rawDisplayName.includes('undefined')) {
+    resolvedName = rawDisplayName.trim();
+  } else if (user?.email) {
+    resolvedName = user.email.split('@')[0];
+  } else if (user?.phone) {
+    resolvedName = `User ${user.phone.slice(-4)}`;
   }
 
+  const avatar = profile?.avatarUri || (Array.isArray(profile?.photos) && profile.photos[0]) || '';
+
   return {
-    userId: profile.user ? profile.user.toString() : '',
-    displayName: profile.displayName || 'Rubaru User',
-    avatarUri: profile.avatarUri || (Array.isArray(profile.photos) && profile.photos[0]) || '',
-    age: profile.age || null,
+    userId: profile?.user ? profile.user.toString() : (user ? user._id.toString() : ''),
+    displayName: resolvedName,
+    avatarUri: avatar,
+    age: profile?.age || null,
     isVerified: user ? Boolean(user.isAgeVerified) : false,
   };
 }
@@ -382,6 +388,11 @@ async function getConversationList(actorUserId, options = {}) {
   }
 
   // 3. Extract other member IDs for direct match conversations and bulk-hydrate profiles (zero N+1)
+  const convIds = pageMemberships.map((m) => {
+    const conv = m.conversationId || m.conversation;
+    return conv._id;
+  });
+
   const otherUserIds = pageMemberships
     .map((m) => {
       const conv = m.conversationId || m.conversation;
@@ -398,17 +409,109 @@ async function getConversationList(actorUserId, options = {}) {
     })
     .filter(Boolean);
 
-  const [otherProfiles, otherUsers] = await Promise.all([
+  const actorObjId = mongoose.Types.ObjectId.isValid(actorUserId)
+    ? new mongoose.Types.ObjectId(actorUserId)
+    : actorUserId;
+
+  const [socialProfiles, datingProfiles, otherUsers, allMembers, lastMessagesAgg, unreadAgg] = await Promise.all([
+    Profile.find({ user: { $in: otherUserIds } }).lean(),
     DatingProfile.find({ user: { $in: otherUserIds } }).lean(),
-    User.find({ _id: { $in: otherUserIds } }, '_id isAgeVerified accountStatus').lean(),
+    User.find({ _id: { $in: otherUserIds } }, '_id email phone isAgeVerified accountStatus').lean(),
+    ConversationMember.find({
+      conversationId: { $in: convIds },
+      state: MemberStates.ACTIVE,
+    }).lean(),
+    Message.aggregate([
+      {
+        $match: {
+          $or: [
+            { conversationId: { $in: convIds } },
+            { chat: { $in: convIds } },
+          ],
+          status: { $ne: 'DELETED' },
+        },
+      },
+      {
+        $sort: { sequence: -1, createdAt: -1 },
+      },
+      {
+        $group: {
+          _id: { $ifNull: ['$conversationId', '$chat'] },
+          doc: { $first: '$$ROOT' },
+        },
+      },
+    ]),
+    Message.aggregate([
+      {
+        $match: {
+          $or: [
+            { conversationId: { $in: convIds } },
+            { chat: { $in: convIds } },
+          ],
+          senderId: { $ne: actorObjId },
+          sender: { $ne: actorObjId },
+          status: { $ne: 'DELETED' },
+        },
+      },
+      {
+        $group: {
+          _id: { $ifNull: ['$conversationId', '$chat'] },
+          items: { $push: { sequence: '$sequence', isRead: '$isRead' } },
+        },
+      },
+    ]),
   ]);
 
-  const profileMap = new Map(otherProfiles.map((p) => [p.user.toString(), p]));
+  const profileMap = new Map();
+  datingProfiles.forEach((p) => {
+    if (p && p.user) profileMap.set(p.user.toString(), p);
+  });
+  socialProfiles.forEach((p) => {
+    if (p && p.user) {
+      const existing = profileMap.get(p.user.toString());
+      profileMap.set(p.user.toString(), { ...(existing || {}), ...p });
+    }
+  });
   const userMap = new Map(otherUsers.map((u) => [u._id.toString(), u]));
+
+  const peerMemberMap = new Map();
+  allMembers.forEach((m) => {
+    const memUserId = (m.userId || m.user)?.toString();
+    const cId = (m.conversationId || m.conversation)?.toString();
+    if (cId && memUserId && memUserId !== actorUserId.toString()) {
+      peerMemberMap.set(cId, m);
+    }
+  });
+
+  const lastMessageMap = new Map();
+  lastMessagesAgg.forEach((item) => {
+    if (item._id && item.doc) {
+      lastMessageMap.set(item._id.toString(), item.doc);
+    }
+  });
+
+  const unreadCountMap = new Map();
+  unreadAgg.forEach((u) => {
+    const convIdStr = u._id.toString();
+    const mem = pageMemberships.find((m) => {
+      const c = m.conversationId || m.conversation;
+      return c._id.toString() === convIdStr;
+    });
+    const myReadSeq = mem ? (mem.readThroughSequence || mem.lastReadSequence || 0) : 0;
+    const count = u.items.filter((item) => {
+      if (item.isRead) return false;
+      if (myReadSeq > 0 && item.sequence !== undefined && item.sequence !== null && item.sequence <= myReadSeq) {
+        return false;
+      }
+      return !item.isRead;
+    }).length;
+    unreadCountMap.set(convIdStr, count);
+  });
 
   // 4. Format clean DTO items
   const items = pageMemberships.map((m) => {
     const conv = m.conversationId || m.conversation;
+    const convIdStr = conv._id.toString();
     let otherIdStr = null;
 
     if (conv.canonicalParticipantKey) {
@@ -421,6 +524,46 @@ async function getConversationList(actorUserId, options = {}) {
 
     const oProfile = otherIdStr ? profileMap.get(otherIdStr) : null;
     const oUser = otherIdStr ? userMap.get(otherIdStr) : null;
+    const lastMsg = lastMessageMap.get(convIdStr) || null;
+    const unreadCount = unreadCountMap.get(convIdStr) || 0;
+
+    let lastMessageDto = null;
+    if (lastMsg) {
+      const isFromMe = (lastMsg.senderId || lastMsg.sender)?.toString() === actorUserId.toString();
+      const peer = peerMemberMap.get(convIdStr);
+      let msgStatus = 'SENT';
+      if (isFromMe) {
+        if (peer && peer.readThroughSequence && peer.readThroughSequence >= (lastMsg.sequence || 0)) {
+          msgStatus = 'READ';
+        } else if (peer && peer.deliveredThroughSequence && peer.deliveredThroughSequence >= (lastMsg.sequence || 0)) {
+          msgStatus = 'DELIVERED';
+        } else if (lastMsg.isRead) {
+          msgStatus = 'READ';
+        }
+      }
+
+      let messageType = 'TEXT';
+      if (lastMsg.type) {
+        messageType = lastMsg.type.toUpperCase();
+      }
+
+      const firstAttachment = Array.isArray(lastMsg.attachments) && lastMsg.attachments.length > 0 ? lastMsg.attachments[0] : null;
+
+      lastMessageDto = {
+        id: lastMsg._id.toString(),
+        text: lastMsg.text || '',
+        type: messageType,
+        mediaType: firstAttachment?.type || (lastMsg.attachmentUri ? (messageType === 'IMAGE' || messageType === 'PHOTO' ? 'IMAGE' : (messageType === 'VOICE' || messageType === 'AUDIO' ? 'AUDIO' : null)) : null),
+        attachmentUri: firstAttachment?.originalObjectKey || lastMsg.attachmentUri || '',
+        isPoll: Boolean(lastMsg.isPoll || lastMsg.pollQuestion),
+        pollQuestion: lastMsg.pollQuestion || '',
+        senderId: (lastMsg.senderId || lastMsg.sender)?.toString(),
+        isFromMe,
+        status: msgStatus,
+        sequence: lastMsg.sequence || 0,
+        createdAt: lastMsg.createdAt || new Date().toISOString(),
+      };
+    }
 
     return {
       id: conv._id.toString(),
@@ -432,7 +575,9 @@ async function getConversationList(actorUserId, options = {}) {
       otherParticipant: conv.type === ConversationTypes.DIRECT_MATCH ? formatMemberProfileDto(oProfile, oUser) : null,
       memberCount: conv.memberCount || 2,
       lastSequence: conv.lastSequence || 0,
-      lastMessageAt: conv.lastMessageAt || conv.updatedAt,
+      lastMessageAt: lastMsg?.createdAt || conv.lastMessageAt || conv.updatedAt,
+      lastMessage: lastMessageDto,
+      unreadCount,
       myMembership: {
         role: m.role,
         state: m.state,
@@ -445,7 +590,7 @@ async function getConversationList(actorUserId, options = {}) {
         readAt: m.readAt || null,
         notificationPreference: m.notificationPreference || 'ALL',
       },
-      updatedAt: conv.updatedAt,
+      updatedAt: lastMsg?.createdAt || conv.updatedAt,
     };
   });
 
@@ -477,11 +622,13 @@ async function getConversationDetails(actorUserId, conversationId) {
 
   let otherParticipantDto = null;
   if (otherMemberId) {
-    const [profile, user] = await Promise.all([
+    const [socialProfile, datingProfile, user] = await Promise.all([
+      Profile.findOne({ user: otherMemberId }).lean(),
       DatingProfile.findOne({ user: otherMemberId }).lean(),
-      User.findById(otherMemberId, '_id isAgeVerified accountStatus').lean(),
+      User.findById(otherMemberId, '_id email phone isAgeVerified accountStatus').lean(),
     ]);
-    otherParticipantDto = formatMemberProfileDto(profile, user);
+    const mergedProfile = { ...(datingProfile || {}), ...(socialProfile || {}) };
+    otherParticipantDto = formatMemberProfileDto(mergedProfile, user);
   }
 
   // Load all active members for this conversation

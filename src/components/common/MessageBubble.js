@@ -3,19 +3,44 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
 
-export default function MessageBubble({ text, time, isSent, isRead, onLongPress, reaction, replyTo }) {
+export default function MessageBubble({
+  text,
+  time,
+  isSent,
+  isRead,
+  status = 'sent', // 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
+  onLongPress,
+  onRetry,
+  reaction,
+  replyTo,
+  isGroupedAbove = false,
+  isGroupedBelow = false,
+}) {
   const { isDarkMode, colors } = useTheme();
+
+  const isFailed = status === 'failed';
+  const isSending = status === 'sending';
+  const isReadReceipt = status === 'read' || status === 'READ' || isRead;
+  const isDeliveredReceipt = status === 'delivered' || status === 'DELIVERED';
 
   if (isSent) {
     return (
-      <View style={styles.sentContainer}>
+      <View
+        style={[
+          styles.sentContainer,
+          isGroupedBelow ? styles.groupedBelowContainer : null,
+        ]}
+      >
         <TouchableOpacity
           style={[
             styles.sentBubble,
-            { backgroundColor: colors.bubbleSent || '#FF6584' },
+            { backgroundColor: isFailed ? '#EF4444' : (colors.bubbleSent || '#FF6584') },
+            isGroupedAbove && styles.sentGroupedAbove,
+            isGroupedBelow && styles.sentGroupedBelow,
           ]}
           activeOpacity={0.9}
           onLongPress={onLongPress}
+          onPress={isFailed && onRetry ? onRetry : undefined}
         >
           {/* Quoted Reply Box */}
           {replyTo && (
@@ -31,17 +56,60 @@ export default function MessageBubble({ text, time, isSent, isRead, onLongPress,
           )}
 
           <Text style={[styles.sentText, { color: colors.bubbleSentText || '#FFFFFF' }]}>{text}</Text>
+          
           <View style={styles.sentInfoRow}>
             <Text style={[styles.sentTimeText, { color: colors.bubbleSentTime || '#FFF0F3' }]}>{time}</Text>
-            {isRead && (
+            
+            {/* Status indicators */}
+            {isSending && (
+              <Ionicons
+                name="time-outline"
+                size={14}
+                color="#FFF0F3"
+                style={styles.statusIcon}
+              />
+            )}
+            
+            {isFailed && (
+              <Ionicons
+                name="alert-circle"
+                size={14}
+                color="#FFFFFF"
+                style={styles.statusIcon}
+              />
+            )}
+
+            {!isSending && !isFailed && isReadReceipt && (
               <Ionicons
                 name="checkmark-done"
-                size={16}
-                color="#10B981" // Green read receipt checkmark as in reference image
-                style={styles.checkIcon}
+                size={15}
+                color="#34D399" // Bright teal-green read receipt
+                style={styles.statusIcon}
+              />
+            )}
+
+            {!isSending && !isFailed && !isReadReceipt && isDeliveredReceipt && (
+              <Ionicons
+                name="checkmark-done"
+                size={15}
+                color="#FFF0F3" // Double white/grey tick for delivered
+                style={styles.statusIcon}
+              />
+            )}
+
+            {!isSending && !isFailed && !isReadReceipt && !isDeliveredReceipt && (
+              <Ionicons
+                name="checkmark"
+                size={15}
+                color="#FFF0F3" // Server acknowledged sent
+                style={styles.statusIcon}
               />
             )}
           </View>
+
+          {isFailed && (
+            <Text style={styles.retryText}>Failed. Tap to retry.</Text>
+          )}
         </TouchableOpacity>
         {reaction && (
           <View style={[styles.reactionBadge, styles.sentReaction, { backgroundColor: isDarkMode ? '#27272A' : '#FFFFFF' }]}>
@@ -53,7 +121,12 @@ export default function MessageBubble({ text, time, isSent, isRead, onLongPress,
   }
 
   return (
-    <View style={styles.receivedContainer}>
+    <View
+      style={[
+        styles.receivedContainer,
+        isGroupedBelow ? styles.groupedBelowContainer : null,
+      ]}
+    >
       <TouchableOpacity
         style={[
           styles.receivedBubble,
@@ -61,6 +134,8 @@ export default function MessageBubble({ text, time, isSent, isRead, onLongPress,
             backgroundColor: colors.bubbleReceived || '#FFFFFF',
             borderColor: isDarkMode ? '#3F3F46' : '#F3F4F6',
           },
+          isGroupedAbove && styles.receivedGroupedAbove,
+          isGroupedBelow && styles.receivedGroupedBelow,
         ]}
         activeOpacity={0.9}
         onLongPress={onLongPress}
@@ -94,78 +169,100 @@ const styles = StyleSheet.create({
   sentContainer: {
     alignSelf: 'flex-end',
     maxWidth: '80%',
-    marginBottom: 12,
+    marginBottom: 8,
     marginRight: 16,
+  },
+  receivedContainer: {
+    alignSelf: 'flex-start',
+    maxWidth: '80%',
+    marginBottom: 8,
+    marginLeft: 16,
+  },
+  groupedBelowContainer: {
+    marginBottom: 3,
   },
   sentBubble: {
     backgroundColor: '#FF6584',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 6, // sharper corner tail
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 4, // sharper tail
     shadowColor: '#FF6584',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  sentGroupedAbove: {
+    borderTopRightRadius: 8,
+  },
+  sentGroupedBelow: {
+    borderBottomRightRadius: 8,
+  },
+  receivedBubble: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderBottomLeftRadius: 4, // sharper tail
+    borderBottomRightRadius: 18,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  receivedGroupedAbove: {
+    borderTopLeftRadius: 8,
+  },
+  receivedGroupedBelow: {
+    borderBottomLeftRadius: 8,
   },
   sentText: {
     color: '#FFFFFF',
     fontSize: 15,
-    lineHeight: 21,
-    fontWeight: '500',
+    lineHeight: 20,
+    fontWeight: '400',
   },
   sentInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    marginTop: 4,
+    marginTop: 3,
   },
   sentTimeText: {
     color: '#FFE4E8',
     fontSize: 11,
     marginRight: 2,
-    fontWeight: '500',
+    fontWeight: '400',
   },
-  checkIcon: {
-    marginLeft: 2,
+  statusIcon: {
+    marginLeft: 3,
   },
-  receivedContainer: {
-    alignSelf: 'flex-start',
-    maxWidth: '80%',
-    marginBottom: 12,
-    marginLeft: 16,
-  },
-  receivedBubble: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 20,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
+  retryText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 2,
+    textDecorationLine: 'underline',
   },
   receivedText: {
     color: '#111827',
     fontSize: 15,
-    lineHeight: 21,
-    fontWeight: '500',
+    lineHeight: 20,
+    fontWeight: '400',
   },
   receivedTimeText: {
     color: '#9CA3AF',
     fontSize: 11,
-    marginTop: 4,
+    marginTop: 3,
     textAlign: 'right',
-    fontWeight: '500',
+    fontWeight: '400',
   },
   reactionBadge: {
     position: 'absolute',
@@ -194,7 +291,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 8,
     borderRadius: 8,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   quotedBoxSent: {
     backgroundColor: 'rgba(255, 255, 255, 0.18)',

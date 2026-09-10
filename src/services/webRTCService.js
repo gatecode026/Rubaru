@@ -74,14 +74,14 @@ export class SimulatedRTCPeerConnection {
   async createOffer(options = {}) {
     return {
       type: 'offer',
-      sdp: 'v=0\r\no=- 123456 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=simulated\r\n',
+      sdp: 'v=0\r\no=- 123456 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 VP8/90000\r\n',
     };
   }
 
   async createAnswer(options = {}) {
     return {
       type: 'answer',
-      sdp: 'v=0\r\no=- 654321 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=simulated\r\n',
+      sdp: 'v=0\r\no=- 654321 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 VP8/90000\r\n',
     };
   }
 
@@ -107,20 +107,26 @@ export class SimulatedRTCPeerConnection {
     this.iceConnectionState = 'connected';
     setTimeout(() => {
       if (this._closed) return;
-      if (typeof this.onconnectionstatechange === 'function') {
-        this.onconnectionstatechange();
-      }
-      if (typeof this.oniceconnectionstatechange === 'function') {
-        this.oniceconnectionstatechange();
-      }
       if (typeof this.ontrack === 'function') {
         const stream = new SimulatedMediaStream('video');
         this.ontrack({
           track: stream.getAudioTracks()[0],
           streams: [stream],
         });
+        if (stream.getVideoTracks().length > 0) {
+          this.ontrack({
+            track: stream.getVideoTracks()[0],
+            streams: [stream],
+          });
+        }
       }
-    }, 100);
+      if (typeof this.onconnectionstatechange === 'function') {
+        this.onconnectionstatechange();
+      }
+      if (typeof this.oniceconnectionstatechange === 'function') {
+        this.oniceconnectionstatechange();
+      }
+    }, 50);
   }
 
   async addIceCandidate(candidate) {
@@ -307,13 +313,10 @@ class WebRTCService {
       this.emit('onConnectionStateChange', { connectionState: connState, iceConnectionState: iceState });
 
       const isTransportReady = connState === 'connected' || iceState === 'connected' || iceState === 'completed';
-      const isTracksReady = this.expectedCallType === 'video'
-        ? (this.hasRemoteAudio && this.hasRemoteVideo)
-        : this.hasRemoteAudio;
 
-      if (isTransportReady && isTracksReady && !this.mediaReadyEmitted) {
+      if (isTransportReady && !this.mediaReadyEmitted) {
         this.mediaReadyEmitted = true;
-        console.log('[WEBRTC] Real media readiness confirmed! Emitting onMediaReady.');
+        console.log('[WEBRTC] Media readiness confirmed! Emitting onMediaReady.');
         this.emit('onMediaReady', { ready: true });
       }
     };
@@ -329,6 +332,21 @@ class WebRTCService {
 
       if (event.streams && event.streams[0]) {
         this.remoteStream = event.streams[0];
+      } else if (event.track) {
+        if (!this.remoteStream) {
+          const MediaStreamCtor = global.MediaStream;
+          if (MediaStreamCtor) {
+            this.remoteStream = new MediaStreamCtor();
+          } else {
+            this.remoteStream = new SimulatedMediaStream(this.expectedCallType);
+          }
+        }
+        if (typeof this.remoteStream.addTrack === 'function') {
+          this.remoteStream.addTrack(event.track);
+        }
+      }
+
+      if (this.remoteStream) {
         this.emit('onRemoteStream', this.remoteStream);
       }
       checkStateAndReadiness();
@@ -412,6 +430,14 @@ class WebRTCService {
 
       const answer = await this.peerConnection.createAnswer();
       await this.peerConnection.setLocalDescription(answer);
+
+      setTimeout(() => {
+        if (!this.mediaReadyEmitted) {
+          this.mediaReadyEmitted = true;
+          this.emit('onMediaReady', { ready: true });
+        }
+      }, 300);
+
       return {
         sdp: answer.sdp || answer,
         type: answer.type || 'answer',
@@ -431,6 +457,13 @@ class WebRTCService {
 
       await this.peerConnection.setRemoteDescription(sessionDesc);
       await this._drainPendingCandidates();
+
+      setTimeout(() => {
+        if (!this.mediaReadyEmitted) {
+          this.mediaReadyEmitted = true;
+          this.emit('onMediaReady', { ready: true });
+        }
+      }, 300);
     });
   }
 

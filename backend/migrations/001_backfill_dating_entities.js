@@ -76,7 +76,7 @@ async function runMigration() {
           age,
           gender: profile?.gender || 'Other',
           bio: profile?.bio || '',
-          avatarUri: profile?.avatarUri || 'https://i.pravatar.cc/150?img=60',
+          avatarUri: profile?.avatarUri || null,
           photos: profile?.photos || [],
           interests: profile?.interests || [],
           isDiscoverable: true,
