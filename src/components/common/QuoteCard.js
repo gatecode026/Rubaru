@@ -33,7 +33,7 @@ export default function QuoteCard({ quoteStart, quoteEmphasis, width }) {
       </View>
     </View>
   );
-}
+} 
  
 const styles = StyleSheet.create({
   card: {
@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 6 },  
     shadowOpacity: 0.08,
     shadowRadius: 14,
     elevation: 5,
