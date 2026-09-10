@@ -8,29 +8,47 @@ const DeviceSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    installationId: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
+    },
+    platform: {
+      type: String,
+      enum: ['ANDROID', 'IOS', 'android', 'ios', 'web'],
+      required: true,
+      set: (v) => (v ? v.toUpperCase() : v),
+    },
     pushToken: {
       type: String,
       required: true,
       index: true,
       trim: true,
     },
-    platform: {
-      type: String,
-      enum: ['ios', 'android', 'web'],
-      required: true,
-    },
-    deviceId: {
+    voipPushToken: {
       type: String,
       trim: true,
-      index: true,
+      default: null,
+      sparse: true,
+    },
+    provider: {
+      type: String,
+      enum: ['FCM', 'APNS', 'EXPO', 'MOCK'],
+      default: 'FCM',
+    },
+    environment: {
+      type: String,
+      enum: ['DEVELOPMENT', 'STAGING', 'PRODUCTION'],
+      default: 'DEVELOPMENT',
     },
     appVersion: {
       type: String,
       default: '1.0.0',
     },
-    locale: {
-      type: String,
-      default: 'en',
+    deviceMetadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
     permissionState: {
       type: String,
@@ -43,22 +61,22 @@ const DeviceSchema = new mongoose.Schema(
       default: 'ACTIVE',
       index: true,
     },
-    provider: {
-      type: String,
-      enum: ['FCM', 'APNS', 'EXPO', 'MOCK'],
-      default: 'FCM',
-    },
     lastSeenAt: {
       type: Date,
       default: Date.now,
+    },
+    invalidatedAt: {
+      type: Date,
+      default: null,
     },
   },
   { timestamps: true }
 );
 
-// Compound index for active user device lookups and deduplication
+// Compound indexes for fast lookups, multi-device queries and token safety
 DeviceSchema.index({ user: 1, status: 1 });
+DeviceSchema.index({ user: 1, installationId: 1 });
 DeviceSchema.index({ pushToken: 1, status: 1 });
-DeviceSchema.index({ user: 1, pushToken: 1 }, { unique: true });
+DeviceSchema.index({ user: 1, pushToken: 1 });
 
 module.exports = mongoose.model('Device', DeviceSchema);

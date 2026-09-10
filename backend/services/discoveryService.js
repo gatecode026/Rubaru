@@ -129,7 +129,7 @@ function hydratePublicCandidateDto(batchId, candidateItem, hideDistance = false)
       age: profile.age,
       distanceLabel,
       bio: profile.bio || '',
-      avatarUri: profile.avatarUri || 'https://i.pravatar.cc/150?img=60',
+      avatarUri: profile.avatarUri || null,
       photos: profile.photos || [],
       prompts: profile.prompts || [],
       interests: profile.interests || [],

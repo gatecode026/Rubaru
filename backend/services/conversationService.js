@@ -1,9 +1,12 @@
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const ConversationMember = require('../models/ConversationMember');
+const Message = require('../models/Message');
 const Match = require('../models/Match');
 const Block = require('../models/Block');
 const User = require('../models/User');
+const Profile = require('../models/Profile');
 const DatingProfile = require('../models/DatingProfile');
 const OutboxEvent = require('../models/OutboxEvent');
 const { ConversationTypes, ConversationStatuses, MemberRoles, MemberStates } = require('../models/enums');
@@ -73,20 +76,23 @@ function verifyConversationCursor(cursorString, currentUserId) {
  * Format privacy-safe other user summary for conversation DTO
  */
 function formatMemberProfileDto(profile, user) {
-  if (!profile) {
-    return {
-      userId: user ? user._id.toString() : '',
-      displayName: 'Rubaru User',
-      avatarUri: '',
-      isVerified: user ? Boolean(user.isAgeVerified) : false,
-    };
+  const rawDisplayName = profile?.displayName;
+  let resolvedName = 'Rubaru User';
+  if (rawDisplayName && rawDisplayName.trim() !== '' && !rawDisplayName.includes('undefined')) {
+    resolvedName = rawDisplayName.trim();
+  } else if (user?.email) {
+    resolvedName = user.email.split('@')[0];
+  } else if (user?.phone) {
+    resolvedName = `User ${user.phone.slice(-4)}`;
   }
 
+  const avatar = profile?.avatarUri || (Array.isArray(profile?.photos) && profile.photos[0]) || '';
+
   return {
-    userId: profile.user ? profile.user.toString() : '',
-    displayName: profile.displayName || 'Rubaru User',
-    avatarUri: profile.avatarUri || (Array.isArray(profile.photos) && profile.photos[0]) || '',
-    age: profile.age || null,
+    userId: profile?.user ? profile.user.toString() : (user ? user._id.toString() : ''),
+    displayName: resolvedName,
+    avatarUri: avatar,
+    age: profile?.age || null,
     isVerified: user ? Boolean(user.isAgeVerified) : false,
   };
 }
@@ -382,6 +388,11 @@ async function getConversationList(actorUserId, options = {}) {
   }
 
   // 3. Extract other member IDs for direct match conversations and bulk-hydrate profiles (zero N+1)
+  const convIds = pageMemberships.map((m) => {
+    const conv = m.conversationId || m.conversation;
+    return conv._id;
+  });
+
   const otherUserIds = pageMemberships
     .map((m) => {
       const conv = m.conversationId || m.conversation;
@@ -398,17 +409,109 @@ async function getConversationList(actorUserId, options = {}) {
     })
     .filter(Boolean);
 
-  const [otherProfiles, otherUsers] = await Promise.all([
+  const actorObjId = mongoose.Types.ObjectId.isValid(actorUserId)
+    ? new mongoose.Types.ObjectId(actorUserId)
+    : actorUserId;
+
+  const [socialProfiles, datingProfiles, otherUsers, allMembers, lastMessagesAgg, unreadAgg] = await Promise.all([
+    Profile.find({ user: { $in: otherUserIds } }).lean(),
     DatingProfile.find({ user: { $in: otherUserIds } }).lean(),
-    User.find({ _id: { $in: otherUserIds } }, '_id isAgeVerified accountStatus').lean(),
+    User.find({ _id: { $in: otherUserIds } }, '_id email phone isAgeVerified accountStatus').lean(),
+    ConversationMember.find({
+      conversationId: { $in: convIds },
+      state: MemberStates.ACTIVE,
+    }).lean(),
+    Message.aggregate([
+      {
+        $match: {
+          $or: [
+            { conversationId: { $in: convIds } },
+            { chat: { $in: convIds } },
+          ],
+          status: { $ne: 'DELETED' },
+        },
+      },
+      {
+        $sort: { sequence: -1, createdAt: -1 },
+      },
+      {
+        $group: {
+          _id: { $ifNull: ['$conversationId', '$chat'] },
+          doc: { $first: '$$ROOT' },
+        },
+      },
+    ]),
+    Message.aggregate([
+      {
+        $match: {
+          $or: [
+            { conversationId: { $in: convIds } },
+            { chat: { $in: convIds } },
+          ],
+          senderId: { $ne: actorObjId },
+          sender: { $ne: actorObjId },
+          status: { $ne: 'DELETED' },
+        },
+      },
+      {
+        $group: {
+          _id: { $ifNull: ['$conversationId', '$chat'] },
+          items: { $push: { sequence: '$sequence', isRead: '$isRead' } },
+        },
+      },
+    ]),
   ]);
 
-  const profileMap = new Map(otherProfiles.map((p) => [p.user.toString(), p]));
+  const profileMap = new Map();
+  datingProfiles.forEach((p) => {
+    if (p && p.user) profileMap.set(p.user.toString(), p);
+  });
+  socialProfiles.forEach((p) => {
+    if (p && p.user) {
+      const existing = profileMap.get(p.user.toString());
+      profileMap.set(p.user.toString(), { ...(existing || {}), ...p });
+    }
+  });
   const userMap = new Map(otherUsers.map((u) => [u._id.toString(), u]));
+
+  const peerMemberMap = new Map();
+  allMembers.forEach((m) => {
+    const memUserId = (m.userId || m.user)?.toString();
+    const cId = (m.conversationId || m.conversation)?.toString();
+    if (cId && memUserId && memUserId !== actorUserId.toString()) {
+      peerMemberMap.set(cId, m);
+    }
+  });
+
+  const lastMessageMap = new Map();
+  lastMessagesAgg.forEach((item) => {
+    if (item._id && item.doc) {
+      lastMessageMap.set(item._id.toString(), item.doc);
+    }
+  });
+
+  const unreadCountMap = new Map();
+  unreadAgg.forEach((u) => {
+    const convIdStr = u._id.toString();
+    const mem = pageMemberships.find((m) => {
+      const c = m.conversationId || m.conversation;
+      return c._id.toString() === convIdStr;
+    });
+    const myReadSeq = mem ? (mem.readThroughSequence || mem.lastReadSequence || 0) : 0;
+    const count = u.items.filter((item) => {
+      if (item.isRead) return false;
+      if (myReadSeq > 0 && item.sequence !== undefined && item.sequence !== null && item.sequence <= myReadSeq) {
+        return false;
+      }
+      return !item.isRead;
+    }).length;
+    unreadCountMap.set(convIdStr, count);
+  });
 
   // 4. Format clean DTO items
   const items = pageMemberships.map((m) => {
     const conv = m.conversationId || m.conversation;
+    const convIdStr = conv._id.toString();
     let otherIdStr = null;
 
     if (conv.canonicalParticipantKey) {
@@ -421,6 +524,46 @@ async function getConversationList(actorUserId, options = {}) {
 
     const oProfile = otherIdStr ? profileMap.get(otherIdStr) : null;
     const oUser = otherIdStr ? userMap.get(otherIdStr) : null;
+    const lastMsg = lastMessageMap.get(convIdStr) || null;
+    const unreadCount = unreadCountMap.get(convIdStr) || 0;
+
+    let lastMessageDto = null;
+    if (lastMsg) {
+      const isFromMe = (lastMsg.senderId || lastMsg.sender)?.toString() === actorUserId.toString();
+      const peer = peerMemberMap.get(convIdStr);
+      let msgStatus = 'SENT';
+      if (isFromMe) {
+        if (peer && peer.readThroughSequence && peer.readThroughSequence >= (lastMsg.sequence || 0)) {
+          msgStatus = 'READ';
+        } else if (peer && peer.deliveredThroughSequence && peer.deliveredThroughSequence >= (lastMsg.sequence || 0)) {
+          msgStatus = 'DELIVERED';
+        } else if (lastMsg.isRead) {
+          msgStatus = 'READ';
+        }
+      }
+
+      let messageType = 'TEXT';
+      if (lastMsg.type) {
+        messageType = lastMsg.type.toUpperCase();
+      }
+
+      const firstAttachment = Array.isArray(lastMsg.attachments) && lastMsg.attachments.length > 0 ? lastMsg.attachments[0] : null;
+
+      lastMessageDto = {
+        id: lastMsg._id.toString(),
+        text: lastMsg.text || '',
+        type: messageType,
+        mediaType: firstAttachment?.type || (lastMsg.attachmentUri ? (messageType === 'IMAGE' || messageType === 'PHOTO' ? 'IMAGE' : (messageType === 'VOICE' || messageType === 'AUDIO' ? 'AUDIO' : null)) : null),
+        attachmentUri: firstAttachment?.originalObjectKey || lastMsg.attachmentUri || '',
+        isPoll: Boolean(lastMsg.isPoll || lastMsg.pollQuestion),
+        pollQuestion: lastMsg.pollQuestion || '',
+        senderId: (lastMsg.senderId || lastMsg.sender)?.toString(),
+        isFromMe,
+        status: msgStatus,
+        sequence: lastMsg.sequence || 0,
+        createdAt: lastMsg.createdAt || new Date().toISOString(),
+      };
+    }
 
     return {
       id: conv._id.toString(),
@@ -432,7 +575,9 @@ async function getConversationList(actorUserId, options = {}) {
       otherParticipant: conv.type === ConversationTypes.DIRECT_MATCH ? formatMemberProfileDto(oProfile, oUser) : null,
       memberCount: conv.memberCount || 2,
       lastSequence: conv.lastSequence || 0,
-      lastMessageAt: conv.lastMessageAt || conv.updatedAt,
+      lastMessageAt: lastMsg?.createdAt || conv.lastMessageAt || conv.updatedAt,
+      lastMessage: lastMessageDto,
+      unreadCount,
       myMembership: {
         role: m.role,
         state: m.state,
@@ -445,7 +590,7 @@ async function getConversationList(actorUserId, options = {}) {
         readAt: m.readAt || null,
         notificationPreference: m.notificationPreference || 'ALL',
       },
-      updatedAt: conv.updatedAt,
+      updatedAt: lastMsg?.createdAt || conv.updatedAt,
     };
   });
 
@@ -460,9 +605,16 @@ async function getConversationList(actorUserId, options = {}) {
  * Retrieve single conversation details with authorization
  */
 async function getConversationDetails(actorUserId, conversationId) {
+  let effectiveActorId = actorUserId;
+  let effectiveConvId = conversationId;
+  if (actorUserId && typeof actorUserId === 'object' && actorUserId.actorUserId) {
+    effectiveActorId = actorUserId.actorUserId;
+    effectiveConvId = actorUserId.conversationId;
+  }
+
   const authContext = await authorizeConversationAccess({
-    actorUserId,
-    conversationId,
+    actorUserId: effectiveActorId,
+    conversationId: effectiveConvId,
     operation: 'VIEW',
   });
 
@@ -470,11 +622,13 @@ async function getConversationDetails(actorUserId, conversationId) {
 
   let otherParticipantDto = null;
   if (otherMemberId) {
-    const [profile, user] = await Promise.all([
+    const [socialProfile, datingProfile, user] = await Promise.all([
+      Profile.findOne({ user: otherMemberId }).lean(),
       DatingProfile.findOne({ user: otherMemberId }).lean(),
-      User.findById(otherMemberId, '_id isAgeVerified accountStatus').lean(),
+      User.findById(otherMemberId, '_id email phone isAgeVerified accountStatus').lean(),
     ]);
-    otherParticipantDto = formatMemberProfileDto(profile, user);
+    const mergedProfile = { ...(datingProfile || {}), ...(socialProfile || {}) };
+    otherParticipantDto = formatMemberProfileDto(mergedProfile, user);
   }
 
   // Load all active members for this conversation
@@ -539,6 +693,415 @@ async function getConversationDetails(actorUserId, conversationId) {
   };
 }
 
+/**
+ * Create a real database-backed group conversation
+ */
+async function createGroupConversation({ actorUserId, name, avatarUri = '', memberUserIds = [] }) {
+  if (!actorUserId) {
+    throw new ConversationServiceError('AUTHENTICATION_REQUIRED', 'Authentication is required', 401);
+  }
+
+  const trimmedName = typeof name === 'string' ? name.trim() : '';
+  if (!trimmedName || trimmedName.length < 2 || trimmedName.length > 80) {
+    throw new ConversationServiceError('INVALID_GROUP_NAME', 'Group name must be between 2 and 80 characters', 400);
+  }
+
+  // Deduplicate and filter member IDs
+  const validMemberIds = [...new Set(
+    memberUserIds
+      .map((id) => (id ? id.toString() : null))
+      .filter((id) => id && id !== actorUserId.toString())
+  )];
+
+  // Validate users exist and are active
+  const targetUsers = await User.find({
+    _id: { $in: validMemberIds },
+    accountStatus: { $in: ['ACTIVE', 'active'] },
+  });
+
+  const activeMemberIds = targetUsers.map((u) => u._id.toString());
+  const allParticipantIds = [actorUserId, ...activeMemberIds];
+
+  const conversation = new Conversation({
+    type: ConversationTypes.GROUP,
+    status: ConversationStatuses.ACTIVE,
+    isGroup: true,
+    groupName: trimmedName,
+    groupAvatar: avatarUri || '',
+    createdBy: actorUserId,
+    participants: allParticipantIds,
+    memberCount: allParticipantIds.length,
+    lastSequence: 0,
+  });
+
+  await conversation.save();
+
+  // Create Owner membership for creator
+  await ConversationMember.create({
+    conversationId: conversation._id,
+    userId: actorUserId,
+    role: MemberRoles.OWNER,
+    state: MemberStates.ACTIVE,
+    joinedAt: new Date(),
+    joinedSequence: 0,
+  });
+
+  // Create Member memberships for initial members
+  for (const memberId of activeMemberIds) {
+    await ConversationMember.create({
+      conversationId: conversation._id,
+      userId: memberId,
+      role: MemberRoles.MEMBER,
+      state: MemberStates.ACTIVE,
+      joinedAt: new Date(),
+      joinedSequence: 0,
+    });
+  }
+
+  return {
+    id: conversation._id.toString(),
+    type: conversation.type,
+    isGroup: true,
+    groupName: conversation.groupName,
+    groupAvatar: conversation.groupAvatar,
+    memberCount: conversation.memberCount,
+    createdBy: actorUserId.toString(),
+    createdAt: conversation.createdAt,
+  };
+}
+
+/**
+ * Update Group Metadata (name, avatar) - Requires OWNER or ADMIN
+ */
+async function updateGroupMetadata({ actorUserId, conversationId, name, avatarUri }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'MANAGE_MEMBERS',
+  });
+
+  const { conversation } = authContext;
+  if (conversation.type !== ConversationTypes.GROUP && !conversation.isGroup) {
+    throw new ConversationServiceError('INVALID_CONVERSATION_TYPE', 'Only group metadata can be updated', 400);
+  }
+
+  if (name !== undefined) {
+    const trimmed = name ? name.trim() : '';
+    if (!trimmed || trimmed.length < 2 || trimmed.length > 80) {
+      throw new ConversationServiceError('INVALID_GROUP_NAME', 'Group name must be between 2 and 80 characters', 400);
+    }
+    conversation.groupName = trimmed;
+  }
+
+  if (avatarUri !== undefined) {
+    conversation.groupAvatar = avatarUri || '';
+  }
+
+  await conversation.save();
+
+  return {
+    id: conversation._id.toString(),
+    groupName: conversation.groupName,
+    groupAvatar: conversation.groupAvatar,
+    updatedAt: conversation.updatedAt,
+  };
+}
+
+/**
+ * Get Group Members list with roles and profile details
+ */
+async function getGroupMembers({ actorUserId, conversationId }) {
+  await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'VIEW',
+  });
+
+  const members = await ConversationMember.find({
+    conversationId,
+    state: MemberStates.ACTIVE,
+  })
+    .populate('userId', '_id isAgeVerified accountStatus')
+    .lean();
+
+  const userIds = members.map((m) => (m.userId ? m.userId._id : m.user));
+  const profiles = await DatingProfile.find({ user: { $in: userIds } }).lean();
+  const profileMap = new Map(profiles.map((p) => [p.user.toString(), p]));
+
+  return members.map((m) => {
+    const u = m.userId || {};
+    const uId = u._id ? u._id.toString() : (m.user ? m.user.toString() : '');
+    const profile = profileMap.get(uId);
+
+    return {
+      userId: uId,
+      role: m.role,
+      state: m.state,
+      joinedAt: m.joinedAt,
+      profile: formatMemberProfileDto(profile, u),
+    };
+  });
+}
+
+/**
+ * Add Members to Group - Requires OWNER or ADMIN
+ */
+async function addGroupMembers({ actorUserId, conversationId, memberUserIds = [] }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'MANAGE_MEMBERS',
+  });
+
+  const { conversation, member: actorMember } = authContext;
+  if (conversation.type !== ConversationTypes.GROUP && !conversation.isGroup) {
+    throw new ConversationServiceError('INVALID_CONVERSATION_TYPE', 'Cannot add members to non-group conversation', 400);
+  }
+
+  if (actorMember.role !== MemberRoles.OWNER && actorMember.role !== MemberRoles.ADMIN) {
+    throw new ConversationServiceError('FORBIDDEN', 'Only group owner or admins can add members', 403);
+  }
+
+  const validIds = [...new Set(
+    memberUserIds.map((id) => (id ? id.toString() : null)).filter(Boolean)
+  )];
+
+  const addedMembers = [];
+  for (const targetId of validIds) {
+    let existing = await ConversationMember.findOne({
+      conversationId: conversation._id,
+      userId: targetId,
+    });
+
+    if (existing) {
+      if (existing.state !== MemberStates.ACTIVE) {
+        existing.state = MemberStates.ACTIVE;
+        existing.role = MemberRoles.MEMBER;
+        existing.joinedAt = new Date();
+        existing.joinedSequence = conversation.lastSequence || 0;
+        await existing.save();
+        addedMembers.push(targetId);
+      }
+    } else {
+      await ConversationMember.create({
+        conversationId: conversation._id,
+        userId: targetId,
+        role: MemberRoles.MEMBER,
+        state: MemberStates.ACTIVE,
+        joinedAt: new Date(),
+        joinedSequence: conversation.lastSequence || 0,
+      });
+      addedMembers.push(targetId);
+    }
+  }
+
+  const activeCount = await ConversationMember.countDocuments({
+    conversationId: conversation._id,
+    state: MemberStates.ACTIVE,
+  });
+
+  conversation.memberCount = activeCount;
+  if (Array.isArray(conversation.participants)) {
+    for (const addedId of addedMembers) {
+      if (!conversation.participants.some((p) => p.toString() === addedId)) {
+        conversation.participants.push(addedId);
+      }
+    }
+  }
+  await conversation.save();
+
+  return {
+    conversationId: conversation._id.toString(),
+    addedCount: addedMembers.length,
+    memberCount: activeCount,
+  };
+}
+
+/**
+ * Remove Group Member - OWNER removes anyone; ADMIN removes MEMBER; Cannot remove OWNER
+ */
+async function removeGroupMember({ actorUserId, conversationId, targetUserId }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'MANAGE_MEMBERS',
+  });
+
+  const { conversation, member: actorMember } = authContext;
+  if (conversation.type !== ConversationTypes.GROUP && !conversation.isGroup) {
+    throw new ConversationServiceError('INVALID_CONVERSATION_TYPE', 'Cannot remove members from non-group conversation', 400);
+  }
+
+  if (actorMember.role !== MemberRoles.OWNER && actorMember.role !== MemberRoles.ADMIN) {
+    throw new ConversationServiceError('FORBIDDEN', 'Only group owner or admins can remove members', 403);
+  }
+
+  const targetMember = await ConversationMember.findOne({
+    conversationId: conversation._id,
+    userId: targetUserId,
+    state: MemberStates.ACTIVE,
+  });
+
+  if (!targetMember) {
+    throw new ConversationServiceError('MEMBER_NOT_FOUND', 'Target user is not an active member of this group', 404);
+  }
+
+  if (targetMember.role === MemberRoles.OWNER) {
+    throw new ConversationServiceError('CANNOT_REMOVE_OWNER', 'The group owner cannot be removed from the group', 403);
+  }
+
+  if (actorMember.role === MemberRoles.ADMIN && targetMember.role === MemberRoles.ADMIN) {
+    throw new ConversationServiceError('CANNOT_REMOVE_ADMIN', 'Admins cannot remove other admins. Only the owner can remove admins.', 403);
+  }
+
+  targetMember.state = MemberStates.REMOVED;
+  targetMember.removedAt = new Date();
+  targetMember.removedBy = actorUserId;
+  await targetMember.save();
+
+  const activeCount = await ConversationMember.countDocuments({
+    conversationId: conversation._id,
+    state: MemberStates.ACTIVE,
+  });
+
+  conversation.memberCount = activeCount;
+  await conversation.save();
+
+  return {
+    conversationId: conversation._id.toString(),
+    removedUserId: targetUserId.toString(),
+    memberCount: activeCount,
+  };
+}
+
+/**
+ * Update Member Role - Only OWNER can promote or demote ADMINs
+ */
+async function updateMemberRole({ actorUserId, conversationId, targetUserId, newRole }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'MANAGE_MEMBERS',
+  });
+
+  const { conversation, member: actorMember } = authContext;
+  if (actorMember.role !== MemberRoles.OWNER) {
+    throw new ConversationServiceError('OWNER_REQUIRED', 'Only the group owner can update member roles', 403);
+  }
+
+  if (![MemberRoles.ADMIN, MemberRoles.MEMBER].includes(newRole)) {
+    throw new ConversationServiceError('INVALID_ROLE', 'Role must be either ADMIN or MEMBER', 400);
+  }
+
+  const targetMember = await ConversationMember.findOne({
+    conversationId: conversation._id,
+    userId: targetUserId,
+    state: MemberStates.ACTIVE,
+  });
+
+  if (!targetMember) {
+    throw new ConversationServiceError('MEMBER_NOT_FOUND', 'Target user is not an active member', 404);
+  }
+
+  if (targetMember.role === MemberRoles.OWNER) {
+    throw new ConversationServiceError('CANNOT_MODIFY_OWNER_ROLE', 'Cannot change owner role directly. Use transfer ownership.', 403);
+  }
+
+  targetMember.role = newRole;
+  await targetMember.save();
+
+  return {
+    conversationId: conversation._id.toString(),
+    userId: targetUserId.toString(),
+    role: targetMember.role,
+  };
+}
+
+/**
+ * Transfer Group Ownership - Only current OWNER
+ */
+async function transferOwnership({ actorUserId, conversationId, targetUserId }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'MANAGE_MEMBERS',
+  });
+
+  const { conversation, member: actorMember } = authContext;
+  if (actorMember.role !== MemberRoles.OWNER) {
+    throw new ConversationServiceError('OWNER_REQUIRED', 'Only current owner can transfer ownership', 403);
+  }
+
+  const targetMember = await ConversationMember.findOne({
+    conversationId: conversation._id,
+    userId: targetUserId,
+    state: MemberStates.ACTIVE,
+  });
+
+  if (!targetMember) {
+    throw new ConversationServiceError('MEMBER_NOT_FOUND', 'Target user is not an active member', 404);
+  }
+
+  actorMember.role = MemberRoles.ADMIN;
+  targetMember.role = MemberRoles.OWNER;
+  conversation.createdBy = targetUserId;
+
+  await Promise.all([actorMember.save(), targetMember.save(), conversation.save()]);
+
+  return {
+    conversationId: conversation._id.toString(),
+    previousOwnerId: actorUserId.toString(),
+    newOwnerId: targetUserId.toString(),
+  };
+}
+
+/**
+ * Leave Group
+ */
+async function leaveGroup({ actorUserId, conversationId }) {
+  const authContext = await authorizeConversationAccess({
+    actorUserId,
+    conversationId,
+    operation: 'VIEW',
+  });
+
+  const { conversation, member } = authContext;
+  if (conversation.type !== ConversationTypes.GROUP && !conversation.isGroup) {
+    throw new ConversationServiceError('INVALID_CONVERSATION_TYPE', 'Cannot leave a direct conversation', 400);
+  }
+
+  const activeCount = await ConversationMember.countDocuments({
+    conversationId: conversation._id,
+    state: MemberStates.ACTIVE,
+  });
+
+  if (member.role === MemberRoles.OWNER && activeCount > 1) {
+    throw new ConversationServiceError(
+      'OWNER_CANNOT_LEAVE_WITHOUT_TRANSFER',
+      'Group owner must transfer ownership to another member before leaving',
+      400
+    );
+  }
+
+  member.state = MemberStates.LEFT;
+  member.leftAt = new Date();
+  await member.save();
+
+  conversation.memberCount = Math.max(0, activeCount - 1);
+  if (conversation.memberCount === 0) {
+    conversation.status = ConversationStatuses.CLOSED;
+    conversation.closedAt = new Date();
+    conversation.closeReason = 'All members left';
+  }
+  await conversation.save();
+
+  return {
+    conversationId: conversation._id.toString(),
+    leftUserId: actorUserId.toString(),
+    remainingMemberCount: conversation.memberCount,
+  };
+}
+
 module.exports = {
   ensureDirectMatchConversation,
   closeConversationForUnmatch,
@@ -547,5 +1110,14 @@ module.exports = {
   getConversationDetails,
   createConversationCursor,
   verifyConversationCursor,
+  createGroupConversation,
+  updateGroupMetadata,
+  getGroupMembers,
+  addGroupMembers,
+  removeGroupMember,
+  updateMemberRole,
+  transferOwnership,
+  leaveGroup,
   ConversationServiceError,
 };
+

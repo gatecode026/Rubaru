@@ -123,11 +123,31 @@ async function enrichProfileStats(profileDoc) {
 // @access  Private
 const getMe = async (req, res) => {
   try {
-    const profile = await Profile.findOne({ user: req.user._id }).populate('user', 'email phone points');
+    let profile = await Profile.findOne({ user: req.user._id }).populate('user', 'email phone points');
     if (!profile) {
-      return res.status(404).json({ message: 'Profile not found' });
+      const userDoc = await User.findById(req.user._id);
+      const defaultName = userDoc?.email ? userDoc.email.split('@')[0] : (userDoc?.phone ? `User_${userDoc.phone.slice(-4)}` : 'Rubaru User');
+      profile = await Profile.create({
+        user: req.user._id,
+        displayName: defaultName,
+        dateOfBirth: new Date('1998-01-01'),
+        gender: 'Female',
+        interests: [],
+        avatarUri: null,
+        photos: [],
+        bio: '',
+        locationName: '',
+      });
+      profile = await Profile.findById(profile._id).populate('user', 'email phone points');
     }
     const enriched = await enrichProfileStats(profile);
+    const Wallet = require('../models/Wallet');
+    const wallet = await Wallet.findOne({ userId: req.user._id });
+    const livePoints = wallet?.availableBalance ?? profile.user?.points ?? 500;
+    enriched.points = livePoints;
+    if (enriched.user && typeof enriched.user === 'object') {
+      enriched.user.points = livePoints;
+    }
     res.status(200).json(enriched);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -174,7 +194,7 @@ const editProfile = async (req, res) => {
         displayName: displayName ? displayName.trim() : 'Rubaru User',
         dateOfBirth: new Date('2000-01-01'),
         gender: gender || 'Other',
-        avatarUri: 'https://i.pravatar.cc/150?img=60',
+        avatarUri: null,
         photos: [],
         interests: [],
       });
@@ -205,7 +225,7 @@ const editProfile = async (req, res) => {
 
     // Handle single avatar upload or removal
     if (req.body.removeAvatar === 'true' || req.body.removeAvatar === true) {
-      profile.avatarUri = 'https://i.pravatar.cc/150?img=60';
+      profile.avatarUri = null;
     } else if (req.files && req.files.avatar && req.files.avatar.length > 0) {
       try {
         const avatarFile = req.files.avatar[0];

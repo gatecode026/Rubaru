@@ -50,8 +50,6 @@ async function advanceDeliveryWatermark({ actorUserId, conversationId, throughSe
     throw new ReceiptServiceError('CONVERSATION_ID_REQUIRED', 'conversationId is required', 400);
   }
 
-  const validSeq = validateSequenceInput(throughSequence);
-
   // 1. Centralized Conversation Authorization
   const authContext = await authorizeConversationAccess({
     actorUserId,
@@ -63,13 +61,9 @@ async function advanceDeliveryWatermark({ actorUserId, conversationId, throughSe
 
   // 2. Bound sequence against authoritative conversation sequence (R3-06-REQ-005)
   const maxConvSeq = conversation.lastSequence || 0;
-  if (validSeq > maxConvSeq) {
-    throw new ReceiptServiceError(
-      'RECEIPT_SEQUENCE_AHEAD',
-      `throughSequence (${validSeq}) exceeds committed conversation sequence (${maxConvSeq})`,
-      400
-    );
-  }
+  const validSeq = (throughSequence === undefined || throughSequence === null)
+    ? maxConvSeq
+    : Math.min(validateSequenceInput(throughSequence), maxConvSeq);
 
   // 3. Monotonic advancement check (R3-06-REQ-003, R3-06-REQ-018)
   const currentDelivered = member.deliveredThroughSequence || member.lastDeliveredSequence || 0;
@@ -158,8 +152,6 @@ async function advanceReadWatermark({ actorUserId, conversationId, throughSequen
     throw new ReceiptServiceError('CONVERSATION_ID_REQUIRED', 'conversationId is required', 400);
   }
 
-  const validSeq = validateSequenceInput(throughSequence);
-
   // 1. Centralized Conversation Authorization
   const authContext = await authorizeConversationAccess({
     actorUserId,
@@ -171,13 +163,9 @@ async function advanceReadWatermark({ actorUserId, conversationId, throughSequen
 
   // 2. Bound sequence against authoritative conversation sequence
   const maxConvSeq = conversation.lastSequence || 0;
-  if (validSeq > maxConvSeq) {
-    throw new ReceiptServiceError(
-      'RECEIPT_SEQUENCE_AHEAD',
-      `throughSequence (${validSeq}) exceeds committed conversation sequence (${maxConvSeq})`,
-      400
-    );
-  }
+  const validSeq = (throughSequence === undefined || throughSequence === null)
+    ? maxConvSeq
+    : Math.min(validateSequenceInput(throughSequence), maxConvSeq);
 
   // 3. Monotonic & Read-Implies-Delivered advancement check (R3-06-REQ-004)
   const currentDelivered = member.deliveredThroughSequence || member.lastDeliveredSequence || 0;
@@ -249,6 +237,63 @@ async function advanceReadWatermark({ actorUserId, conversationId, throughSequen
     });
   } catch (outboxErr) {
     console.warn('[RECEIPT SERVICE] Outbox recording warning:', outboxErr.message);
+  }
+
+  // 6. Also mark Message documents isRead: true for messages in this conversation
+  try {
+    const Message = require('../models/Message');
+    await Message.updateMany(
+      {
+        $or: [{ conversationId: conversation._id }, { chat: conversation._id }],
+        $and: [
+          {
+            $or: [
+              { senderId: { $ne: actorUserId } },
+              { sender: { $ne: actorUserId } },
+            ],
+          },
+        ],
+        isRead: false,
+      },
+      { $set: { isRead: true, readAt: now } }
+    );
+  } catch (mErr) {
+    console.warn('[RECEIPT SERVICE] Mark messages read warning:', mErr.message);
+  }
+
+  // 7. Real-time Socket Dispatch
+  try {
+    const { getSocketIO } = require('./socketDispatchService');
+    const io = getSocketIO();
+    if (io) {
+      const cIdStr = conversation._id.toString();
+      const payload = {
+        chatId: cIdStr,
+        conversationId: cIdStr,
+        readerId: actorUserId.toString(),
+        actorUserId: actorUserId.toString(),
+        readThroughSequence: finalRead,
+        unreadCount: 0,
+      };
+      io.to(`conversation:${cIdStr}`).emit('messages_read', payload);
+      io.to(`chat_${cIdStr}`).emit('messages_read', payload);
+      io.to(`conversation:${cIdStr}`).emit('receipt.read', payload);
+      io.to(`conversation:${cIdStr}`).emit('message_read', payload);
+      io.to(`user:${actorUserId}`).emit('messages_read', payload);
+      io.to(`user_${actorUserId}`).emit('messages_read', payload);
+
+      if (Array.isArray(conversation.participants)) {
+        conversation.participants.forEach((p) => {
+          const pId = (p._id || p).toString();
+          io.to(`user:${pId}`).emit('messages_read', payload);
+          io.to(`user_${pId}`).emit('messages_read', payload);
+          io.to(`user:${pId}`).emit('message_read', payload);
+          io.to(`user:${pId}`).emit('receipt.read', payload);
+        });
+      }
+    }
+  } catch (sockErr) {
+    console.warn('[RECEIPT SERVICE] Socket broadcast warning:', sockErr.message);
   }
 
   return {

@@ -89,6 +89,13 @@ export default function BuyPointsScreen() {
   const { isDarkMode } = useTheme();
   const balance = usePointsStore((state) => state.balance);
   const addPoints = usePointsStore((state) => state.addPoints);
+  const fetchBalance = usePointsStore((state) => state.fetchBalance);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (fetchBalance) fetchBalance();
+    }, [])
+  );
 
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);

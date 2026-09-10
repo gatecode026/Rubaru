@@ -39,8 +39,7 @@ const DatingProfileSchema = new mongoose.Schema(
     },
     avatarUri: {
       type: String,
-      required: true,
-      default: 'https://i.pravatar.cc/150?img=60',
+      default: null,
     },
     photos: {
       type: [String],

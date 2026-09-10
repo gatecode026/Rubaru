@@ -1,7 +1,6 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-
 // Ensure upload directories exist
 const uploadDirs = [
   'uploads',
@@ -9,7 +8,6 @@ const uploadDirs = [
   'uploads/videos',
   'uploads/audio'
 ];
-
 uploadDirs.forEach(dir => {
   const dirPath = path.join(__dirname, '..', dir);
   if (!fs.existsSync(dirPath)) {
@@ -56,7 +54,6 @@ const fileFilter = (req, file, cb) => {
     cb(new Error('Invalid file type. Only images, videos, and audio are allowed.'), false);
   }
 };
-
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,

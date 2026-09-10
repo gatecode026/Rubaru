@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import interactionService from '../../services/interactionService';
 import { getSocket } from '../../services/socket';
+import { useSelector } from 'react-redux';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -30,7 +31,7 @@ export default function PostCommentsModal({
   onClose,
   postId,
   postAuthor = 'Rubaru User',
-  postAuthorAvatar = 'https://i.pravatar.cc/150?img=60',
+  postAuthorAvatar = null,
   postCaption = '',
   postImageUri,
 }) {
@@ -40,6 +41,7 @@ export default function PostCommentsModal({
   const [expandedReplies, setExpandedReplies] = useState({});
   const [filterSort, setFilterSort] = useState('top'); // 'top' | 'newest'
   const scrollViewRef = useRef(null);
+  const myAvatar = useSelector((state) => state.profile?.profile?.avatarUri || null);
 
   useEffect(() => {
     if (visible && postId && /^[0-9a-fA-F]{24}$/.test(String(postId))) {
@@ -53,7 +55,7 @@ export default function PostCommentsModal({
                 id: c._id || c.id,
                 user: c.author?.username || c.author?.displayName || 'user',
                 name: c.author?.displayName || c.author?.username || 'User',
-                avatar: c.author?.avatarUri || 'https://i.pravatar.cc/150?img=33',
+                avatar: c.author?.avatarUri || null,
                 isVerified: Boolean(c.author?.isVerified),
                 text: c.text,
                 time: c.createdAt
@@ -65,7 +67,7 @@ export default function PostCommentsModal({
                   id: r._id || r.id,
                   user: r.author?.username || r.author?.displayName || 'user',
                   name: r.author?.displayName || r.author?.username || 'User',
-                  avatar: r.author?.avatarUri || 'https://i.pravatar.cc/150?img=33',
+                  avatar: r.author?.avatarUri || null,
                   text: r.text,
                   time: r.createdAt
                     ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -102,7 +104,7 @@ export default function PostCommentsModal({
             id: c.id || c._id,
             user: c.author?.username || c.author?.displayName || 'user',
             name: c.author?.displayName || c.author?.username || 'User',
-            avatar: c.author?.avatarUri || 'https://i.pravatar.cc/150?img=33',
+            avatar: c.author?.avatarUri || null,
             isVerified: Boolean(c.author?.isVerified),
             text: c.text,
             time: 'Just now',
@@ -242,7 +244,7 @@ export default function PostCommentsModal({
         id: `r_${Date.now()}`,
         user: 'you',
         name: 'You',
-        avatar: 'https://i.pravatar.cc/150?img=60',
+        avatar: myAvatar || null,
         text: `@${replyingTo.user} ${textToSend}`,
         time: 'Just now',
         likesCount: 0,
@@ -270,7 +272,7 @@ export default function PostCommentsModal({
         id: `c_${Date.now()}`,
         user: 'you',
         name: 'You',
-        avatar: 'https://i.pravatar.cc/150?img=60',
+        avatar: myAvatar || null,
         isVerified: false,
         text: textToSend,
         time: 'Just now',
@@ -563,10 +565,13 @@ export default function PostCommentsModal({
 
             {/* Bottom Comment Input Bar */}
             <View style={styles.inputBarContainer}>
-              <Image
-                source={{ uri: 'https://i.pravatar.cc/150?img=60' }}
-                style={styles.myInputAvatar}
-              />
+              {myAvatar ? (
+                <Image source={{ uri: myAvatar }} style={styles.myInputAvatar} />
+              ) : (
+                <View style={[styles.myInputAvatar, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                  <Ionicons name="person" size={16} color="#9CA3AF" />
+                </View>
+              )}
               <View style={styles.inputWrap}>
                 <TextInput
                   placeholder={

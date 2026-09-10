@@ -257,12 +257,78 @@ export default function TransactionsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const balance = usePointsStore((state) => state.balance);
+  const fetchBalance = usePointsStore((state) => state.fetchBalance);
 
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchBar, setShowSearchBar] = useState(false);
   const [selectedTxn, setSelectedTxn] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
+
+  const loadTransactions = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/v1/wallet/transactions');
+      if (res.data && res.data.ok && Array.isArray(res.data.data)) {
+        const mapped = res.data.data.map((txn) => {
+          const isCredit = txn.entryType === 'CREDIT';
+          const title = txn.communicationType
+            ? `${txn.communicationType} with ${txn.counterparty?.displayName || 'Rubaru User'}`
+            : (txn.transactionType === 'INITIAL_MIGRATION' ? 'Initial Migrated Balance' : 'Wallet Transfer');
+          const subtitle = txn.minuteIndex
+            ? `Minute ${txn.minuteIndex} • ${isCredit ? 'Coins Earned' : 'Coins Deducted'}`
+            : (txn.transactionType || 'Account Adjustment');
+
+          const icon = txn.communicationType === 'VIDEO'
+            ? 'videocam-outline'
+            : (txn.communicationType === 'AUDIO'
+              ? 'call-outline'
+              : (txn.communicationType === 'MESSAGE' ? 'chatbubble-ellipses-outline' : 'wallet-outline'));
+
+          const iconColor = isCredit ? '#10B981' : '#EF4444';
+          const iconBg = isCredit ? '#ECFDF5' : '#FEF2F2';
+
+          const createdDate = new Date(txn.createdAt);
+          const dateStr = createdDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+          const timeStr = createdDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+          return {
+            id: txn.transactionId,
+            sessionId: txn.sessionId,
+            title,
+            subtitle,
+            category: isCredit ? 'reward' : 'usage',
+            type: isCredit ? 'credit' : 'debit',
+            points: `${isCredit ? '+' : '-'}${txn.amount}`,
+            amount: `${txn.amount} Coins`,
+            date: dateStr,
+            timestamp: `${dateStr}, ${timeStr}`,
+            status: 'Completed',
+            statusColor: '#10B981',
+            icon,
+            iconColor,
+            iconBg,
+            referenceNo: `TXN-${txn.transactionId.substring(0, 12).toUpperCase()}`,
+            counterparty: txn.counterparty,
+            balanceBefore: txn.balanceBefore,
+            balanceAfter: txn.balanceAfter,
+          };
+        });
+        setTransactions(mapped);
+      }
+    } catch (err) {
+      console.warn('[TRANSACTIONS SCREEN] Error loading transactions:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTransactions();
+    if (fetchBalance) fetchBalance();
+  }, []);
 
   const handleBack = () => {
     if (selectedTxn) {
@@ -299,7 +365,7 @@ export default function TransactionsScreen() {
   };
 
   const filteredTransactions = useMemo(() => {
-    return FAKE_TRANSACTIONS.filter((txn) => {
+    return transactions.filter((txn) => {
       const matchesTab = activeTab === 'all' || txn.category === activeTab;
       const matchesSearch =
         txn.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -307,7 +373,7 @@ export default function TransactionsScreen() {
         txn.id.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesTab && matchesSearch;
     });
-  }, [activeTab, searchQuery]);
+  }, [transactions, activeTab, searchQuery]);
 
   const handleShareReceipt = async (txn) => {
     try {

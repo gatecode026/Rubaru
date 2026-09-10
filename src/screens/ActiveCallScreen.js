@@ -1,267 +1,302 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Image,
-  ImageBackground,
   StatusBar,
   Modal,
   Pressable,
   Share,
+  AppState,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import api from '../services/api';
-import { getSocket } from '../services/socket';
-import { v4 as uuidv4 } from 'uuid';
+import { useCallController } from '../hooks/useCallController';
+import { useCallStore } from '../store/callStore';
+import { RTCView } from '../services/webRTCService';
+import { usePointsStore } from '../store/pointsStore';
+import { PaidSessionLiveBadge, PaidSessionReceiptModal } from '../components/common/PaidCommunicationModal';
+
+function formatDuration(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 export default function ActiveCallScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
 
-  const contactName = params.contactName || 'User';
-  const phoneNumber = params.phoneNumber || '';
-  const rawAvatar = params.avatarUri;
-  const avatarUri = (rawAvatar && typeof rawAvatar === 'string' && rawAvatar.trim().length > 0)
+  const callController = useCallController();
+  const {
+    callId,
+    callStatus,
+    callType,
+    peerName,
+    peerAvatar,
+    ratePerMinute,
+    durationSeconds,
+    isAudioMuted,
+    isVideoEnabled,
+    isFrontCamera,
+    isSpeakerOn,
+    localStream,
+    remoteStream,
+    billingSummary,
+    toggleAudio,
+    toggleVideo,
+    switchCamera,
+    toggleSpeaker,
+    hangupCall,
+    initiateCall,
+    cleanup,
+  } = callController;
+
+  const rawContactName = params.contactName || peerName;
+  const contactName = rawContactName && rawContactName !== 'User' && rawContactName !== 'Rubaru User'
+    ? rawContactName
+    : (peerName || params.contactName || 'Rubaru Member');
+
+  const rawAvatar = params.avatarUri || peerAvatar;
+  const avatarUri = rawAvatar && typeof rawAvatar === 'string' && rawAvatar.trim().startsWith('http')
     ? rawAvatar.trim()
-    : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
-  const receiverId = params.receiverId || '';
-  const initialStatus = params.initialStatus || 'calling';
-  const initialCallType = params.callType === 'video';
-  // Stable call session ID for this call
-  const callSessionId = useRef(params.callSessionId || `call_${Date.now()}`).current;
+    : '';
 
-  const [callStatus, setCallStatus] = useState(initialStatus);
-  const [secondsElapsed, setSecondsElapsed] = useState(0);
-
-  // In-call toggles
-  const [isVideo, setIsVideo] = useState(initialCallType !== false);
-  const [isSpeaker, setIsSpeaker] = useState(true);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isFrontCamera, setIsFrontCamera] = useState(true);
-  const [hasFilter, setHasFilter] = useState(false);
+  const balance = usePointsStore((state) => state.balance);
+  const errorMessage = useCallStore((state) => state.errorMessage);
+  const endReason = useCallStore((state) => state.endReason);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showMoreModal, setShowMoreModal] = useState(false);
   const [showKeypad, setShowKeypad] = useState(false);
   const [enteredDigits, setEnteredDigits] = useState('');
+  const [hasFilter, setHasFilter] = useState(false);
+  const [isAppBackgrounded, setIsAppBackgrounded] = useState(false);
+  const hasInitiatedRef = useRef(false);
 
-  const timerRef = useRef(null);
-
-  // --- SOCKET: Outgoing call signaling ---
+  // AppState listener for background/foreground video suspension & audio preservation
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
+    const sub = AppState.addEventListener('change', (nextState) => {
+      const isBg = nextState === 'background' || nextState === 'inactive';
+      setIsAppBackgrounded(isBg);
+      if (isBg && callType === 'video') {
+        console.log('[ACTIVE CALL] App backgrounded: video preview suspended, audio preserved.');
+      } else if (!isBg) {
+        console.log('[ACTIVE CALL] App foregrounded: video preview restored.');
+      }
+    });
 
-    // Only emit call_user for outgoing calls (not when accepted via banner)
-    if (initialStatus !== 'connected' && receiverId) {
-      socket.emit('call_user', {
-        recipientId: receiverId,
-        callType: params.callType || 'voice',
-        callSessionId,
+    return () => {
+      sub.remove();
+    };
+  }, [callType]);
+
+  // Mark screen un-minimized when entered
+  useEffect(() => {
+    useCallStore.getState().setMinimized(false);
+  }, []);
+
+  const exitScreen = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  }, [router]);
+
+  const handleMinimize = useCallback(() => {
+    const status = useCallStore.getState().callStatus;
+    if (status === 'ENDED' || status === 'IDLE') {
+      useCallStore.getState().resetToIdle();
+      exitScreen();
+      return;
+    }
+    useCallStore.getState().setMinimized(true);
+    exitScreen();
+  }, [exitScreen]);
+
+  // Android hardware back press support -> minimize call
+  useEffect(() => {
+    const onBackPress = () => {
+      handleMinimize();
+      return true;
+    };
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backSub.remove();
+  }, [handleMinimize]);
+
+  // If initiated from screen params and not yet active
+  useEffect(() => {
+    if (params.receiverId && params.isInitiator !== 'false' && !hasInitiatedRef.current) {
+      hasInitiatedRef.current = true;
+      const currentStatus = useCallStore.getState().callStatus;
+      if (currentStatus === 'ENDED') {
+        useCallStore.getState().resetToIdle();
+      }
+      initiateCall({
+        receiverId: params.receiverId,
+        callType: params.callType === 'video' ? 'video' : 'audio',
+        contactName: params.contactName || 'User',
+        avatarUri: params.avatarUri || '',
       });
-      console.log('[SOCKET] Emitting call_user to:', receiverId);
     }
+  }, [params.receiverId, initiateCall, params.callType, params.contactName, params.avatarUri, params.isInitiator]);
 
-    // Recipient accepted our call
-    const onCallConnected = ({ callSessionId: sid }) => {
-      if (sid === callSessionId) {
-        console.log('[SOCKET] Call connected!');
-        setCallStatus('connected');
-      }
-    };
-
-    // Recipient declined our call
-    const onCallDeclined = ({ callSessionId: sid }) => {
-      if (sid === callSessionId) {
-        console.log('[SOCKET] Call declined');
-        handleEndCallSocket();
-      }
-    };
-
-    // Remote party hung up
-    const onCallHungUp = ({ callSessionId: sid }) => {
-      if (sid === callSessionId) {
-        console.log('[SOCKET] Remote party hung up');
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.push('/call-logs');
-        }
-      }
-    };
-
-    socket.on('call_connected', onCallConnected);
-    socket.on('call_declined', onCallDeclined);
-    socket.on('call_hungup', onCallHungUp);
-
-    return () => {
-      socket.off('call_connected', onCallConnected);
-      socket.off('call_declined', onCallDeclined);
-      socket.off('call_hungup', onCallHungUp);
-    };
-  }, [receiverId, initialStatus]);
-
+  // Handle call completion / receipt modal
   useEffect(() => {
-    if (initialStatus === 'connected') {
-      setCallStatus('connected');
-    } else {
-      // Fallback timer — auto-connect after 4.5s if socket hasn't connected
-      const t1 = setTimeout(() => { setCallStatus('ringing'); }, 2000);
-      const t2 = setTimeout(() => { setCallStatus('connected'); }, 4500);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
-    }
-  }, [initialStatus]);
-
-  useEffect(() => {
-    if (callStatus === 'connected') {
-      timerRef.current = setInterval(() => {
-        setSecondsElapsed((prev) => prev + 1);
-      }, 1000);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [callStatus]);
-
-  const formatDuration = (totalSeconds) => {
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    const formattedMins = String(mins).padStart(2, '0');
-    const formattedSecs = String(secs).padStart(2, '0');
-    return `${formattedMins}:${formattedSecs}`;
-  };
-
-  const handleEndCallSocket = () => {
-    // Emit call_ended so the other party hangs up too
-    const socket = getSocket();
-    if (socket && receiverId) {
-      socket.emit('call_ended', { recipientId: receiverId, callSessionId });
-    }
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.push('/call-logs');
-    }
-  };
-
-  const handleEndCall = async () => {
-    // Emit hang-up signal to the other party
-    const socket = getSocket();
-    if (socket && receiverId) {
-      socket.emit('call_ended', { recipientId: receiverId, callSessionId });
-    }
-
-    // Save call log to database if receiverId is a valid ObjectId
-    if (receiverId && /^[0-9a-fA-F]{24}$/.test(String(receiverId))) {
-      try {
-        const duration = secondsElapsed > 0
-          ? `${String(Math.floor(secondsElapsed / 60)).padStart(2, '0')}:${String(secondsElapsed % 60).padStart(2, '0')}`
-          : 'missed';
-        await api.post('/calls/logs', {
-          receiverId,
-          callType: callStatus === 'connected' ? 'outgoing' : 'missed',
-          callIconType: params.callType === 'video' ? 'video' : 'voice',
-          duration,
-        });
-      } catch (e) {
-        console.log('[SAVE CALL LOG ERROR]', e.message);
+    if (callStatus === 'ENDED') {
+      if (billingSummary) {
+        setShowReceiptModal(true);
+      } else {
+        const delay = errorMessage ? 1800 : 600;
+        const timeout = setTimeout(() => {
+          useCallStore.getState().resetToIdle();
+          exitScreen();
+        }, delay);
+        return () => clearTimeout(timeout);
       }
     }
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.push('/call-logs');
+  }, [callStatus, billingSummary, errorMessage, exitScreen]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      const status = useCallStore.getState().callStatus;
+      if (status === 'ENDED') {
+        useCallStore.getState().resetToIdle();
+      }
+    };
+  }, []);
+
+  const handleEndCall = () => {
+    if (callStatus === 'ENDED' || callStatus === 'IDLE') {
+      useCallStore.getState().resetToIdle();
+      exitScreen();
+      return;
     }
+    hangupCall('USER_HUNG_UP');
+    setTimeout(() => {
+      if (!useCallStore.getState().billingSummary) {
+        useCallStore.getState().resetToIdle();
+        exitScreen();
+      }
+    }, 400);
   };
 
   const getSubStatusText = () => {
-    if (callStatus === 'calling') return 'Calling...';
-    if (callStatus === 'ringing') return 'Ringing...';
-    if (callStatus === 'connected') return formatDuration(secondsElapsed);
-    return 'Calling...';
+    switch (callStatus) {
+      case 'INITIATING':
+        return 'Starting call...';
+      case 'RINGING':
+        return 'Ringing...';
+      case 'CONNECTING':
+        return 'Connecting media...';
+      case 'RECONNECTING':
+        return 'Reconnecting...';
+      case 'ACTIVE':
+        return formatDuration(durationSeconds);
+      case 'ENDED':
+        if (errorMessage) return errorMessage;
+        if (endReason === 'INITIATION_FAILED') return 'Unable to place call';
+        if (endReason === 'REJECTED') return 'Call declined';
+        if (endReason === 'BUSY') return 'User is busy on another call';
+        if (endReason === 'TIMEOUT') return 'No answer';
+        return 'Call ended';
+      default:
+        return 'Calling...';
+    }
   };
 
   const handleShareCall = async () => {
     try {
       await Share.share({
-        message: `Join my video call on Rubaru: ${contactName} (${phoneNumber})`,
+        message: `Join my call on Rubaru: ${contactName} (${phoneNumber})`,
       });
-    } catch (error) {
-      // ignore
-    }
+    } catch (e) {}
   };
 
   const handleDigitPress = (digit) => {
     setEnteredDigits((prev) => prev + digit);
   };
 
+  const isVideoCall = callType === 'video';
+
   return (
     <View style={styles.safeContainer}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
 
-      {/* Main Full-Screen Video Feed / Background */}
+      {/* Main Video View / Backdrop */}
       <View style={styles.fullScreenVideoWrapper}>
-        {/* Remote Camera Feed Image */}
-        <Image
-          source={{
-            uri: isVideo
-              ? 'https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg?w=1080'
-              : avatarUri,
-          }}
-          style={StyleSheet.absoluteFillObject}
-          resizeMode="cover"
-        />
+        {isVideoCall && remoteStream && RTCView ? (
+          <RTCView
+            streamURL={typeof remoteStream.toURL === 'function' ? remoteStream.toURL() : ''}
+            style={StyleSheet.absoluteFillObject}
+            objectFit="cover"
+            mirror={false}
+          />
+        ) : avatarUri ? (
+          <Image
+            source={{ uri: avatarUri }}
+            style={[StyleSheet.absoluteFillObject, { opacity: 0.35 }]}
+            blurRadius={20}
+            resizeMode="cover"
+          />
+        ) : (
+          <LinearGradient
+            colors={['#0B141B', '#1E293B']}
+            style={StyleSheet.absoluteFillObject}
+          />
+        )}
 
-        {/* Subtle dark gradient overlay on top and bottom for readability */}
+        {/* Gradient overlays */}
         <View style={styles.topGradientOverlay} />
         <View style={styles.bottomGradientOverlay} />
 
-        {/* Top Header Section */}
+        {/* Top Header */}
         <View style={styles.topHeader}>
-          {/* Left Minimize Chevron */}
           <TouchableOpacity
             style={[styles.headerCircleBtn, { top: Math.max(insets.top + 8, 20) }]}
             activeOpacity={0.7}
-            onPress={handleEndCall}
+            onPress={handleMinimize}
             accessibilityLabel="Minimize call"
           >
             <Ionicons name="chevron-down" size={24} color="#E9EDEF" />
           </TouchableOpacity>
 
-          {/* Center Contact Number & Encrypted Subtitle */}
           <View style={[styles.headerCenter, { paddingTop: Math.max(insets.top + 8, 20) }]}>
             <Text style={styles.contactTitleText} numberOfLines={1}>
-              {phoneNumber || contactName}
+              {contactName}
             </Text>
             <View style={styles.encryptedRow}>
-              {callStatus === 'connected' ? (
+              {callStatus === 'ACTIVE' ? (
                 <Text style={styles.subStatusText}>{getSubStatusText()}</Text>
               ) : (
                 <>
                   <Ionicons name="lock-closed" size={12} color="#CBD5E1" style={{ marginRight: 4 }} />
-                  <Text style={styles.subStatusText}>End-to-end encrypted</Text>
+                  <Text style={styles.subStatusText}>{getSubStatusText()}</Text>
                 </>
               )}
             </View>
+
+            {callStatus === 'ACTIVE' && (
+              <PaidSessionLiveBadge
+                isInitiator={callController.isInitiator}
+                ratePerMinute={ratePerMinute || (isVideoCall ? 10 : 5)}
+                billedMinutes={Math.max(1, Math.ceil(durationSeconds / 60))}
+                totalCoins={Math.max(1, Math.ceil(durationSeconds / 60)) * (ratePerMinute || (isVideoCall ? 10 : 5))}
+                currentBalance={balance}
+              />
+            )}
           </View>
 
-          {/* Right Vertical Tool Column (Add Person, Chat, Flip Camera, Magic Filters) */}
+          {/* Right Tools Column */}
           <View style={[styles.rightVerticalTools, { top: Math.max(insets.top + 8, 20) }]}>
-            {/* 1. Add Person */}
-            <TouchableOpacity
-              style={styles.toolCircleBtn}
-              activeOpacity={0.7}
-              onPress={() => {}}
-              accessibilityLabel="Add person"
-            >
-              <Ionicons name="person-add" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-
-            {/* 2. In-Call Chat */}
             <TouchableOpacity
               style={styles.toolCircleBtn}
               activeOpacity={0.7}
@@ -271,17 +306,17 @@ export default function ActiveCallScreen() {
               <Ionicons name="chatbubble-ellipses" size={20} color="#FFFFFF" />
             </TouchableOpacity>
 
-            {/* 3. Flip Camera */}
-            <TouchableOpacity
-              style={styles.toolCircleBtn}
-              activeOpacity={0.7}
-              onPress={() => setIsFrontCamera(!isFrontCamera)}
-              accessibilityLabel="Flip camera"
-            >
-              <Ionicons name="camera-reverse" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
+            {isVideoCall && (
+              <TouchableOpacity
+                style={styles.toolCircleBtn}
+                activeOpacity={0.7}
+                onPress={switchCamera}
+                accessibilityLabel="Switch Camera"
+              >
+                <Ionicons name="camera-reverse" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
 
-            {/* 4. Magic Filters / Effects */}
             <TouchableOpacity
               style={[styles.toolCircleBtn, hasFilter && styles.toolBtnActive]}
               activeOpacity={0.7}
@@ -297,36 +332,54 @@ export default function ActiveCallScreen() {
           </View>
         </View>
 
-        {/* Self Camera PiP Floating Thumbnail (Bottom-Right Corner above controls) */}
-        {isVideo && (
+        {/* Local Camera Self-Preview (PiP Floating Thumbnail) */}
+        {isVideoCall && isVideoEnabled && (
           <View style={styles.pipThumbnailContainer}>
-            <Image
-              source={{ uri: 'https://images.pexels.com/photos/1580271/pexels-photo-1580271.jpeg?w=400' }}
-              style={styles.pipThumbnailImage}
-              resizeMode="cover"
-            />
+            {localStream && RTCView ? (
+              <RTCView
+                streamURL={typeof localStream.toURL === 'function' ? localStream.toURL() : ''}
+                style={styles.pipThumbnailImage}
+                objectFit="cover"
+                mirror={isFrontCamera}
+              />
+            ) : (
+              <View style={[styles.pipThumbnailImage, styles.avatarPlaceholderSmall]}>
+                <Ionicons name="person" size={28} color="#94A3B8" />
+              </View>
+            )}
             <View style={styles.pipBorderRing} />
           </View>
         )}
 
-        {/* Voice Call Avatar Fallback (when video is toggled off) */}
-        {!isVideo && (
+        {/* Center Avatar for Audio Calls */}
+        {!isVideoCall && (
           <View style={styles.centerAvatarContainer}>
             <View style={styles.avatarRingOuter}>
-              <Image
-                source={{ uri: avatarUri }}
-                style={styles.avatarImage}
-                resizeMode="cover"
-              />
+              {avatarUri ? (
+                <Image
+                  source={{ uri: avatarUri }}
+                  style={styles.avatarImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.avatarImage, styles.avatarPlaceholderLarge]}>
+                  <Text style={styles.avatarInitialLarge}>
+                    {contactName ? contactName.charAt(0).toUpperCase() : 'R'}
+                  </Text>
+                </View>
+              )}
             </View>
             <Text style={styles.callerDisplayName}>{contactName}</Text>
+            {callStatus === 'ACTIVE' && (
+              <Text style={styles.callDurationTimer}>{formatDuration(durationSeconds)}</Text>
+            )}
           </View>
         )}
 
-        {/* WhatsApp Video Call Floating Bottom Control Capsule Bar */}
+        {/* Bottom Floating Control Bar */}
         <View style={[styles.bottomCapsuleWrapper, { paddingBottom: Math.max(insets.bottom + 12, 28) }]}>
           <View style={styles.capsuleBar}>
-            {/* 1. More / Options */}
+            {/* 1. More Options */}
             <TouchableOpacity
               style={styles.capsuleCircleBtn}
               activeOpacity={0.75}
@@ -335,70 +388,66 @@ export default function ActiveCallScreen() {
               <Ionicons name="ellipsis-horizontal" size={22} color="#FFFFFF" />
             </TouchableOpacity>
 
-            {/* 2. Camera Toggle (Off/On) */}
+            {/* 2. Camera Toggle */}
+            {isVideoCall && (
+              <TouchableOpacity
+                style={[
+                  styles.capsuleCircleBtn,
+                  !isVideoEnabled && styles.capsuleBtnDeactivated,
+                ]}
+                activeOpacity={0.75}
+                onPress={toggleVideo}
+              >
+                <Ionicons
+                  name={isVideoEnabled ? 'videocam' : 'videocam-off'}
+                  size={22}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+            )}
+
+            {/* 3. Speaker / Audio Route */}
             <TouchableOpacity
               style={[
                 styles.capsuleCircleBtn,
-                !isVideo && styles.capsuleBtnDeactivated,
+                !isSpeakerOn && styles.capsuleBtnDeactivated,
               ]}
               activeOpacity={0.75}
-              onPress={() => setIsVideo(!isVideo)}
+              onPress={toggleSpeaker}
             >
               <Ionicons
-                name={isVideo ? 'videocam' : 'videocam-off'}
+                name={isSpeakerOn ? 'volume-high' : 'volume-mute'}
                 size={22}
                 color="#FFFFFF"
               />
             </TouchableOpacity>
 
-            {/* 3. Speaker (White Active Circle / Dark Toggle) */}
+            {/* 4. Microphone Mute / Unmute */}
             <TouchableOpacity
               style={[
                 styles.capsuleCircleBtn,
-                isSpeaker && styles.capsuleBtnWhiteActive,
+                isAudioMuted && styles.capsuleBtnDeactivated,
               ]}
               activeOpacity={0.75}
-              onPress={() => setIsSpeaker(!isSpeaker)}
+              onPress={toggleAudio}
             >
               <Ionicons
-                name={isSpeaker ? 'volume-high' : 'volume-medium-outline'}
-                size={22}
-                color={isSpeaker ? '#000000' : '#FFFFFF'}
-              />
-            </TouchableOpacity>
-
-            {/* 4. Mute Microphone (Mic with slash when muted) */}
-            <TouchableOpacity
-              style={[
-                styles.capsuleCircleBtn,
-                isMuted && styles.capsuleBtnMuted,
-              ]}
-              activeOpacity={0.75}
-              onPress={() => setIsMuted(!isMuted)}
-            >
-              <Ionicons
-                name={isMuted ? 'mic-off' : 'mic-outline'}
+                name={isAudioMuted ? 'mic-off' : 'mic'}
                 size={22}
                 color="#FFFFFF"
               />
             </TouchableOpacity>
 
-            {/* 5. Red End Call Button */}
+            {/* 5. Hangup Button */}
             <TouchableOpacity
-              style={styles.capsuleEndBtn}
-              activeOpacity={0.85}
+              style={styles.capsuleEndCallBtn}
+              activeOpacity={0.8}
               onPress={handleEndCall}
             >
-              <Ionicons
-                name="call"
-                size={24}
-                color="#FFFFFF"
-                style={{ transform: [{ rotate: '135deg' }] }}
-              />
+              <Ionicons name="call" size={26} color="#FFFFFF" style={{ transform: [{ rotate: '135deg' }] }} />
             </TouchableOpacity>
           </View>
         </View>
-
       </View>
 
       {/* More Options Sheet */}
@@ -411,7 +460,7 @@ export default function ActiveCallScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setShowMoreModal(false)}>
           <Pressable style={styles.moreSheetContainer} onPress={(e) => e.stopPropagation()}>
             <View style={styles.sheetGrabHandle} />
-            <Text style={styles.sheetTitle}>Video Call Options</Text>
+            <Text style={styles.sheetTitle}>Call Options</Text>
 
             <TouchableOpacity
               style={styles.sheetOptionRow}
@@ -440,20 +489,6 @@ export default function ActiveCallScreen() {
               </View>
               <Text style={styles.sheetOptionText}>Share Call Invite</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sheetOptionRow}
-              activeOpacity={0.7}
-              onPress={() => {
-                setIsFrontCamera(!isFrontCamera);
-                setShowMoreModal(false);
-              }}
-            >
-              <View style={styles.sheetOptionIconBox}>
-                <Ionicons name="camera-reverse-outline" size={22} color="#E9EDEF" />
-              </View>
-              <Text style={styles.sheetOptionText}>Switch to {isFrontCamera ? 'Back' : 'Front'} Camera</Text>
-            </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
@@ -475,7 +510,6 @@ export default function ActiveCallScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* 4x3 Grid */}
             <View style={styles.keypadGrid}>
               {[
                 ['1', '2', '3'],
@@ -510,6 +544,23 @@ export default function ActiveCallScreen() {
         </Pressable>
       </Modal>
 
+      {/* Authoritative End-of-Session Financial Receipt Modal */}
+      <PaidSessionReceiptModal
+        visible={showReceiptModal}
+        sessionData={billingSummary}
+        onClose={() => {
+          setShowReceiptModal(false);
+          cleanup('COMPLETED');
+          useCallStore.getState().resetToIdle();
+          exitScreen();
+        }}
+        onViewTransactions={() => {
+          setShowReceiptModal(false);
+          cleanup('COMPLETED');
+          useCallStore.getState().resetToIdle();
+          router.push('/transactions');
+        }}
+      />
     </View>
   );
 }
@@ -524,8 +575,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     justifyContent: 'space-between',
   },
-
-  /* ── Gradients ── */
   topGradientOverlay: {
     position: 'absolute',
     top: 0,
@@ -542,8 +591,6 @@ const styles = StyleSheet.create({
     height: 180,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
   },
-
-  /* ── Top Header ── */
   topHeader: {
     position: 'absolute',
     top: 0,
@@ -575,9 +622,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 3,
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
   encryptedRow: {
     flexDirection: 'row',
@@ -588,49 +632,42 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#E2E8F0',
     fontWeight: '500',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
   },
-
-  /* ── Right Vertical Tool Column ── */
   rightVerticalTools: {
     position: 'absolute',
     right: 16,
-    alignItems: 'center',
-    gap: 12,
     zIndex: 35,
+    gap: 12,
   },
   toolCircleBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(15, 23, 42, 0.70)',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   toolBtnActive: {
-    backgroundColor: 'rgba(0, 168, 132, 0.35)',
+    backgroundColor: 'rgba(0, 168, 132, 0.25)',
     borderColor: '#00A884',
   },
-
-  /* ── Self Video PiP Thumbnail ── */
   pipThumbnailContainer: {
     position: 'absolute',
     bottom: 120,
-    right: 18,
+    right: 16,
     width: 100,
     height: 145,
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
+    backgroundColor: '#1E293B',
+    zIndex: 25,
     elevation: 8,
-    zIndex: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
   },
   pipThumbnailImage: {
     width: '100%',
@@ -638,194 +675,186 @@ const styles = StyleSheet.create({
   },
   pipBorderRing: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    borderRadius: 14,
+    borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-
-  /* ── Center Avatar fallback ── */
   centerAvatarContainer: {
-    alignItems: 'center',
+    flex: 1,
     justifyContent: 'center',
-    marginVertical: 20,
+    alignItems: 'center',
   },
   avatarRingOuter: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: '#1E2B33',
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
     marginBottom: 16,
   },
   avatarImage: {
-    width: 154,
-    height: 154,
-    borderRadius: 77,
-    backgroundColor: '#2A3942',
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+  },
+  avatarPlaceholderLarge: {
+    backgroundColor: '#FF2E63',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitialLarge: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  avatarPlaceholderSmall: {
+    backgroundColor: '#334155',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   callerDisplayName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: '#FFFFFF',
-    textAlign: 'center',
+    marginBottom: 4,
   },
-
-  /* ── Floating Capsule Bottom Bar (WhatsApp Video Call) ── */
+  callDurationTimer: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#10B981',
+    letterSpacing: 0.5,
+  },
   bottomCapsuleWrapper: {
-    paddingHorizontal: 20,
-    zIndex: 20,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 30,
   },
   capsuleBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(24, 34, 41, 0.92)',
-    borderRadius: 40,
-    paddingHorizontal: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    elevation: 10,
+    borderRadius: 36,
+    gap: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   capsuleCircleBtn: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  capsuleBtnWhiteActive: {
-    backgroundColor: '#FFFFFF',
-  },
-  capsuleBtnMuted: {
-    backgroundColor: 'rgba(234, 0, 56, 0.35)',
-  },
   capsuleBtnDeactivated: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(239, 68, 68, 0.35)',
   },
-  capsuleEndBtn: {
+  capsuleEndCallBtn: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#EA0038',
+    backgroundColor: '#EF4444',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#EA0038',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 5,
   },
-
-  /* ── Modals & Bottom Sheets ── */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'flex-end',
   },
   moreSheetContainer: {
-    backgroundColor: '#1E2B33',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 14,
-    paddingBottom: 36,
-  },
-  keypadSheetContainer: {
-    backgroundColor: '#1E2B33',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 32,
-    paddingTop: 14,
+    backgroundColor: '#1E293B',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
     paddingBottom: 36,
   },
   sheetGrabHandle: {
-    width: 40,
+    width: 36,
     height: 4,
+    backgroundColor: '#475569',
     borderRadius: 2,
-    backgroundColor: '#8696A0',
     alignSelf: 'center',
     marginBottom: 16,
   },
   sheetTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#E9EDEF',
+    color: '#F8FAFC',
     marginBottom: 16,
   },
   sheetOptionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2A3942',
+    paddingVertical: 12,
   },
   sheetOptionIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#2A3942',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   sheetOptionText: {
-    fontSize: 16,
+    fontSize: 15.5,
+    color: '#F1F5F9',
     fontWeight: '500',
-    color: '#E9EDEF',
+  },
+  keypadSheetContainer: {
+    backgroundColor: '#1E293B',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 36,
   },
   keypadHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2A3942',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   keypadDigitsText: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#E9EDEF',
-    letterSpacing: 2,
+    color: '#FFFFFF',
   },
   keypadGrid: {
-    gap: 14,
+    gap: 12,
   },
   keypadRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
   },
   keypadDigitBtn: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    backgroundColor: '#2A3942',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   keypadDigitText: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#E9EDEF',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   clearDigitsBtn: {
     alignSelf: 'center',
-    marginTop: 18,
+    marginTop: 16,
     paddingVertical: 8,
     paddingHorizontal: 20,
   },
   clearDigitsText: {
+    color: '#94A3B8',
     fontSize: 14,
     fontWeight: '600',
-    color: '#00A884',
   },
 });

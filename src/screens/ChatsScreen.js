@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,8 @@ import EmptyStateIllustration from '../components/common/EmptyStateIllustration'
 import { useTheme } from '../theme/index';
 import { useLanguage } from '../localization/LanguageContext';
 import api from '../services/api';
+import messagingService from '../services/messagingService';
+import { getSocket } from '../services/socket';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -40,35 +42,92 @@ export default function ChatsScreen() {
   const fetchChats = useCallback(() => {
     async function load() {
       try {
-        const [chatsRes, meRes] = await Promise.all([
-          api.get('/chats'),
-          api.get('/profiles/me'),
-        ]);
+        let rawConversations = [];
+        try {
+          const v1Res = await messagingService.listConversations();
+          rawConversations = Array.isArray(v1Res) ? v1Res : (v1Res?.items || []);
+        } catch (e) {
+          const chatsRes = await api.get('/chats');
+          rawConversations = Array.isArray(chatsRes.data) ? chatsRes.data : [];
+        }
+
+        const meRes = await api.get('/profiles/me');
         setMyProfile(meRes.data);
 
+        // Helper for chat list timestamp format
+        function formatChatListTime(dateInput) {
+          if (!dateInput) return '';
+          const d = new Date(dateInput);
+          if (isNaN(d.getTime())) return '';
+          const now = new Date();
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+          const diffMs = today.getTime() - msgDay.getTime();
+          const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+          if (diffDays === 0) {
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase();
+          }
+          if (diffDays === 1) return 'Yesterday';
+          if (diffDays < 7) {
+            return d.toLocaleDateString([], { weekday: 'short' });
+          }
+          return d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+        }
+
         // Map API response to ChatListItem shape
-        const mapped = chatsRes.data.map((c) => {
+        const mapped = rawConversations.map((c) => {
           const lastMsg = c.lastMessage;
           let msgType = 'text';
-          let msgText = lastMsg?.text || 'Start a conversation';
-          if (lastMsg?.type === 'image') { msgType = 'photo'; msgText = 'Photo'; }
-          if (lastMsg?.type === 'voice') { msgType = 'audio'; msgText = 'Voice message'; }
+          let msgText = lastMsg?.text || (lastMsg ? '' : 'Start a conversation');
+          const typeUpper = (lastMsg?.type || '').toUpperCase();
+          const mediaUpper = (lastMsg?.mediaType || '').toUpperCase();
+
+          if (typeUpper === 'IMAGE' || typeUpper === 'PHOTO' || mediaUpper === 'IMAGE') {
+            msgType = 'photo';
+            msgText = lastMsg?.text || 'Photo';
+          } else if (typeUpper === 'VIDEO' || mediaUpper === 'VIDEO') {
+            msgType = 'video';
+            msgText = lastMsg?.text || 'Video';
+          } else if (typeUpper === 'VOICE' || typeUpper === 'VOICE_NOTE' || typeUpper === 'AUDIO' || mediaUpper === 'AUDIO' || mediaUpper === 'VOICE_NOTE') {
+            msgType = 'audio';
+            msgText = 'Voice message';
+          } else if (lastMsg?.isPoll || typeUpper === 'POLL') {
+            msgType = 'poll';
+            msgText = lastMsg?.pollQuestion ? lastMsg.pollQuestion : 'Poll';
+          }
+
+          const isGrp = c.isGroup || c.type === 'GROUP';
+          const rawParticipantName = c.otherParticipant?.displayName || c.otherParticipant?.name || c.participantName || c.displayName;
+          const finalName = isGrp
+            ? (c.groupName || c.name || 'Group')
+            : (rawParticipantName && rawParticipantName.trim() !== '' && !rawParticipantName.includes('undefined') ? rawParticipantName.trim() : 'Rubaru User');
+
+          const rawAvatar = isGrp
+            ? (c.groupAvatar || c.avatarUri)
+            : (c.otherParticipant?.avatarUri || c.avatarUri || c.avatar);
+
+          const timeVal = lastMsg?.createdAt || c.lastMessageAt || c.updatedAt;
 
           return {
-            id: c.id,
-            chatId: c.id,
-            name: c.isGroup ? c.groupName : (c.otherParticipant?.displayName || 'Rubaru User'),
-            avatarUrl: c.isGroup
-              ? getAvatarUrl(c.groupAvatar)
-              : getAvatarUrl(c.otherParticipant?.avatarUri),
-            recipientId: c.otherParticipant?.userId,
+            id: c.id || c._id,
+            chatId: c.id || c._id,
+            name: finalName,
+            avatarUrl: getAvatarUrl(rawAvatar),
+            recipientId: c.otherParticipant?.userId || c.recipientId,
             messageType: msgType,
             messageText: msgText,
-            time: lastMsg?.createdAt
-              ? new Date(lastMsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              : '',
+            isFromMe: Boolean(lastMsg?.isFromMe),
+            status: lastMsg?.status || 'SENT',
+            unreadCount: c.unreadCount || 0,
+            hasLastMessage: Boolean(lastMsg),
+            updatedAt: timeVal || new Date(0).toISOString(),
+            time: formatChatListTime(timeVal),
           };
         });
+
+        // Sort by latest activity descending
+        mapped.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
         setChats(mapped);
       } catch (e) {
         console.log('[CHATS FETCH ERROR]', e.message);
@@ -79,7 +138,45 @@ export default function ChatsScreen() {
     load();
   }, []);
 
-  useFocusEffect(fetchChats);
+  const handleOpenChat = useCallback((chatId) => {
+    setChats((prev) =>
+      prev.map((c) => (c.id === chatId || c.chatId === chatId ? { ...c, unreadCount: 0 } : c))
+    );
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchChats();
+    }, [fetchChats])
+  );
+
+  // Real-time socket listener to refresh chat list on new incoming messages or read updates
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const onIncomingMessage = () => {
+      fetchChats();
+    };
+
+    socket.on('receive_message', onIncomingMessage);
+    socket.on('message.created', onIncomingMessage);
+    socket.on('new_message', onIncomingMessage);
+    socket.on('conversation.message.created', onIncomingMessage);
+    socket.on('messages_read', onIncomingMessage);
+    socket.on('message_read', onIncomingMessage);
+    socket.on('receipt.read', onIncomingMessage);
+
+    return () => {
+      socket.off('receive_message', onIncomingMessage);
+      socket.off('message.created', onIncomingMessage);
+      socket.off('new_message', onIncomingMessage);
+      socket.off('conversation.message.created', onIncomingMessage);
+      socket.off('messages_read', onIncomingMessage);
+      socket.off('message_read', onIncomingMessage);
+      socket.off('receipt.read', onIncomingMessage);
+    };
+  }, [fetchChats]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -121,15 +218,26 @@ export default function ChatsScreen() {
     {
       id: 'me',
       name: 'My Story',
-      imageUrl: myAvatarUrl || 'https://i.pravatar.cc/150?img=1',
+      imageUrl: myAvatarUrl || null,
       isFirst: true,
     },
     ...chats.slice(0, 8).map((c) => ({
       id: c.id,
       name: c.name,
-      imageUrl: c.avatarUrl || 'https://i.pravatar.cc/150?img=2',
+      imageUrl: c.avatarUrl || null,
     })),
   ];
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchChats();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchChats]);
 
   return (
     <View style={[styles.safeContainer, { backgroundColor: colors.background }]}>
@@ -164,7 +272,12 @@ export default function ChatsScreen() {
         <FlatList
           data={chats}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ChatListItem item={item} />}
+          renderItem={({ item }) => <ChatListItem item={{ ...item, onOpen: handleOpenChat }} />}
+          ItemSeparatorComponent={() => (
+            <View style={[styles.separator, { backgroundColor: isDarkMode ? '#1E1E26' : '#F0F0F2' }]} />
+          )}
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
           ListHeaderComponent={
             <FlatList
               horizontal
@@ -220,4 +333,5 @@ const styles = StyleSheet.create({
   storiesContainer: { marginVertical: 10 },
   storiesContentContainer: { paddingHorizontal: 20, paddingBottom: 12 },
   listContentContainer: { paddingBottom: 90 },
+  separator: { height: StyleSheet.hairlineWidth, marginLeft: 82, marginRight: 0 },
 });

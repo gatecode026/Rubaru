@@ -4,7 +4,7 @@
 > **Target Audience**: Site Reliability Engineers, DevOps, On-Call Backend Engineers, and Security Reviewers  
 > **Service**: Rubaru Dating Core Engine (Discovery, Likes, Matches, Chat Gating & Safety)  
 > **Status**: APPROVED  
-> **Date**: 1 September 2026  
+> **Date**: 1 September 2026 
 
 ---
 

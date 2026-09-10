@@ -1,4 +1,7 @@
+const mongoose = require('mongoose');
 const Chat = require('../models/Chat');
+const Conversation = require('../models/Conversation');
+const ConversationMember = require('../models/ConversationMember');
 const Message = require('../models/Message');
 const Profile = require('../models/Profile');
 const User = require('../models/User');
@@ -24,32 +27,75 @@ const getChats = async (req, res) => {
         )?._id;
 
         let otherProfile = null;
+        let otherUser = null;
         if (otherParticipantId) {
-          otherProfile = await Profile.findOne({ user: otherParticipantId });
+          [otherProfile, otherUser] = await Promise.all([
+            Profile.findOne({ user: otherParticipantId }),
+            User.findById(otherParticipantId, '_id email phone'),
+          ]);
         }
+
+        const rawDisplayName = otherProfile?.displayName;
+        const resolvedDisplayName = rawDisplayName && rawDisplayName.trim() !== '' && !rawDisplayName.includes('undefined')
+          ? rawDisplayName.trim()
+          : (otherUser?.email ? otherUser.email.split('@')[0] : (otherUser?.phone ? `User ${otherUser.phone.slice(-4)}` : 'Rubaru User'));
+
+        const resolvedAvatarUri = otherProfile?.avatarUri || (Array.isArray(otherProfile?.photos) && otherProfile.photos[0]) || '';
+
+        const unreadCount = await Message.countDocuments({
+          $or: [{ chat: chat._id }, { conversationId: chat._id }],
+          $and: [
+            {
+              $or: [
+                { sender: { $ne: req.user._id } },
+                { senderId: { $ne: req.user._id } },
+              ],
+            },
+          ],
+          isRead: false,
+        });
+
+        let lastMsgDoc = chat.lastMessage;
+        if (!lastMsgDoc) {
+          lastMsgDoc = await Message.findOne({
+            $or: [{ chat: chat._id }, { conversationId: chat._id }],
+            status: { $ne: 'DELETED' },
+          }).sort({ createdAt: -1 });
+        }
+
+        const isFromMe = lastMsgDoc
+          ? ((lastMsgDoc.sender || lastMsgDoc.senderId)?.toString() === req.user._id.toString())
+          : false;
+
+        const msgStatus = lastMsgDoc
+          ? (lastMsgDoc.isRead ? 'READ' : (lastMsgDoc.deliveredAt ? 'DELIVERED' : 'SENT'))
+          : 'SENT';
 
         return {
           id: chat._id,
           isGroup: chat.isGroup,
           groupName: chat.groupName || '',
           groupAvatar: chat.groupAvatar || '',
-          otherParticipant: otherProfile
+          unreadCount: unreadCount || 0,
+          otherParticipant: otherParticipantId
             ? {
-                userId: otherProfile.user,
-                displayName: otherProfile.displayName,
-                avatarUri: otherProfile.avatarUri,
-                bio: otherProfile.bio,
+                userId: otherParticipantId,
+                displayName: resolvedDisplayName,
+                avatarUri: resolvedAvatarUri,
+                bio: otherProfile?.bio || '',
               }
             : null,
-          lastMessage: chat.lastMessage
+          lastMessage: lastMsgDoc
             ? {
-                id: chat.lastMessage._id,
-                text: chat.lastMessage.text,
-                type: chat.lastMessage.type,
-                createdAt: chat.lastMessage.createdAt,
+                id: lastMsgDoc._id,
+                text: lastMsgDoc.text,
+                type: lastMsgDoc.type,
+                createdAt: lastMsgDoc.createdAt,
+                isFromMe,
+                status: msgStatus,
               }
             : null,
-          updatedAt: chat.updatedAt,
+          updatedAt: lastMsgDoc?.createdAt || chat.updatedAt,
         };
       })
     );
@@ -215,20 +261,79 @@ const sendMessage = async (req, res) => {
       }
     }
 
-    // 2. Create Message
+    // 2. Allocate sequence atomically
+    let nextSequence = 1;
+    const conv = await Conversation.findOneAndUpdate(
+      { _id: targetChatId },
+      { $inc: { lastSequence: 1 } },
+      { new: true }
+    );
+    if (conv) {
+      nextSequence = conv.lastSequence;
+    } else {
+      const highestMsg = await Message.findOne({
+        $or: [{ conversationId: targetChatId }, { chat: targetChatId }],
+      }).sort({ sequence: -1 });
+      nextSequence = (highestMsg?.sequence || 0) + 1;
+    }
+
+    // Create Message with sequence
     const newMessage = await Message.create({
       chat: targetChatId,
+      conversationId: targetChatId,
       sender: req.user._id,
+      senderId: req.user._id,
+      clientMessageId: req.body.clientMessageId || `cmsg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      sequence: nextSequence,
       type: messageType,
       text: text || '',
       attachmentUri,
       stickerId: stickerId || '',
       replyTo: replyTo || undefined,
+      isRead: false,
     });
 
     // 3. Update Chat lastMessage pointer
     chat.lastMessage = newMessage._id;
     await chat.save();
+
+    // 4. Real-time Socket Broadcast to conversation room and all participants
+    try {
+      const { getSocketIO } = require('../services/socketDispatchService');
+      const io = getSocketIO();
+      if (io) {
+        const msgPayload = {
+          id: newMessage._id.toString(),
+          _id: newMessage._id.toString(),
+          chatId: targetChatId.toString(),
+          chat: targetChatId.toString(),
+          conversationId: targetChatId.toString(),
+          senderId: req.user._id.toString(),
+          sender: req.user._id.toString(),
+          type: messageType,
+          text: text || '',
+          attachmentUri: newMessage.attachmentUri,
+          isRead: false,
+          createdAt: newMessage.createdAt,
+        };
+
+        io.to(`conversation:${targetChatId}`).emit('receive_message', msgPayload);
+        io.to(`conversation:${targetChatId}`).emit('message.created', { version: 1, data: { message: msgPayload } });
+        io.to(`chat_${targetChatId}`).emit('receive_message', msgPayload);
+
+        if (Array.isArray(chat.participants)) {
+          chat.participants.forEach((p) => {
+            const participantId = (p._id || p).toString();
+            io.to(`user:${participantId}`).emit('receive_message', msgPayload);
+            io.to(`user_${participantId}`).emit('receive_message', msgPayload);
+            io.to(`user:${participantId}`).emit('message.created', { version: 1, data: { message: msgPayload } });
+            io.to(`user:${participantId}`).emit('new_message', msgPayload);
+          });
+        }
+      }
+    } catch (socketBroadcastErr) {
+      console.warn('[CHAT REST SOCKET BROADCAST ERROR]', socketBroadcastErr.message);
+    }
 
     res.status(201).json(newMessage);
   } catch (error) {
@@ -361,6 +466,138 @@ const reactMessage = async (req, res) => {
   }
 };
 
+// @desc    Mark conversation messages as read
+// @route   PUT /api/chats/:chatId/read
+// @access  Private
+const markAsRead = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    if (!chatId) {
+      return res.status(400).json({ message: 'chatId is required' });
+    }
+
+    const possibleIds = [chatId];
+    if (mongoose.Types.ObjectId.isValid(chatId)) {
+      const objId = new mongoose.Types.ObjectId(chatId);
+      possibleIds.push(objId);
+
+      // Check if chatId is a recipient's user ID rather than a chat ID
+      const [chatByPart, convByPart] = await Promise.all([
+        Chat.findOne({ participants: { $all: [req.user._id, objId] } }),
+        Conversation.findOne({
+          $or: [
+            { participants: { $all: [req.user._id, objId] } },
+            { canonicalParticipantKey: `${[req.user._id.toString(), objId.toString()].sort().join(':')}` },
+          ],
+        }),
+      ]);
+
+      if (chatByPart) {
+        possibleIds.push(chatByPart._id);
+        possibleIds.push(chatByPart._id.toString());
+      }
+      if (convByPart) {
+        possibleIds.push(convByPart._id);
+        possibleIds.push(convByPart._id.toString());
+      }
+    }
+
+    // 1. Mark all messages from other sender as read
+    await Message.updateMany(
+      {
+        $or: [
+          { chat: { $in: possibleIds } },
+          { conversationId: { $in: possibleIds } },
+        ],
+        $and: [
+          {
+            $or: [
+              { sender: { $ne: req.user._id } },
+              { senderId: { $ne: req.user._id } },
+            ],
+          },
+        ],
+        isRead: false,
+      },
+      { $set: { isRead: true, readAt: new Date() } }
+    );
+
+    // 2. Advance ConversationMember read watermarks
+    const matchedConvs = await Conversation.find({ _id: { $in: possibleIds } }).lean();
+    for (const conv of matchedConvs) {
+      const maxSeq = conv.lastSequence || 0;
+      await ConversationMember.updateMany(
+        {
+          conversationId: conv._id,
+          userId: req.user._id,
+        },
+        {
+          $max: {
+            readThroughSequence: maxSeq,
+            lastReadSequence: maxSeq,
+            deliveredThroughSequence: maxSeq,
+            lastDeliveredSequence: maxSeq,
+          },
+          $set: { readAt: new Date() },
+        }
+      );
+    }
+
+    // 3. Broadcast read receipt via Socket.IO to conversation and user rooms
+    try {
+      const { getSocketIO } = require('../services/socketDispatchService');
+      const io = getSocketIO();
+      if (io) {
+        const uniqueIdStrs = Array.from(new Set(possibleIds.map((id) => id.toString())));
+        uniqueIdStrs.forEach((idStr) => {
+          const payload = {
+            chatId: idStr,
+            conversationId: idStr,
+            readerId: req.user._id.toString(),
+            actorUserId: req.user._id.toString(),
+            unreadCount: 0,
+          };
+          io.to(`conversation:${idStr}`).emit('messages_read', payload);
+          io.to(`chat_${idStr}`).emit('messages_read', payload);
+          io.to(`conversation:${idStr}`).emit('receipt.read', payload);
+          io.to(`conversation:${idStr}`).emit('message_read', payload);
+        });
+
+        // Collect all participants to notify their individual user rooms
+        const chatDocs = await Chat.find({ _id: { $in: possibleIds } }).lean();
+        const allParticipants = new Set();
+        allParticipants.add(req.user._id.toString());
+        chatDocs.forEach((c) => {
+          (c.participants || []).forEach((p) => allParticipants.add((p._id || p).toString()));
+        });
+        matchedConvs.forEach((c) => {
+          (c.participants || []).forEach((p) => allParticipants.add((p._id || p).toString()));
+        });
+
+        allParticipants.forEach((pId) => {
+          const payload = {
+            chatId,
+            conversationId: chatId,
+            readerId: req.user._id.toString(),
+            actorUserId: req.user._id.toString(),
+            unreadCount: 0,
+          };
+          io.to(`user:${pId}`).emit('messages_read', payload);
+          io.to(`user_${pId}`).emit('messages_read', payload);
+          io.to(`user:${pId}`).emit('message_read', payload);
+          io.to(`user:${pId}`).emit('receipt.read', payload);
+        });
+      }
+    } catch (sErr) {
+      console.warn('[MARK AS READ SOCKET EMIT ERROR]', sErr.message);
+    }
+
+    res.status(200).json({ success: true, chatId });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getChats,
   getMessages,
@@ -368,4 +605,5 @@ module.exports = {
   createPoll,
   votePoll,
   reactMessage,
+  markAsRead,
 };

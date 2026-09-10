@@ -11,10 +11,12 @@ import {
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useRouter, Stack, useFocusEffect } from 'expo-router';
+import { Alert } from 'react-native';
 import SegmentedNotifCallsHeader from '../components/common/SegmentedNotifCallsHeader';
 import EmptyCallLogsView from '../components/common/EmptyCallLogsView';
 import BottomTabBar from '../components/common/BottomTabBar';
 import api from '../services/api';
+import { useCallStore } from '../store/callStore';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -57,6 +59,18 @@ export default function CallLogsScreen() {
   };
 
   const handlePressCallIcon = (item) => {
+    const currentStatus = useCallStore.getState().callStatus;
+    if (currentStatus !== 'IDLE' && currentStatus !== 'ENDED') {
+      Alert.alert(
+        'Call in Progress',
+        'You are already in an active call. Please finish your current call first.'
+      );
+      return;
+    }
+    if (currentStatus === 'ENDED') {
+      useCallStore.getState().resetToIdle();
+    }
+
     router.push({
       pathname: '/active-call',
       params: {

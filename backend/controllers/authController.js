@@ -227,19 +227,28 @@ const login = async (req, res) => {
 
 // @desc    First-time Profile Setup
 // @route   POST /api/auth/profile-setup
-// @access  Private
 const profileSetup = async (req, res) => {
-  const { displayName, dateOfBirth, gender, interests, bio, locationName } = req.body;
-
-  if (!displayName || !dateOfBirth || !gender) {
-    return res.status(400).json({ message: 'Please provide name, birthdate, and gender' });
-  }
+  let { displayName, dateOfBirth, gender, interests, bio, locationName } = req.body || {};
 
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ message: 'User not found'});
+      return res.status(404).json({ message: 'User not found' });
     }
+
+    // Robust fallbacks for onboarding fields
+    if (!displayName || typeof displayName !== 'string' || displayName.trim() === '' || displayName.includes('undefined')) {
+      displayName = user.email ? user.email.split('@')[0] : (user.phone ? `User_${user.phone.slice(-4)}` : 'Rubaru User');
+    } else {
+      displayName = displayName.trim();
+    }
+
+    let parsedDob = new Date(dateOfBirth);
+    if (!dateOfBirth || isNaN(parsedDob.getTime())) {
+      parsedDob = new Date('1998-01-01');
+    }
+
+    const finalGender = gender && ['Male', 'Female', 'More', 'Other'].includes(gender) ? gender : 'Female';
 
     let parsedInterests = [];
     if (interests) {         
@@ -247,7 +256,7 @@ const profileSetup = async (req, res) => {
     }
 
     // Check if avatar is uploaded
-    let avatarUri = 'https://i.pravatar.cc/150?img=60';
+    let avatarUri = null;
     if (req.file) {
       try {
         const uploadedAvatar = await imagekitService.uploadLocalFile(
@@ -267,8 +276,8 @@ const profileSetup = async (req, res) => {
     let profile = await Profile.findOne({ user: req.user._id });
     if (profile) {
       profile.displayName = displayName;
-      if (dateOfBirth) profile.dateOfBirth = new Date(dateOfBirth);
-      if (gender) profile.gender = gender;
+      profile.dateOfBirth = parsedDob;
+      profile.gender = finalGender;
       if (parsedInterests) profile.interests = parsedInterests;
       if (bio !== undefined) profile.bio = bio;
       if (avatarUri) profile.avatarUri = avatarUri;
@@ -278,8 +287,8 @@ const profileSetup = async (req, res) => {
       profile = await Profile.create({
         user: req.user._id,
         displayName,
-        dateOfBirth: new Date(dateOfBirth),
-        gender,
+        dateOfBirth: parsedDob,
+        gender: finalGender,
         interests: parsedInterests,
         bio: bio || '',
         avatarUri,

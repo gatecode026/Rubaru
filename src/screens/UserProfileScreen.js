@@ -40,6 +40,7 @@ import interactionService from '@services/interactionService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import storage from '@services/storage';
 import { getSocket, disconnectSocket } from '@services/socket';
+import { useCallStore } from '../store/callStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_WIDTH = (SCREEN_WIDTH - 60) / 3;
@@ -493,14 +494,14 @@ export default function UserProfileScreen() {
   };
 
   const getFullUrl = (uri) => {
-    if (!uri) return 'https://i.pravatar.cc/150?img=60';
+    if (!uri) return null;
     let target = uri;
     if (typeof target === 'object') {
       target = target.url || target.thumbnailUri || target.originalUrl || target.uri || '';
     }
-    if (typeof target !== 'string' || !target) return 'https://i.pravatar.cc/150?img=60';
+    if (typeof target !== 'string' || !target) return null;
     if (target.startsWith('http') || target.startsWith('file://') || target.startsWith('content://')) return target;
-    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.70:5000/api';
+    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.33:5000/api';
     const host = apiBase.replace('/api', '');
     return `${host}${target.startsWith('/') ? '' : '/'}${target}`;
   };
@@ -659,7 +660,7 @@ export default function UserProfileScreen() {
             {/* Avatar Photo Section */}
             <View style={styles.avatarSection}>
               <View style={styles.avatarRingOuter}>
-                {(!profile?.avatarUri || profile.avatarUri.includes('pravatar.cc')) ? (
+                {(!profile?.avatarUri || profile.avatarUri.includes('pravatar.cc') || !profile.avatarUri.startsWith('http')) ? (
                   <View style={[styles.avatarImage, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
                     <Ionicons name="person-outline" size={36} color="#9CA3AF" />
                   </View>
@@ -748,6 +749,14 @@ export default function UserProfileScreen() {
                 <Pressable
                   style={({ pressed }) => [styles.actionPill, pressed && styles.buttonPressed]}
                   onPress={() => {
+                    const currentCallStatus = useCallStore.getState().callStatus;
+                    if (currentCallStatus !== 'IDLE' && currentCallStatus !== 'ENDED') {
+                      alert('You are already in an active call. Please finish your current call first.');
+                      return;
+                    }
+                    if (currentCallStatus === 'ENDED') {
+                      useCallStore.getState().resetToIdle();
+                    }
                     const callRecipientId = params.userId || profile?.user?._id || profile?.user;
                     if (!callRecipientId || !/^[0-9a-fA-F]{24}$/.test(String(callRecipientId))) {
                       alert('Cannot start call: Invalid user');
@@ -1946,7 +1955,7 @@ export default function UserProfileScreen() {
           <View style={[styles.photoViewerTopBar, { paddingTop: Math.max(insets.top + 8, 20) }]}>
             <View style={styles.photoViewerUserRow}>
               <Image
-                source={{ uri: profile?.avatarUri ? getFullUrl(profile.avatarUri) : 'https://i.pravatar.cc/150?img=60' }}
+                source={{ uri: profile?.avatarUri ? getFullUrl(profile.avatarUri) : null }}
                 style={styles.photoViewerAvatar}
               />
               <View style={{ marginLeft: 10 }}>
