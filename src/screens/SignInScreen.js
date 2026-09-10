@@ -81,8 +81,15 @@ export default function SignInScreen() {
       }
     } catch (error) {
       setLoading(false);
-      console.error(error);
-      if (error.response?.data?.unverified) {
+      if (error.response?.status === 503 || (typeof error.response?.data === 'string' && error.response.data.includes('Tunnel Unavailable'))) {
+        alert('Server tunnel is currently unavailable (503). Please check that your backend or tunnel is running.');
+        return;
+      }
+      if (!error.response) {
+        alert('Unable to connect to backend server. Please check your network connection.');
+        return;
+      }
+      if (error.response.data?.unverified) {
         alert(error.response.data.message || 'Please verify your OTP code to activate your account.');
         router.push({
           pathname: '/otp-verification',
@@ -93,7 +100,11 @@ export default function SignInScreen() {
         });
         return;
       }
-      const errMsg = error.response?.data?.message || 'Invalid email or password. Please try again.';
+      const defaultMsg =
+        activeTab === 'email'
+          ? 'Invalid email or password. Please try again.'
+          : 'Invalid phone number or password. Please try again.';
+      const errMsg = error.response?.data?.message || defaultMsg;
       alert(errMsg);
     }
   };
