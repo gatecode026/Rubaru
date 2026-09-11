@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import interactionService from '../../services/interactionService';
 import { getSocket } from '../../services/socket';
-import { useSelector } from 'react-redux';
+import storage from '../../services/storage';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -41,7 +41,15 @@ export default function PostCommentsModal({
   const [expandedReplies, setExpandedReplies] = useState({});
   const [filterSort, setFilterSort] = useState('top'); // 'top' | 'newest'
   const scrollViewRef = useRef(null);
-  const myAvatar = useSelector((state) => state.profile?.profile?.avatarUri || null);
+  const [myAvatar, setMyAvatar] = useState(null);
+
+  useEffect(() => {
+    storage.getUser().then((u) => {
+      if (u) {
+        setMyAvatar(u.avatarUri || u.avatar || u.profile?.avatarUri || u.user?.avatarUri || null);
+      }
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (visible && postId && /^[0-9a-fA-F]{24}$/.test(String(postId))) {

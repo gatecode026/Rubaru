@@ -50,6 +50,11 @@
       "expo-camera",
       "expo-audio"
     ],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./src/assets/images/icon.png"
+    },
     "scheme": "rubaru"
   }
 }

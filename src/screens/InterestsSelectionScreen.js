@@ -91,7 +91,7 @@ export default function InterestsSelectionScreen() {
             type,
           });
 
-          const baseURL = api.defaults.baseURL || 'http://192.168.1.33:5000/api';
+          const baseURL = api.defaults.baseURL || 'http://192.168.1.104:5000/api';
           const res = await fetch(`${baseURL}/auth/profile-setup`, {
             method: 'POST',
             headers: {

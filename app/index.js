@@ -5,6 +5,7 @@ import OnboardingScreen from '@screens/OnboardingScreen';
 import api from '../src/services/api';
 import storage from '../src/services/storage';
 import { connectSocket } from '../src/services/socket';
+import { usePointsStore } from '../src/store/pointsStore';
 
 export default function Index() {
   const router = useRouter();
@@ -63,6 +64,11 @@ export default function Index() {
 
           // Fully authenticated & verified user
           await storage.saveSession(token, userData);
+          if (userData.points !== undefined || userData.walletBalance !== undefined) {
+            usePointsStore.getState().setBalance(userData.walletBalance ?? userData.points);
+          }
+          usePointsStore.getState().fetchBalance().catch(() => {});
+
           try {
             connectSocket(token);
           } catch (sockErr) {

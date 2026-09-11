@@ -13,4 +13,10 @@ config.resolver.blockList = [
   /node_modules\/\..*/,
   /node_modules\\\..*/,
 ];
+
+config.resolver.extraNodeModules = {
+  ...config.resolver.extraNodeModules,
+  '@react-native/normalize-colors': require.resolve('@react-native/normalize-colors'),
+};
+
 module.exports = config;

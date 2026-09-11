@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking, Platform } from 'react-native';
-import { v4 as uuidv4 } from 'uuid';
 import api from './api';
 import { useCallStore } from '../store/callStore';
+
+const generateInstallationId = () => `inst_${Platform.OS}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
 const INSTALLATION_ID_KEY = '@rubaru_installation_id';
 const PROCESSED_CALLS_KEY = '@rubaru_processed_calls';
@@ -23,7 +24,7 @@ class CallPushClientService {
     try {
       let id = await AsyncStorage.getItem(INSTALLATION_ID_KEY);
       if (!id) {
-        id = `inst_${Platform.OS}_${uuidv4()}`;
+        id = generateInstallationId();
         await AsyncStorage.setItem(INSTALLATION_ID_KEY, id);
       }
       this.installationId = id;
