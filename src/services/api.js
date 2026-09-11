@@ -13,7 +13,7 @@ const getBaseUrl = () => {
       return `http://${ip}:5000/api`;
     }
   }
-  return 'http://192.168.1.33:5000/api';
+  return 'http://192.168.1.104:5000/api';
 };
 
 const api = axios.create({

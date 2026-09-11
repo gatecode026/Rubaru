@@ -14,6 +14,7 @@ import api from '@services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import storage from '@services/storage';
 import { connectSocket } from '@services/socket';
+import { usePointsStore } from '../store/pointsStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -68,6 +69,12 @@ export default function OtpVerificationScreen() {
       
       // Configure default header for future requests
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+      // Update wallet balance from response and sync live balance
+      if (response.data?.points !== undefined || response.data?.walletBalance !== undefined) {
+        usePointsStore.getState().setBalance(response.data.walletBalance ?? response.data.points);
+      }
+      usePointsStore.getState().fetchBalance().catch(() => {});
 
       // Connect socket so real-time chat and calls work from first session
       connectSocket(token);

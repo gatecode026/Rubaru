@@ -134,7 +134,7 @@ export default function HomeScreen({ isNestedInPager }) {
   const getFullUrl = (uri) => {
     if (!uri || typeof uri !== 'string' || uri.trim() === '') return null;
     if (uri.startsWith('http') || uri.startsWith('file://') || uri.startsWith('content://')) return uri;
-    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.33:5000/api';
+    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.104:5000/api';
     const host = apiBase.replace('/api', '');
     return `${host}${uri.startsWith('/') ? '' : '/'}${uri}`;
   };
