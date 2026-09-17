@@ -33,3 +33,12 @@ package-lock.json
 backend/uploads/
 uploads/
 .vscode/
+
+# Build artifacts & binaries
+*.apk
+*.aab
+k6-*/
+
+# Credentials & secrets
+serviceAccountKey.json
+backend/serviceAccountKey.json

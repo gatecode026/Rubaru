@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
 import { useLanguage } from '../../localization/LanguageContext';
+import { getSocket } from '../../services/socket';
+import notificationService from '../../services/notificationService';
 
 const reelIcon = require('../../assets/icons/solar_reel.png');
 
@@ -55,6 +57,42 @@ export default function BottomTabBar({ activeTab = 'index', onTabPress }) {
   const insets = useSafeAreaInsets();
   const { colors, isDarkMode } = useTheme();
   const { t } = useLanguage();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+    notificationService
+      .getUnreadCount()
+      .then((res) => {
+        if (isMounted && res) {
+          setUnreadCount(Number(res.unreadCount || res.count || 0));
+        }
+      })
+      .catch(() => {});
+
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleBadge = (data) => {
+      if (data && typeof data.unreadCount === 'number') {
+        setUnreadCount(data.unreadCount);
+      }
+    };
+    const handleNew = () => {
+      setUnreadCount((prev) => prev + 1);
+    };
+
+    socket.on('notification:badge_update', handleBadge);
+    socket.on('notification:unread_count', handleBadge);
+    socket.on('notification:new', handleNew);
+
+    return () => {
+      isMounted = false;
+      socket.off('notification:badge_update', handleBadge);
+      socket.off('notification:unread_count', handleBadge);
+      socket.off('notification:new', handleNew);
+    };
+  }, []);
 
   const getIsActive = (itemKey, activeName) => {
     if (!activeName) return false;
@@ -111,6 +149,9 @@ export default function BottomTabBar({ activeTab = 'index', onTabPress }) {
                   <ReelIcon color={iconColor} />
                 ) : (
                   <Ionicons name={iconName} size={26} color={iconColor} />
+                )}
+                {item.key === 'notification' && unreadCount > 0 && (
+                  <View style={styles.unreadBadgeDot} />
                 )}
               </View>
             </Pressable>
@@ -173,5 +214,16 @@ const styles = StyleSheet.create({
   reelIcon: {
     width: 24,
     height: 24,
+  },
+  unreadBadgeDot: {
+    position: 'absolute',
+    top: 0,
+    right: -4,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: '#FF2E63',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
   },
 });

@@ -22,7 +22,7 @@ class FraudProtectionService {
   /**
    * Pre-initiation fraud and safety checks
    */
-  async validateSessionInitiation({ initiatorId, receiverId }) {
+  async validateSessionInitiation({ initiatorId, receiverId, communicationType = null }) {
     if (initiatorId.toString() === receiverId.toString()) {
       return { allowed: false, code: 'SELF_COMMUNICATION_PROHIBITED', message: 'Cannot initiate session with yourself.' };
     }
@@ -46,7 +46,11 @@ class FraudProtectionService {
       };
     }
 
-    // 2. Concurrent Active Session Limit
+    // 2. Concurrent Active Session Limit (scoped by communication type and freshness)
+    const sessionTypeFilter = (communicationType && communicationType !== 'MESSAGE')
+      ? { communicationType: { $in: ['AUDIO', 'VIDEO'] } }
+      : {};
+
     const activeSessionsCount = await PaidCommunicationSession.countDocuments({
       $or: [{ initiatorId }, { receiverId: initiatorId }],
       status: {
@@ -57,6 +61,8 @@ class FraudProtectionService {
           PaidSessionStatuses.ACTIVE,
         ],
       },
+      createdAt: { $gte: new Date(now.getTime() - 15 * 60 * 1000) }, // ignore stale un-ended sessions older than 15 min
+      ...sessionTypeFilter,
     });
 
     if (activeSessionsCount >= this.maxConcurrentActiveSessions) {

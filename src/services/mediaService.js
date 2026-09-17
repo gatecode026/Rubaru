@@ -1,4 +1,4 @@
-import api from './api';
+import api, { getBaseUrl } from './api';
 
 /**
  * Rubaru Frontend Media Service Client
@@ -17,7 +17,7 @@ export const mediaService = {
    * Upload binary data directly to the authorized upload target
    */
   uploadDirect: async (uploadUrl, binaryBufferOrBlob, mimeType, onProgress) => {
-    const apiBase = api.defaults.baseURL || process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.33:5000/api';
+    const apiBase = api.defaults.baseURL || getBaseUrl();
     const host = apiBase.replace('/api', '');
     const fullUrl = uploadUrl.startsWith('http') ? uploadUrl : `${host}${uploadUrl}`;
 

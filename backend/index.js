@@ -1,4 +1,13 @@
 require('dotenv').config();
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[CRITICAL UNHANDLED REJECTION]:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[CRITICAL UNCAUGHT EXCEPTION]:', err);
+});
+
 const express = require('express');
 const http = require('http');
 const socketio = require('socket.io');
@@ -215,5 +224,13 @@ server.listen(PORT, () => {
     }
   } catch (workerErr) {
     console.warn('[PAID BILLING] Failed to start background worker:', workerErr.message);
+  }
+  try {
+    const { defaultSocialWorker } = require('./services/socialLifecycleWorker');
+    if (defaultSocialWorker && typeof defaultSocialWorker.start === 'function') {
+      defaultSocialWorker.start();
+    }
+  } catch (socialErr) {
+    console.warn('[SOCIAL LIFECYCLE] Failed to start background worker:', socialErr.message);
   }
 });

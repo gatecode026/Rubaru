@@ -349,13 +349,48 @@ async function getConversationList(actorUserId, options = {}) {
   }
 
   // 1. Find user's active memberships
-  const memberDocs = await ConversationMember.find({
+  let memberDocs = await ConversationMember.find({
     userId: actorUserId,
     state: MemberStates.ACTIVE,
   })
     .sort({ updatedAt: -1, _id: -1 })
     .populate('conversationId')
     .lean();
+
+  // Dual-lookup auto-heal: check if any direct conversations have participants includes actorUserId
+  // but ConversationMember was not created yet
+  try {
+    const existingMemberConvIds = new Set(
+      memberDocs
+        .map((m) => (m.conversationId?._id || m.conversationId)?.toString())
+        .filter(Boolean)
+    );
+    const unlinkedConversations = await Conversation.find({
+      participants: actorUserId,
+      status: ConversationStatuses.ACTIVE,
+      _id: { $nin: Array.from(existingMemberConvIds) },
+    }).lean();
+
+    if (unlinkedConversations.length > 0) {
+      const createdMembers = await Promise.all(
+        unlinkedConversations.map(async (conv) => {
+          const newM = await ConversationMember.create({
+            conversationId: conv._id,
+            userId: actorUserId,
+            role: MemberRoles.MEMBER,
+            state: MemberStates.ACTIVE,
+          });
+          return {
+            ...newM.toObject(),
+            conversationId: conv,
+          };
+        })
+      );
+      memberDocs = [...memberDocs, ...createdMembers];
+    }
+  } catch (healErr) {
+    console.warn('[CONVERSATION AUTO-HEAL NOTE]:', healErr.message);
+  }
 
   // 2. Filter valid active conversations matching requested criteria
   const validMemberships = memberDocs.filter((m) => {

@@ -180,7 +180,8 @@ function validateOfferPayload(payload) {
   if (!callId) {
     return { valid: false, error: 'callId is required' };
   }
-  const rawSdp = typeof payload.sdp === 'object' && payload.sdp ? payload.sdp.sdp : payload.sdp;
+  const signalObj = payload.signal || payload.sdp;
+  const rawSdp = typeof signalObj === 'object' && signalObj ? (signalObj.sdp || signalObj) : signalObj;
   if (!rawSdp || typeof rawSdp !== 'string') {
     return { valid: false, error: 'sdp string is required' };
   }
@@ -189,12 +190,17 @@ function validateOfferPayload(payload) {
     return { valid: false, error: sdpValidation.error };
   }
   const requestId = sanitizeString(payload.requestId, 128) || `req_${Date.now()}`;
+  const formattedSdp = typeof signalObj === 'object' && signalObj?.sdp
+    ? signalObj
+    : { type: 'offer', sdp: rawSdp };
 
   return {
     valid: true,
     data: {
       callId,
-      sdp: typeof payload.sdp === 'object' ? payload.sdp : { type: 'offer', sdp: rawSdp },
+      sdp: formattedSdp,
+      signal: formattedSdp,
+      targetUserId: payload.targetUserId || null,
       requestId,
     },
   };
@@ -211,7 +217,8 @@ function validateAnswerPayload(payload) {
   if (!callId) {
     return { valid: false, error: 'callId is required' };
   }
-  const rawSdp = typeof payload.sdp === 'object' && payload.sdp ? payload.sdp.sdp : payload.sdp;
+  const signalObj = payload.signal || payload.sdp;
+  const rawSdp = typeof signalObj === 'object' && signalObj ? (signalObj.sdp || signalObj) : signalObj;
   if (!rawSdp || typeof rawSdp !== 'string') {
     return { valid: false, error: 'sdp string is required' };
   }
@@ -220,12 +227,17 @@ function validateAnswerPayload(payload) {
     return { valid: false, error: sdpValidation.error };
   }
   const requestId = sanitizeString(payload.requestId, 128) || `req_${Date.now()}`;
+  const formattedSdp = typeof signalObj === 'object' && signalObj?.sdp
+    ? signalObj
+    : { type: 'answer', sdp: rawSdp };
 
   return {
     valid: true,
     data: {
       callId,
-      sdp: typeof payload.sdp === 'object' ? payload.sdp : { type: 'answer', sdp: rawSdp },
+      sdp: formattedSdp,
+      signal: formattedSdp,
+      targetUserId: payload.targetUserId || null,
       requestId,
     },
   };
@@ -242,7 +254,7 @@ function validateIcePayload(payload) {
   if (!callId) {
     return { valid: false, error: 'callId is required' };
   }
-  const candidateObj = payload.candidate;
+  const candidateObj = payload.candidate || (payload.signal?.candidate ? payload.signal : payload.signal);
   const iceValidation = turnService.validateIceCandidate(candidateObj);
   if (!iceValidation.valid) {
     return { valid: false, error: iceValidation.error };
@@ -258,6 +270,8 @@ function validateIcePayload(payload) {
         sdpMid: sanitizeString(candidateObj.sdpMid, 256) || null,
         sdpMLineIndex: typeof candidateObj.sdpMLineIndex === 'number' ? candidateObj.sdpMLineIndex : null,
       },
+      signal: candidateObj,
+      targetUserId: payload.targetUserId || null,
       requestId,
     },
   };

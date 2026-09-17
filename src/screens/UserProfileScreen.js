@@ -17,6 +17,7 @@ import {
   TextInput,
   TouchableOpacity,
   Share,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -65,10 +66,16 @@ const ALL_INTERESTS = [
 export default function UserProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  if (!params.userId && params.id) {
+    params.userId = params.id;
+  }
   const insets = useSafeAreaInsets();
   const { language, setLanguage, t } = useLanguage();
   const [activeTab, setActiveTab] = useState('top');
   const [isFollowing, setIsFollowing] = useState(false);
+  const [followStatus, setFollowStatus] = useState('NONE'); // 'NONE', 'FOLLOWING', 'REQUESTED', 'FOLLOW_BACK'
+  const [isTargetPrivate, setIsTargetPrivate] = useState(false);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -87,6 +94,36 @@ export default function UserProfileScreen() {
   const [photoCommentsVisible, setPhotoCommentsVisible] = useState(false);
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+
+  // Follow & Following List Modal State
+  const [followListModalVisible, setFollowListModalVisible] = useState(false);
+  const [followListType, setFollowListType] = useState('followers');
+  const [followListItems, setFollowListItems] = useState([]);
+  const [loadingFollowList, setLoadingFollowList] = useState(false);
+
+  const handleOpenFollowList = async (type) => {
+    const rawTargetId = params.userId || params.id;
+    const targetId = rawTargetId || profile?.user?._id || profile?.user;
+    if (!targetId) return;
+    setFollowListType(type);
+    setFollowListModalVisible(true);
+    setLoadingFollowList(true);
+    try {
+      let res;
+      if (type === 'followers') {
+        res = await followService.getFollowers(targetId);
+      } else {
+        res = await followService.getFollowing(targetId);
+      }
+      const list = res.data?.items || res.items || [];
+      setFollowListItems(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.warn('[FOLLOW LIST ERROR]', err.message);
+      setFollowListItems([]);
+    } finally {
+      setLoadingFollowList(false);
+    }
+  };
 
   const selectedPhotoItemRef = useRef(null);
   const lastTapRef = useRef(0);
@@ -290,13 +327,20 @@ export default function UserProfileScreen() {
       if (isTargetingOther) {
         try {
           const followStatusRes = await followService.getFollowStatus(rawTargetId);
-          const status = followStatusRes.status || followStatusRes.data?.status;
-          setIsFollowing(status === 'ACCEPTED');
+          const fData = followStatusRes.data || followStatusRes;
+          // Backend returns 'ACCEPTED' when following; normalize to 'FOLLOWING' for UI consistency
+          const rawStatus = fData.status || 'NONE';
+          const normalizedStatus = rawStatus === 'ACCEPTED' ? 'FOLLOWING' : rawStatus;
+          setFollowStatus(normalizedStatus);
+          setIsFollowing(normalizedStatus === 'FOLLOWING' || Boolean(fData.isFollowing));
+          setIsTargetPrivate(Boolean(fData.isPrivate));
         } catch (fErr) {
           console.log('[FETCH FOLLOW STATUS ERROR]', fErr.message);
         }
       } else {
         setIsFollowing(false);
+        setFollowStatus('NONE');
+        setIsTargetPrivate(false);
       }
 
       // Also fetch user's reels / short videos
@@ -330,17 +374,53 @@ export default function UserProfileScreen() {
       console.warn('[FOLLOW] Cannot follow invalid or own user ID:', targetId);
       return;
     }
-    const prev = isFollowing;
-    setIsFollowing(!prev);
+
+    if (isFollowLoading) return;
+    setIsFollowLoading(true);
+
+    const prevStatus = followStatus;
+    const prevFollowing = isFollowing;
+
     try {
-      if (prev) {
+      if (prevStatus === 'FOLLOWING' || prevFollowing) {
+        // Unfollow
+        setFollowStatus('NONE');
+        setIsFollowing(false);
+        setProfile((p) => (p ? { ...p, followersCount: Math.max(0, (p.followersCount || 1) - 1) } : p));
+        await followService.unfollowUser(targetId);
+      } else if (prevStatus === 'REQUESTED') {
+        // Cancel follow request
+        setFollowStatus('NONE');
+        setIsFollowing(false);
         await followService.unfollowUser(targetId);
       } else {
-        await followService.followUser(targetId);
+        // Follow or Request to follow
+        if (isTargetPrivate) {
+          setFollowStatus('REQUESTED');
+          setIsFollowing(false);
+        } else {
+          setFollowStatus('FOLLOWING');
+          setIsFollowing(true);
+          setProfile((p) => (p ? { ...p, followersCount: (p.followersCount || 0) + 1 } : p));
+        }
+
+        const res = await followService.followUser(targetId);
+        const relStatus = res.data?.relationship?.status || res.relationship?.status;
+        // Normalize 'ACCEPTED' from backend to 'FOLLOWING' for UI
+        if (relStatus === 'PENDING') {
+          setFollowStatus('REQUESTED');
+          setIsFollowing(false);
+        } else if (relStatus === 'ACCEPTED' || relStatus === 'FOLLOWING') {
+          setFollowStatus('FOLLOWING');
+          setIsFollowing(true);
+        }
       }
     } catch (err) {
       console.log('[FOLLOW TOGGLE ERROR]', err.message);
-      setIsFollowing(prev);
+      setFollowStatus(prevStatus);
+      setIsFollowing(prevFollowing);
+    } finally {
+      setIsFollowLoading(false);
     }
   };
 
@@ -672,9 +752,30 @@ export default function UserProfileScreen() {
                   />
                 )}
               </View>
-              <Text style={styles.followersText}>
-                {profile?.followersCount !== undefined ? `${profile.followersCount} Followers` : '0 Followers'}
-              </Text>
+
+              <View style={styles.followersRowInteractive}>
+                <Pressable
+                  onPress={() => handleOpenFollowList('followers')}
+                  style={({ pressed }) => [styles.statHeaderBtn, pressed && styles.buttonPressed]}
+                  hitSlop={8}
+                >
+                  <Text style={styles.followersText}>
+                    <Text style={{ fontWeight: '700', color: '#111827' }}>{profile?.followersCount || 0}</Text> Followers
+                  </Text>
+                </Pressable>
+
+                <View style={styles.statDotSeparator} />
+
+                <Pressable
+                  onPress={() => handleOpenFollowList('following')}
+                  style={({ pressed }) => [styles.statHeaderBtn, pressed && styles.buttonPressed]}
+                  hitSlop={8}
+                >
+                  <Text style={styles.followersText}>
+                    <Text style={{ fontWeight: '700', color: '#111827' }}>{profile?.followingCount || 0}</Text> Following
+                  </Text>
+                </Pressable>
+              </View>
             </View>
 
             {/* Action Buttons Row - Instagram Reference: Edit/Share for Own Profile, Follow/Message/Call for Other Profile */}
@@ -713,14 +814,26 @@ export default function UserProfileScreen() {
               <View style={styles.actionRow}>
                 <Pressable
                   onPress={handleFollowToggle}
+                  disabled={isFollowLoading}
                   style={({ pressed }) => [
                     styles.actionPill,
-                    isFollowing && styles.actionPillActive,
+                    (followStatus === 'FOLLOWING' || followStatus === 'REQUESTED') && styles.actionPillActive,
                     pressed && styles.buttonPressed,
                   ]}
                 >
-                  <Text style={[styles.actionPillText, isFollowing && styles.actionPillTextActive]}>
-                    {isFollowing ? t('following', 'Following') : t('follow', 'Follow')}
+                  <Text
+                    style={[
+                      styles.actionPillText,
+                      (followStatus === 'FOLLOWING' || followStatus === 'REQUESTED') && styles.actionPillTextActive,
+                    ]}
+                  >
+                    {followStatus === 'FOLLOWING'
+                      ? 'Following'
+                      : followStatus === 'REQUESTED'
+                      ? 'Requested'
+                      : followStatus === 'FOLLOW_BACK'
+                      ? 'Follow Back'
+                      : 'Follow'}
                   </Text>
                 </Pressable>
 
@@ -779,9 +892,21 @@ export default function UserProfileScreen() {
               </View>
             )}
 
-            {/* Tabs Filter Bar Header (Top & About Me options) */}
-            <View style={styles.tabsHeaderContainer}>
-              <View style={styles.tabsRow}>
+            {isTargetPrivate && !isFollowing && !isOwnProfile ? (
+              <View style={styles.privateAccountBox}>
+                <View style={styles.privateLockCircle}>
+                  <Ionicons name="lock-closed-outline" size={38} color="#111827" />
+                </View>
+                <Text style={styles.privateAccountHeading}>This Account is Private</Text>
+                <Text style={styles.privateAccountSubheading}>
+                  Follow this account to see their photos and videos.
+                </Text>
+              </View>
+            ) : (
+              <View style={{ width: '100%' }}>
+                {/* Tabs Filter Bar Header (Top & About Me options) */}
+                <View style={styles.tabsHeaderContainer}>
+                  <View style={styles.tabsRow}>
                 <Pressable
                   onPress={() => setActiveTab('top')}
                   style={styles.tabItem}
@@ -1359,6 +1484,8 @@ export default function UserProfileScreen() {
                 </View>
               </View>
             )}
+              </View>
+            )}
 
           </ScrollView>
 
@@ -1586,55 +1713,82 @@ export default function UserProfileScreen() {
                 <Text style={styles.settingItemText}>{t('deleteAccount', 'Delete Account')}</Text>
               </Pressable>
 
-              {/* Sign Out Option */}
-              <Pressable
-                onPress={async () => {
-                  setShowSettingsModal(false);
-                  try {
-                    await storage.clearSession();
-                    disconnectSocket();
-                    router.replace('/sign-in');
-                  } catch (e) {
-                    console.log('Logout error:', e.message);
-                  }
-                }}
-                style={styles.settingItemRow}
-              >
-                <View style={styles.bulletDot} />
-                <Text style={[styles.settingItemText, { color: '#FF2E63', fontWeight: '700' }]}>
-                  {t('signOut', 'Sign Out')}
-                </Text>
-              </Pressable>
-
-              {/* Group 6: App Language — Segmented Pill Control */}
-              <View style={[styles.sectionHeaderRow, { marginTop: 18, marginBottom: 10 }]}>
-                <Text style={styles.langSectionIcon}>文A</Text>
-                <Text style={[styles.sectionHeaderTitle, { marginLeft: 6 }]}>{t('appLanguage', 'App Language')}</Text>
+              {/* Group 6: App Language — Modern Interactive Dual Cards */}
+              <View style={[styles.sectionHeaderRow, { marginTop: 22, marginBottom: 12, justifyContent: 'space-between' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={styles.langHeaderIconWrap}>
+                    <Ionicons name="globe-outline" size={17} color="#FF2E63" />
+                  </View>
+                  <Text style={[styles.sectionHeaderTitle, { marginLeft: 8 }]}>{t('appLanguage', 'App Language')}</Text>
+                </View>
+                <View style={styles.currentLangBadge}>
+                  <Text style={styles.currentLangBadgeText}>{isHindi ? 'हिंदी' : 'English'}</Text>
+                </View>
               </View>
 
-              {/* Segmented pill — EN / हिंदी */}
-              <View style={styles.langSegmentTrack}>
-                {/* English pill */}
+              {/* Modern Language Dual-Cards */}
+              <View style={styles.modernLangGrid}>
+                {/* English Option Card */}
                 <Pressable
                   onPress={() => setLanguage('en')}
-                  style={[styles.langSegmentBtn, !isHindi && styles.langSegmentBtnActive]}
+                  style={[
+                    styles.modernLangCard,
+                    !isHindi ? styles.modernLangCardActive : styles.modernLangCardInactive,
+                  ]}
+                  android_ripple={{ color: 'rgba(255, 46, 99, 0.08)' }}
                 >
-                  <Text style={[styles.langSegmentCode, !isHindi && styles.langSegmentCodeActive]}>EN</Text>
-                  <Text style={[styles.langSegmentName, !isHindi && styles.langSegmentNameActive]}>English</Text>
+                  <View style={styles.modernLangCardLeft}>
+                    <View style={[styles.langAvatarCircle, !isHindi && styles.langAvatarCircleActive]}>
+                      <Text style={[styles.langAvatarText, !isHindi && styles.langAvatarTextActive]}>EN</Text>
+                    </View>
+                    <View style={{ marginLeft: 10 }}>
+                      <Text style={[styles.modernLangTitle, !isHindi && styles.modernLangTitleActive]}>
+                        English
+                      </Text>
+                      <Text style={styles.modernLangSub}>Default</Text>
+                    </View>
+                  </View>
+                  {!isHindi ? (
+                    <View style={styles.langCheckedWrap}>
+                      <Ionicons name="checkmark-circle" size={18} color="#FF2E63" />
+                    </View>
+                  ) : (
+                    <View style={styles.langUncheckedCircle} />
+                  )}
                 </Pressable>
 
-                {/* Hindi pill */}
+                {/* Hindi Option Card */}
                 <Pressable
                   onPress={() => setLanguage('hi')}
-                  style={[styles.langSegmentBtn, isHindi && styles.langSegmentBtnActive]}
+                  style={[
+                    styles.modernLangCard,
+                    isHindi ? styles.modernLangCardActive : styles.modernLangCardInactive,
+                  ]}
+                  android_ripple={{ color: 'rgba(255, 46, 99, 0.08)' }}
                 >
-                  <Text style={[styles.langSegmentCode, isHindi && styles.langSegmentCodeActive]}>हि</Text>
-                  <Text style={[styles.langSegmentName, isHindi && styles.langSegmentNameActive]}>हिंदी</Text>
+                  <View style={styles.modernLangCardLeft}>
+                    <View style={[styles.langAvatarCircle, isHindi && styles.langAvatarCircleActive]}>
+                      <Text style={[styles.langAvatarText, isHindi && styles.langAvatarTextActive]}>हि</Text>
+                    </View>
+                    <View style={{ marginLeft: 10 }}>
+                      <Text style={[styles.modernLangTitle, isHindi && styles.modernLangTitleActive]}>
+                        हिंदी
+                      </Text>
+                      <Text style={styles.modernLangSub}>Hindi</Text>
+                    </View>
+                  </View>
+                  {isHindi ? (
+                    <View style={styles.langCheckedWrap}>
+                      <Ionicons name="checkmark-circle" size={18} color="#FF2E63" />
+                    </View>
+                  ) : (
+                    <View style={styles.langUncheckedCircle} />
+                  )}
                 </Pressable>
               </View>
 
               {/* Group 7: Mode */}
-              <View style={[styles.settingSwitchRow, { marginTop: 18 }]}>
+              <View style={[styles.settingSwitchRow, { marginTop: 20 }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Ionicons name="options-outline" size={20} color="#111827" style={{ marginRight: 10 }} />
                   <Text style={styles.sectionHeaderTitle}>{t('mode', 'Mode')}</Text>
@@ -1642,21 +1796,27 @@ export default function UserProfileScreen() {
                 <Switch
                   value={isDarkMode}
                   onValueChange={toggleTheme}
-                  trackColor={{ false: '#E5E7EB', true: '#F44649' }}
+                  trackColor={{ false: '#E5E7EB', true: '#FF2E63' }}
                   thumbColor="#FFFFFF"
                 />
               </View>
 
               {/* Group 8: Log out */}
               <Pressable
-                onPress={() => {
+                onPress={async () => {
                   setShowSettingsModal(false);
+                  try {
+                    await storage.clearSession();
+                    disconnectSocket();
+                  } catch (e) {
+                    console.log('Logout error:', e.message);
+                  }
                   router.replace('/sign-in');
                 }}
                 style={[styles.sectionHeaderRow, { marginTop: 24, marginBottom: 16 }]}
               >
-                <Ionicons name="log-out-outline" size={22} color="#111827" style={{ marginRight: 10 }} />
-                <Text style={styles.sectionHeaderTitle}>{t('logout', 'Log out')}</Text>
+                <Ionicons name="log-out-outline" size={22} color="#EF4444" style={{ marginRight: 10 }} />
+                <Text style={[styles.sectionHeaderTitle, { color: '#EF4444' }]}>{t('logout', 'Log out')}</Text>
               </Pressable>
 
             </ScrollView>
@@ -1772,9 +1932,18 @@ export default function UserProfileScreen() {
                   </Pressable>
 
                   <Pressable
-                    onPress={() => {
-                      setShowDeleteModal(false);
-                      router.replace('/sign-in');
+                    onPress={async () => {
+                      try {
+                        setShowDeleteModal(false);
+                        await api.delete('/auth/account');
+                        await storage.clearSession();
+                        disconnectSocket();
+                        Alert.alert('Account Deleted', 'Your account and data have been removed.');
+                        router.replace('/sign-in');
+                      } catch (err) {
+                        console.log('[DELETE ACCOUNT ERROR]', err.message);
+                        Alert.alert('Error', err.response?.data?.message || 'Failed to delete account. Please try again.');
+                      }
                     }}
                     style={[styles.deleteActionButton, { backgroundColor: '#10B981' }]}
                   >
@@ -1929,6 +2098,86 @@ export default function UserProfileScreen() {
                 )}
               </LinearGradient>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Follow / Following List Modal (Instagram style) */}
+      <Modal
+        visible={followListModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFollowListModalVisible(false)}
+      >
+        <View style={styles.followListModalOverlay}>
+          <View style={[styles.followListModalCard, { paddingBottom: Math.max(insets.bottom + 12, 24) }]}>
+            {/* Header */}
+            <View style={styles.followListModalHeader}>
+              <Text style={styles.followListModalTitle}>
+                {followListType === 'followers' ? 'Followers' : 'Following'}
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setFollowListModalVisible(false)}
+                style={styles.followListModalCloseBtn}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={22} color="#111827" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Content List */}
+            {loadingFollowList ? (
+              <View style={styles.followListLoadingWrap}>
+                <ActivityIndicator size="small" color="#FF2E63" />
+                <Text style={styles.followListLoadingText}>Loading list...</Text>
+              </View>
+            ) : followListItems.length === 0 ? (
+              <View style={styles.followListEmptyWrap}>
+                <Ionicons name="people-outline" size={42} color="#9CA3AF" />
+                <Text style={styles.followListEmptyText}>
+                  {followListType === 'followers' ? 'No followers found' : 'Not following anyone yet'}
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={followListItems}
+                keyExtractor={(item) => String(item.userId || item._id || Math.random())}
+                style={{ maxHeight: 420 }}
+                showsVerticalScrollIndicator={false}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.followListItemRow}
+                    onPress={() => {
+                      setFollowListModalVisible(false);
+                      router.push({
+                        pathname: '/user-profile',
+                        params: { userId: String(item.userId || item._id) },
+                      });
+                    }}
+                  >
+                    <Image
+                      source={{ uri: item.avatarUri ? getFullUrl(item.avatarUri) : 'https://placehold.co/100x100/png' }}
+                      style={styles.followListAvatar}
+                    />
+                    <View style={styles.followListItemInfo}>
+                      <Text style={styles.followListName} numberOfLines={1}>
+                        {item.displayName || item.name || 'Rubaru User'}
+                      </Text>
+                      {item.bio ? (
+                        <Text style={styles.followListBio} numberOfLines={1}>
+                          {item.bio}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.followListViewBtn}>
+                      <Text style={styles.followListViewBtnText}>View</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -2126,12 +2375,117 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 48,
   },
+  followersRowInteractive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+  },
+  statHeaderBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  statDotSeparator: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#9CA3AF',
+    marginHorizontal: 8,
+  },
   followersText: {
     fontFamily: 'Poppins_800ExtraBold',
+    fontSize: 16,
+    color: '#4B5563',
+    letterSpacing: -0.2,
+  },
+  followListModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  followListModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    maxHeight: '80%',
+  },
+  followListModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    marginBottom: 8,
+  },
+  followListModalTitle: {
     fontSize: 18,
+    fontWeight: '700',
     color: '#111827',
+  },
+  followListModalCloseBtn: {
+    padding: 6,
+  },
+  followListLoadingWrap: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  followListLoadingText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  followListEmptyWrap: {
+    paddingVertical: 48,
+    alignItems: 'center',
+  },
+  followListEmptyText: {
     marginTop: 12,
-    letterSpacing: -0.3,
+    fontSize: 15,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  followListItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F9FAFB',
+  },
+  followListAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F3F4F6',
+  },
+  followListItemInfo: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+  followListName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  followListBio: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  followListViewBtn: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  followListViewBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
   },
   actionRow: {
     flexDirection: 'row',
@@ -2665,51 +3019,103 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#374151',
   },
-  /* ─── App Language Segmented Pill ─── */
-  langSectionIcon: {
-    fontSize: 18,
-    color: '#111827',
+  /* ─── Modern App Language UI ─── */
+  langHeaderIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#FFE4EB',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  langSegmentTrack: {
+  currentLangBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#FFE4EB',
+  },
+  currentLangBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FF2E63',
+  },
+  modernLangGrid: {
     flexDirection: 'row',
-    backgroundColor: '#F3E8ED',
-    borderRadius: 14,
-    padding: 4,
+    gap: 10,
     marginVertical: 4,
   },
-  langSegmentBtn: {
+  modernLangCard: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 6,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
   },
-  langSegmentBtnActive: {
+  modernLangCardActive: {
     backgroundColor: '#FFFFFF',
-    shadowColor: '#E63956',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1.5,
+    borderColor: '#FF2E63',
+    shadowColor: '#FF2E63',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  langSegmentCode: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#9CA3AF',
+  modernLangCardInactive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 46, 99, 0.15)',
   },
-  langSegmentCodeActive: {
-    color: '#E63956',
+  modernLangCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  langSegmentName: {
+  langAvatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  langAvatarCircleActive: {
+    backgroundColor: '#FF2E63',
+  },
+  langAvatarText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#6B7280',
+  },
+  langAvatarTextActive: {
+    color: '#FFFFFF',
+  },
+  modernLangTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#9CA3AF',
+    color: '#4B5563',
   },
-  langSegmentNameActive: {
-    color: '#374151',
+  modernLangTitleActive: {
+    color: '#111827',
     fontWeight: '700',
+  },
+  modernLangSub: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#9CA3AF',
+    marginTop: 1,
+  },
+  langCheckedWrap: {
+    marginLeft: 4,
+  },
+  langUncheckedCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    marginLeft: 4,
   },
   modalOverlayCenter: {
     flex: 1,
@@ -3623,5 +4029,36 @@ const styles = StyleSheet.create({
   },
   photoViewerActionIcon: {
     padding: 6,
+  },
+  // --- Instagram Private Account Locked View ---
+  privateAccountBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 56,
+  },
+  privateLockCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 2,
+    borderColor: '#111827',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  privateAccountHeading: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  privateAccountSubheading: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    maxWidth: 280,
   },
 });

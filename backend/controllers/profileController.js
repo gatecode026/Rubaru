@@ -5,6 +5,7 @@ const Notification = require('../models/Notification');
 const Content = require('../models/Content');
 const Match = require('../models/Match');
 const FollowRelationship = require('../models/FollowRelationship');
+const followService = require('../services/followService');
 const imagekitService = require('../services/imagekitService');
 
 /**
@@ -19,7 +20,7 @@ async function enrichProfileStats(profileDoc) {
 
   try {
     const userObjectId = new mongoose.Types.ObjectId(targetUserId.toString());
-    const [contentLikesAgg, matchesCount, followsCount] = await Promise.all([
+    const [contentLikesAgg, matchesCount, followsCount, liveFollowersCount, liveFollowingCount] = await Promise.all([
       Content.aggregate([
         {
           $match: {
@@ -40,6 +41,14 @@ async function enrichProfileStats(profileDoc) {
         ],
         status: 'ACCEPTED',
       }),
+      FollowRelationship.countDocuments({
+        followingId: userObjectId,
+        status: 'ACCEPTED',
+      }),
+      FollowRelationship.countDocuments({
+        followerId: userObjectId,
+        status: 'ACCEPTED',
+      }),
     ]);
 
     const totalContentLikes = contentLikesAgg[0]?.totalLikes || 0;
@@ -48,7 +57,7 @@ async function enrichProfileStats(profileDoc) {
       matchesCount,
       followsCount,
       Number(profileDoc.connectionsCount) || 0,
-      Number(profileDoc.followersCount) || 0
+      liveFollowersCount
     );
     const dynamicViews = Number(profileDoc.profileViews) || 0;
 
@@ -56,6 +65,14 @@ async function enrichProfileStats(profileDoc) {
     obj.likesCount = dynamicLikes;
     obj.connectionsCount = dynamicConnections;
     obj.profileViews = dynamicViews;
+    obj.followersCount = liveFollowersCount;
+    obj.followingCount = liveFollowingCount;
+
+    // Self-heal stored profile counters in MongoDB background
+    Profile.updateOne(
+      { _id: profileDoc._id },
+      { $set: { followersCount: liveFollowersCount, followingCount: liveFollowingCount } }
+    ).catch(() => {});
 
     // Enrich photos with Content document IDs, likesCount, commentsCount
     const photoUrls = Array.isArray(profileDoc.photos) ? profileDoc.photos : [];
@@ -306,50 +323,18 @@ const followProfile = async (req, res) => {
   }
 
   try {
-    const targetProfile = await Profile.findOne({ user: targetUserId });
-    const currentProfile = await Profile.findOne({ user: currentUserId });
+    const status = await followService.getFollowStatus(currentUserId, targetUserId);
 
-    if (!targetProfile || !currentProfile) {
-      return res.status(404).json({ message: 'Profile not found' });
-    }
-
-    const isFollowing = currentProfile.following.includes(targetUserId);
-
-    if (isFollowing) {
-      // Unfollow
-      currentProfile.following = currentProfile.following.filter(id => id.toString() !== targetUserId);
-      currentProfile.followingCount = Math.max(0, currentProfile.followingCount - 1);
-
-      targetProfile.followers = targetProfile.followers.filter(id => id.toString() !== currentUserId.toString());
-      targetProfile.followersCount = Math.max(0, targetProfile.followersCount - 1);
-
-      await currentProfile.save();
-      await targetProfile.save();
-
-      res.status(200).json({ message: 'Unfollowed successfully', isFollowing: false });
+    if (status.isFollowing) {
+      await followService.unfollowUser(currentUserId, targetUserId);
+      return res.status(200).json({ message: 'Unfollowed successfully', isFollowing: false });
     } else {
-      // Follow
-      currentProfile.following.push(targetUserId);
-      currentProfile.followingCount += 1;
-
-      targetProfile.followers.push(currentUserId);
-      targetProfile.followersCount += 1;
-
-      await currentProfile.save();
-      await targetProfile.save();
-
-      // Create notification
-      await Notification.create({
-        recipient: targetUserId,
-        sender: currentUserId,
-        type: 'follow',
-        message: `${currentProfile.displayName} started following you.`,
-      });
-
-      res.status(200).json({ message: 'Followed successfully', isFollowing: true });
+      await followService.followUser(currentUserId, targetUserId);
+      return res.status(200).json({ message: 'Followed successfully', isFollowing: true });
     }
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({ message: error.message });
   }
 };
 

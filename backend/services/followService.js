@@ -6,6 +6,8 @@ const Notification = require('../models/Notification');
 const OutboxEvent = require('../models/OutboxEvent');
 const FollowRelationship = require('../models/FollowRelationship');
 const socialPolicyService = require('./socialPolicyService');
+const notificationService = require('./notificationService');
+const { SocialNotificationTypes } = require('../models/enums');
 
 class FollowService {
   /**
@@ -148,13 +150,15 @@ class FollowService {
         console.warn('[FOLLOW SERVICE] Outbox recording warning:', outboxErr.message);
       }
 
-      // In-App Notification
+      // Real-time Notification for New Follower
       try {
-        await Notification.create({
-          recipient: targetId,
-          sender: followerId,
-          type: 'follow',
-          message: `${followerProfile.displayName || 'Someone'} started following you.`,
+        await notificationService.createNotification({
+          recipientId: targetId,
+          actorId: followerId,
+          type: SocialNotificationTypes.NEW_FOLLOWER,
+          subjectType: 'USER',
+          subjectId: followerId,
+          customMessage: `${followerProfile.displayName || 'Someone'} started following you.`,
         });
       } catch (notifErr) {
         console.warn('[FOLLOW SERVICE] Notification error:', notifErr.message);
@@ -179,12 +183,15 @@ class FollowService {
         console.warn('[FOLLOW SERVICE] Outbox recording warning:', outboxErr.message);
       }
 
+      // Real-time Notification for Follow Request
       try {
-        await Notification.create({
-          recipient: targetId,
-          sender: followerId,
-          type: 'follow',
-          message: `${followerProfile.displayName || 'Someone'} requested to follow you.`,
+        await notificationService.createNotification({
+          recipientId: targetId,
+          actorId: followerId,
+          type: SocialNotificationTypes.FOLLOW_REQUEST_RECEIVED,
+          subjectType: 'USER',
+          subjectId: followerId,
+          customMessage: `${followerProfile.displayName || 'Someone'} requested to follow you.`,
         });
       } catch (notifErr) {
         console.warn('[FOLLOW SERVICE] Notification error:', notifErr.message);
@@ -417,11 +424,14 @@ class FollowService {
 
     const targetProfile = await Profile.findOne({ user: targetId });
     try {
-      await Notification.create({
-        recipient: relationship.followerId,
-        sender: targetId,
-        type: 'follow',
-        message: `${targetProfile ? targetProfile.displayName : 'A user'} accepted your follow request.`,
+      await notificationService.createNotification({
+        recipientId: relationship.followerId,
+        actorId: targetId,
+        type: SocialNotificationTypes.FOLLOW_REQUEST_ACCEPTED,
+        subjectType: 'USER',
+        subjectId: targetId,
+        deduplicationKey: `follow_acc_${relationship.followerId}_${targetId}`,
+        customMessage: `${targetProfile ? targetProfile.displayName : 'A user'} accepted your follow request.`,
       });
     } catch (notifErr) {
       console.warn('[FOLLOW SERVICE] Notification warning:', notifErr.message);
@@ -711,16 +721,28 @@ class FollowService {
       };
     }
 
-    const [viewerToTarget, targetToViewer] = await Promise.all([
+    const [viewerToTarget, targetToViewer, targetProfile] = await Promise.all([
       FollowRelationship.findOne({ followerId: viewerId, followingId: targetId }),
       FollowRelationship.findOne({ followerId: targetId, followingId: viewerId }),
+      Profile.findOne({ user: targetId }),
     ]);
 
+    const isFollowing = viewerToTarget?.status === 'ACCEPTED';
+    const followsYou = targetToViewer?.status === 'ACCEPTED';
+    const requestPending = viewerToTarget?.status === 'PENDING';
+    const isPrivate = targetProfile?.socialAccountVisibility === 'PRIVATE';
+
+    let status = viewerToTarget ? viewerToTarget.status : 'NONE';
+    if (status === 'NONE' && followsYou) {
+      status = 'FOLLOW_BACK';
+    }
+
     return {
-      status: viewerToTarget ? viewerToTarget.status : 'NONE',
-      isFollowing: viewerToTarget?.status === 'ACCEPTED',
-      followsYou: targetToViewer?.status === 'ACCEPTED',
-      requestPending: viewerToTarget?.status === 'PENDING',
+      status,
+      isFollowing,
+      followsYou,
+      requestPending,
+      isPrivate,
     };
   }
 
@@ -841,6 +863,52 @@ class FollowService {
       userId: userId.toString(),
       actualFollowers,
       actualFollowing,
+    };
+  }
+
+  /**
+   * Get relationship status between viewer and target user (Instagram style)
+   */
+  async getFollowStatus(viewerId, targetId) {
+    if (!viewerId || !targetId || viewerId.toString() === targetId.toString()) {
+      return {
+        isFollowing: false,
+        isFollower: false,
+        isPending: false,
+        isRequestedByTarget: false,
+        status: 'NONE',
+        isPrivate: false,
+      };
+    }
+
+    const [viewerToTarget, targetToViewer, targetProfile] = await Promise.all([
+      FollowRelationship.findOne({ followerId: viewerId, followingId: targetId }),
+      FollowRelationship.findOne({ followerId: targetId, followingId: viewerId }),
+      Profile.findOne({ user: targetId }).select('socialAccountVisibility isPrivate displayName'),
+    ]);
+
+    const isFollowing = viewerToTarget?.status === 'ACCEPTED';
+    const isPending = viewerToTarget?.status === 'PENDING';
+    const isFollower = targetToViewer?.status === 'ACCEPTED';
+    const isRequestedByTarget = targetToViewer?.status === 'PENDING';
+    const isPrivate = targetProfile?.socialAccountVisibility === 'PRIVATE' || targetProfile?.isPrivate === true;
+
+    let status = 'NONE';
+    if (isFollowing) {
+      status = 'FOLLOWING';
+    } else if (isPending) {
+      status = 'REQUESTED';
+    } else if (isFollower) {
+      status = 'FOLLOW_BACK';
+    }
+
+    return {
+      status,
+      isFollowing,
+      isFollower,
+      isPending,
+      isRequestedByTarget,
+      isPrivate,
     };
   }
 }

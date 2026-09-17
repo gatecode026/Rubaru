@@ -48,6 +48,11 @@ export default function ActiveCallScreen() {
     isSpeakerOn,
     localStream,
     remoteStream,
+    isRemoteAudioMuted,
+    isRemoteVideoDisabled,
+    networkQuality,
+    candidatePairType,
+    isReconnecting,
     billingSummary,
     toggleAudio,
     toggleVideo,
@@ -191,11 +196,11 @@ export default function ActiveCallScreen() {
   const getSubStatusText = () => {
     switch (callStatus) {
       case 'INITIATING':
-        return 'Starting call...';
+        return 'Calling...';
       case 'RINGING':
         return 'Ringing...';
       case 'CONNECTING':
-        return 'Connecting media...';
+        return 'Connecting...';
       case 'RECONNECTING':
         return 'Reconnecting...';
       case 'ACTIVE':
@@ -204,8 +209,10 @@ export default function ActiveCallScreen() {
         if (errorMessage) return errorMessage;
         if (endReason === 'INITIATION_FAILED') return 'Unable to place call';
         if (endReason === 'REJECTED') return 'Call declined';
-        if (endReason === 'BUSY') return 'User is busy on another call';
+        if (endReason === 'BUSY' || endReason === 'USER_BUSY') return 'User is busy on another call';
         if (endReason === 'TIMEOUT') return 'No answer';
+        if (endReason === 'CONNECTION_TIMEOUT') return "Couldn't connect — check your connection";
+        if (endReason === 'ICE_FAILED' || endReason === 'CONNECTION_LOST') return 'Connection lost';
         return 'Call ended';
       default:
         return 'Calling...';
@@ -233,13 +240,27 @@ export default function ActiveCallScreen() {
 
       {/* Main Video View / Backdrop */}
       <View style={styles.fullScreenVideoWrapper}>
-        {isVideoCall && remoteStream && RTCView ? (
+        {isVideoCall && !isRemoteVideoDisabled && remoteStream && RTCView ? (
           <RTCView
             streamURL={typeof remoteStream.toURL === 'function' ? remoteStream.toURL() : ''}
             style={StyleSheet.absoluteFillObject}
             objectFit="cover"
             mirror={false}
           />
+        ) : isVideoCall && isRemoteVideoDisabled ? (
+          <View style={[StyleSheet.absoluteFillObject, styles.cameraOffPlaceholder]}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.cameraOffAvatar} />
+            ) : (
+              <View style={[styles.cameraOffAvatar, styles.avatarPlaceholderLarge]}>
+                <Text style={styles.avatarInitialLarge}>{contactName ? contactName.charAt(0).toUpperCase() : 'R'}</Text>
+              </View>
+            )}
+            <View style={styles.cameraOffNoticeBox}>
+              <Ionicons name="videocam-off" size={18} color="#94A3B8" style={{ marginRight: 6 }} />
+              <Text style={styles.cameraOffNoticeText}>{contactName} turned off camera</Text>
+            </View>
+          </View>
         ) : avatarUri ? (
           <Image
             source={{ uri: avatarUri }}
@@ -283,6 +304,23 @@ export default function ActiveCallScreen() {
                 </>
               )}
             </View>
+
+            {/* WhatsApp/Instagram Indicators: Poor connection & Remote Mute */}
+            {(networkQuality === 'poor' || callStatus === 'RECONNECTING') && (
+              <View style={styles.poorConnectionBadge}>
+                <Ionicons name="warning" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
+                <Text style={styles.poorConnectionBadgeText}>
+                  {callStatus === 'RECONNECTING' ? 'Reconnecting call...' : 'Poor connection'}
+                </Text>
+              </View>
+            )}
+
+            {isRemoteAudioMuted && callStatus === 'ACTIVE' && (
+              <View style={styles.remoteMutedBadge}>
+                <Ionicons name="mic-off" size={12} color="#EF4444" style={{ marginRight: 4 }} />
+                <Text style={styles.remoteMutedBadgeText}>{contactName} muted</Text>
+              </View>
+            )}
 
             {callStatus === 'ACTIVE' && (
               <PaidSessionLiveBadge
@@ -341,6 +379,7 @@ export default function ActiveCallScreen() {
                 style={styles.pipThumbnailImage}
                 objectFit="cover"
                 mirror={isFrontCamera}
+                zOrder={1}
               />
             ) : (
               <View style={[styles.pipThumbnailImage, styles.avatarPlaceholderSmall]}>
@@ -856,5 +895,91 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontSize: 14,
     fontWeight: '600',
+  },
+  poorConnectionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginTop: 6,
+  },
+  poorConnectionBadgeText: {
+    color: '#F59E0B',
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  remoteMutedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginTop: 6,
+  },
+  remoteMutedBadgeText: {
+    color: '#F87171',
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  cameraOffPlaceholder: {
+    backgroundColor: '#0F172A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cameraOffAvatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginBottom: 16,
+  },
+  cameraOffNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(30, 41, 59, 0.8)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  cameraOffNoticeText: {
+    color: '#CBD5E1',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  pipThumbnailContainer: {
+    position: 'absolute',
+    top: 96,
+    right: 16,
+    width: 105,
+    height: 155,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#1E293B',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+    zIndex: 40,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  pipThumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  pipBorderRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
 });

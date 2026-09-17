@@ -1,5 +1,7 @@
 // Safe Audio Helper for Rubaru
 // Bridges modern expo-audio and legacy expo-av seamlessly
+// IMPORTANT: expo-audio is preferred for PLAYBACK but expo-av is used for RECORDING
+// because expo-audio's Recording API is not yet fully stable in Expo Go.
 
 let ExpoAudio = null;
 try {
@@ -13,7 +15,12 @@ try {
 
 let SafeAudio = null;
 
-if (ExpoAudio && typeof ExpoAudio.createAudioPlayer === 'function') {
+// Prefer expo-av for the full API (playback + recording)
+if (ExpoAV && ExpoAV.Audio) {
+  SafeAudio = ExpoAV.Audio;
+  SafeAudio.isAvailable = true;
+} else if (ExpoAudio && typeof ExpoAudio.createAudioPlayer === 'function') {
+  // expo-audio available for playback only; build a compatible API surface
   SafeAudio = {
     isAvailable: true,
     setAudioModeAsync: async (config) => {
@@ -82,8 +89,10 @@ if (ExpoAudio && typeof ExpoAudio.createAudioPlayer === 'function') {
         }
       },
     },
+    // Recording is not supported via expo-audio shim — will be a no-op
     Recording: {
       createAsync: async () => {
+        console.warn('[AUDIO HELPER] Voice recording requires expo-av. Please install expo-av.');
         return {
           recording: {
             stopAndUnloadAsync: async () => {},
@@ -96,9 +105,6 @@ if (ExpoAudio && typeof ExpoAudio.createAudioPlayer === 'function') {
       HIGH_QUALITY: {},
     },
   };
-} else if (ExpoAV && ExpoAV.Audio) {
-  SafeAudio = ExpoAV.Audio;
-  SafeAudio.isAvailable = true;
 } else {
   SafeAudio = {
     isAvailable: false,

@@ -2,9 +2,10 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-const getBaseUrl = () => {
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+export const getBaseUrl = () => {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl) {
+    return envUrl;
   }
   const debuggerHost = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost || Constants.manifest?.debuggerHost;
   if (debuggerHost) {
@@ -13,7 +14,7 @@ const getBaseUrl = () => {
       return `http://${ip}:5000/api`;
     }
   }
-  return 'http://192.168.1.3:5000/api';
+  return 'http://192.168.1.20:5000/api';
 };
 
 const api = axios.create({
@@ -28,6 +29,9 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     try {
+      if (config.baseURL && config.baseURL.includes('loca.lt')) {
+        config.baseURL = getBaseUrl();
+      }
       console.log(`[API REQUEST] ${config.method?.toUpperCase()} ${config.baseURL || ''}${config.url}`);
       const token = await AsyncStorage.getItem('userToken');
       if (token) {

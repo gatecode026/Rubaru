@@ -26,6 +26,12 @@ try {
 
 export const RTCView = RTCViewNative;
 
+const DEFAULT_STUN_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+];
+
 /**
  * Simulated MediaStream for non-native / Expo Go environments
  */
@@ -154,10 +160,7 @@ class WebRTCService {
     this.peerConnection = null;
     this.localStream = null;
     this.remoteStream = null;
-    this.iceServers = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ];
+    this.iceServers = [...DEFAULT_STUN_SERVERS];
     this.isAudioMuted = false;
     this.isVideoEnabled = true;
     this.isFrontCamera = true;
@@ -167,6 +170,10 @@ class WebRTCService {
       onConnectionStateChange: [],
       onIceCandidate: [],
       onMediaReady: [],
+      onConnectionFailed: [],
+      onConnectionReconnecting: [],
+      onQualityReport: [],
+      onPoorConnection: [],
     };
     this.pendingCandidates = [];
     this.maxBufferedCandidates = 100;
@@ -178,18 +185,15 @@ class WebRTCService {
     this.mediaReadyEmitted = false;
     this.expectedCallType = 'audio';
     this.forceRelayOnly = false;
+    this.connectionWatchdogTimer = null;
+    this.qualityMonitorTimer = null;
+    this.lastSelectedCandidatePair = null;
   }
 
-  /**
-   * Set development-only forced relay transport policy
-   */
   setForceRelayOnly(enabled) {
     this.forceRelayOnly = Boolean(enabled);
   }
 
-  /**
-   * Subscribe to WebRTC events
-   */
   on(event, callback) {
     if (this.listeners[event]) {
       this.listeners[event].push(callback);
@@ -218,21 +222,30 @@ class WebRTCService {
    */
   async fetchIceServers() {
     try {
-      const res = await api.get('/v1/calls/turn-credentials');
-      if (res.data?.data?.iceServers && Array.isArray(res.data.data.iceServers)) {
-        this.iceServers = res.data.data.iceServers;
+      const res = await api.get('/calls/turn-credentials');
+      const creds = res.data?.data || res.data;
+      if (creds?.iceServers && Array.isArray(creds.iceServers) && creds.iceServers.length > 0) {
+        this.iceServers = creds.iceServers;
         return this.iceServers;
       }
     } catch (err) {
-      console.warn('[WEBRTC] Using fallback public STUN servers:', err.message);
+      console.warn('[WEBRTC] Primary /calls/turn-credentials failed, trying fallback:', err.message);
+      try {
+        const fallbackRes = await api.get('/calls/ice-servers');
+        const fallbackCreds = fallbackRes.data?.data || fallbackRes.data;
+        if (fallbackCreds?.iceServers && Array.isArray(fallbackCreds.iceServers) && fallbackCreds.iceServers.length > 0) {
+          this.iceServers = fallbackCreds.iceServers;
+          return this.iceServers;
+        }
+      } catch (fallbackErr) {
+        console.error('[WEBRTC] Failed to fetch dynamic TURN credentials, using default STUN:', fallbackErr.message);
+      }
     }
     return this.iceServers;
   }
 
   /**
    * Initialize Local Media Stream
-   * Requests real microphone and camera based on callType
-   * Never requests camera for audio calls
    */
   async initializeLocalMedia({ video = false, audio = true } = {}) {
     this.isVideoEnabled = Boolean(video);
@@ -251,21 +264,29 @@ class WebRTCService {
         this.emit('onLocalStream', this.localStream);
         return this.localStream;
       } catch (err) {
-        console.log('[WEBRTC] Hardware media stream capture unavailable, falling back to development stream:', err.message);
+        if (process.env.EXPO_PUBLIC_ENABLE_CALL_SIMULATION === 'true') {
+          console.warn('[WEBRTC] Hardware media stream capture unavailable, using dev simulation:', err.message);
+          this.localStream = new SimulatedMediaStream(video ? 'video' : 'audio');
+          this.emit('onLocalStream', this.localStream);
+          return this.localStream;
+        }
+        throw new Error(`MEDIA_CAPTURE_FAILED: ${err.message}. Ensure microphone and camera permissions are granted.`);
+      }
+    } else {
+      if (process.env.EXPO_PUBLIC_ENABLE_CALL_SIMULATION === 'true') {
+        console.log('[WEBRTC] Simulation mode enabled: Initializing simulated media stream.');
         this.localStream = new SimulatedMediaStream(video ? 'video' : 'audio');
         this.emit('onLocalStream', this.localStream);
         return this.localStream;
       }
-    } else {
-      console.log('[WEBRTC] Running in standard Expo Go environment. Initializing simulated media stream for development & flow testing.');
-      this.localStream = new SimulatedMediaStream(video ? 'video' : 'audio');
-      this.emit('onLocalStream', this.localStream);
-      return this.localStream;
+      throw new Error(
+        'NATIVE_WEBRTC_REQUIRED: Real device calling requires an Expo Development Build (npx expo run:android or run:ios). Standard Expo Go does not contain compiled react-native-webrtc native modules.'
+      );
     }
   }
 
   /**
-   * Initialize RTCPeerConnection with active ICE configuration
+   * Initialize RTCPeerConnection with dynamic ICE configuration and transport watchdog
    */
   async createPeerConnection({ callType = 'audio' } = {}) {
     this.expectedCallType = callType;
@@ -279,8 +300,14 @@ class WebRTCService {
     const RTCPC = RTCPeerConnectionNative || (typeof RTCPeerConnection !== 'undefined' ? RTCPeerConnection : null);
 
     if (!RTCPC) {
-      console.log('[WEBRTC] RTCPeerConnection native class not available in Expo Go. Using simulated peer connection for flow testing.');
-      this.peerConnection = new SimulatedRTCPeerConnection({ iceServers: this.iceServers });
+      if (process.env.EXPO_PUBLIC_ENABLE_CALL_SIMULATION === 'true') {
+        console.log('[WEBRTC] Simulation mode enabled: Using simulated peer connection.');
+        this.peerConnection = new SimulatedRTCPeerConnection({ iceServers: this.iceServers });
+      } else {
+        throw new Error(
+          'NATIVE_WEBRTC_REQUIRED: RTCPeerConnection native binary not loaded. Real calling requires an Expo Development Build (npx expo run:android or run:ios).'
+        );
+      }
     } else {
       const pcConfig = {
         iceServers: this.iceServers,
@@ -304,7 +331,7 @@ class WebRTCService {
       }
     };
 
-    // Handle Connection State & Media Readiness
+    // Honest Transport Connection State & Media Readiness
     const checkStateAndReadiness = () => {
       if (!this.peerConnection) return;
       const connState = this.peerConnection.connectionState;
@@ -316,18 +343,34 @@ class WebRTCService {
 
       if (isTransportReady && !this.mediaReadyEmitted) {
         this.mediaReadyEmitted = true;
-        console.log('[WEBRTC] Media readiness confirmed! Emitting onMediaReady.');
+        this.clearConnectionWatchdog();
+        console.log('[WEBRTC] Real WebRTC transport connection confirmed! Emitting onMediaReady.');
         this.emit('onMediaReady', { ready: true });
+        this.startQualityMonitoring();
+      }
+
+      if (connState === 'disconnected' || iceState === 'disconnected') {
+        console.warn('[WEBRTC] Connection interrupted: transport disconnected. Attempting ICE recovery...');
+        this.emit('onConnectionReconnecting', { connState, iceState });
+      }
+
+      if (connState === 'failed' || iceState === 'failed') {
+        console.error('[WEBRTC] Connection failed: ICE transport failed to connect.');
+        this.clearConnectionWatchdog();
+        this.emit('onConnectionFailed', { reason: 'ICE_FAILED', connState, iceState });
       }
     };
 
     this.peerConnection.onconnectionstatechange = checkStateAndReadiness;
     this.peerConnection.oniceconnectionstatechange = checkStateAndReadiness;
 
-    // Handle Remote Track
+    // Handle Remote Stream (Standardized OMS Pattern)
     this.peerConnection.ontrack = (event) => {
       console.log('[WEBRTC] Remote track received:', event.track?.kind);
-      if (event.track?.kind === 'audio') this.hasRemoteAudio = true;
+      if (event.track?.kind === 'audio') {
+        this.hasRemoteAudio = true;
+        if (event.track) event.track.enabled = true;
+      }
       if (event.track?.kind === 'video') this.hasRemoteVideo = true;
 
       if (event.streams && event.streams[0]) {
@@ -363,7 +406,34 @@ class WebRTCService {
       });
     }
 
+    // Set 15-second Connection Watchdog Timeout
+    this.armConnectionWatchdog(15000);
+
     return this.peerConnection;
+  }
+
+  armConnectionWatchdog(timeoutMs = 15000) {
+    this.clearConnectionWatchdog();
+    this.connectionWatchdogTimer = setTimeout(() => {
+      if (!this.mediaReadyEmitted && this.peerConnection) {
+        const ice = this.peerConnection.iceConnectionState;
+        const conn = this.peerConnection.connectionState;
+        console.warn(`[WEBRTC] Connection watchdog expired after ${timeoutMs}ms. State: conn=${conn}, ice=${ice}`);
+        this.emit('onConnectionFailed', {
+          reason: 'CONNECTION_TIMEOUT',
+          message: "Couldn't connect — check your connection",
+          connState: conn,
+          iceState: ice,
+        });
+      }
+    }, timeoutMs);
+  }
+
+  clearConnectionWatchdog() {
+    if (this.connectionWatchdogTimer) {
+      clearTimeout(this.connectionWatchdogTimer);
+      this.connectionWatchdogTimer = null;
+    }
   }
 
   /**
@@ -417,26 +487,32 @@ class WebRTCService {
 
   /**
    * Handle Remote SDP Offer and create SDP Answer (Receiver side)
+   * Note: Premature fake timers have been removed; onMediaReady is emitted strictly on real transport state
    */
   async handleOfferAndCreateAnswer(remoteOffer) {
     return this._serializeNegotiation(async () => {
       if (!this.peerConnection) await this.createPeerConnection({ callType: this.expectedCallType });
 
+      let offerInit;
+      if (typeof remoteOffer === 'string') {
+        offerInit = { type: 'offer', sdp: remoteOffer };
+      } else if (remoteOffer && typeof remoteOffer === 'object') {
+        offerInit = {
+          type: remoteOffer.type || 'offer',
+          sdp: remoteOffer.sdp || remoteOffer,
+        };
+      } else {
+        throw new Error('Invalid remoteOffer format');
+      }
+
       const RTCSD = RTCSessionDescriptionNative || (typeof RTCSessionDescription !== 'undefined' ? RTCSessionDescription : null);
-      const sessionDesc = RTCSD ? new RTCSD(remoteOffer) : remoteOffer;
+      const sessionDesc = RTCSD ? new RTCSD(offerInit) : offerInit;
 
       await this.peerConnection.setRemoteDescription(sessionDesc);
       await this._drainPendingCandidates();
 
       const answer = await this.peerConnection.createAnswer();
       await this.peerConnection.setLocalDescription(answer);
-
-      setTimeout(() => {
-        if (!this.mediaReadyEmitted) {
-          this.mediaReadyEmitted = true;
-          this.emit('onMediaReady', { ready: true });
-        }
-      }, 300);
 
       return {
         sdp: answer.sdp || answer,
@@ -452,18 +528,47 @@ class WebRTCService {
   async handleAnswer(remoteAnswer) {
     return this._serializeNegotiation(async () => {
       if (!this.peerConnection) return;
+
+      let answerInit;
+      if (typeof remoteAnswer === 'string') {
+        answerInit = { type: 'answer', sdp: remoteAnswer };
+      } else if (remoteAnswer && typeof remoteAnswer === 'object') {
+        answerInit = {
+          type: remoteAnswer.type || 'answer',
+          sdp: remoteAnswer.sdp || remoteAnswer,
+        };
+      } else {
+        throw new Error('Invalid remoteAnswer format');
+      }
+
       const RTCSD = RTCSessionDescriptionNative || (typeof RTCSessionDescription !== 'undefined' ? RTCSessionDescription : null);
-      const sessionDesc = RTCSD ? new RTCSD(remoteAnswer) : remoteAnswer;
+      const sessionDesc = RTCSD ? new RTCSD(answerInit) : answerInit;
 
       await this.peerConnection.setRemoteDescription(sessionDesc);
       await this._drainPendingCandidates();
+    });
+  }
 
-      setTimeout(() => {
-        if (!this.mediaReadyEmitted) {
-          this.mediaReadyEmitted = true;
-          this.emit('onMediaReady', { ready: true });
-        }
-      }, 300);
+  /**
+   * Trigger ICE Restart (WhatsApp/Instagram parity recovery)
+   */
+  async restartIce() {
+    if (!this.peerConnection) return null;
+    console.log('[WEBRTC] Triggering ICE restart negotiation...');
+    this.currentNegotiationGeneration += 1;
+    return this._serializeNegotiation(async () => {
+      const offer = await this.peerConnection.createOffer({
+        iceRestart: true,
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: this.isVideoEnabled,
+      });
+      await this.peerConnection.setLocalDescription(offer);
+      return {
+        sdp: offer.sdp || offer,
+        type: offer.type || 'offer',
+        generation: this.currentNegotiationGeneration,
+        iceRestart: true,
+      };
     });
   }
 
@@ -473,11 +578,9 @@ class WebRTCService {
   async addIceCandidate(candidateData) {
     if (!candidateData) return;
 
-    // Handle candidate object format
     const candidateObj = candidateData.candidate || candidateData;
     const generation = candidateData.generation;
 
-    // Reject stale candidates from previous negotiation generation
     if (generation !== undefined && generation < this.currentNegotiationGeneration) {
       console.log(`[WEBRTC] Dropping stale ICE candidate from generation ${generation} (current: ${this.currentNegotiationGeneration})`);
       return;
@@ -489,33 +592,24 @@ class WebRTCService {
         const iceCandidate = RTCIce ? new RTCIce(candidateObj) : candidateObj;
         await this.peerConnection.addIceCandidate(iceCandidate);
       } catch (err) {
-        console.warn('[WEBRTC] addIceCandidate error:', err.message);
+        console.warn('[WEBRTC] Add ICE candidate warning:', err.message);
       }
     } else {
-      // Buffer candidates if remote description is not yet set
       if (this.pendingCandidates.length < this.maxBufferedCandidates) {
-        this.pendingCandidates.push({ candidate: candidateObj, generation: this.currentNegotiationGeneration });
-      } else {
-        console.warn('[WEBRTC] ICE candidate buffer limit reached (100). Dropping oldest candidate.');
-        this.pendingCandidates.shift();
-        this.pendingCandidates.push({ candidate: candidateObj, generation: this.currentNegotiationGeneration });
+        this.pendingCandidates.push(candidateObj);
       }
     }
   }
 
-  /**
-   * Drain queued ICE candidates once remote description is installed
-   */
   async _drainPendingCandidates() {
-    if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
+    if (this.pendingCandidates.length > 0 && this.peerConnection) {
+      const candidates = [...this.pendingCandidates];
+      this.pendingCandidates = [];
+      const RTCIce = RTCIceCandidateNative || (typeof RTCIceCandidate !== 'undefined' ? RTCIceCandidate : null);
 
-    const RTCIce = RTCIceCandidateNative || (typeof RTCIceCandidate !== 'undefined' ? RTCIceCandidate : null);
-
-    while (this.pendingCandidates.length > 0) {
-      const item = this.pendingCandidates.shift();
-      if (item.generation >= this.currentNegotiationGeneration) {
+      for (const cand of candidates) {
         try {
-          const iceCandidate = RTCIce ? new RTCIce(item.candidate) : item.candidate;
+          const iceCandidate = RTCIce ? new RTCIce(cand) : cand;
           await this.peerConnection.addIceCandidate(iceCandidate);
         } catch (err) {
           console.warn('[WEBRTC] Drain addIceCandidate error:', err.message);
@@ -551,9 +645,19 @@ class WebRTCService {
   }
 
   /**
-   * Switch Camera between Front and Back
+   * Switch Camera between Front and Back (OMS native track._switchCamera pattern)
    */
   async switchCamera() {
+    if (this.localStream && typeof this.localStream.getVideoTracks === 'function') {
+      const videoTracks = this.localStream.getVideoTracks();
+      if (videoTracks.length > 0 && typeof videoTracks[0]._switchCamera === 'function') {
+        videoTracks[0]._switchCamera();
+        this.isFrontCamera = !this.isFrontCamera;
+        return this.isFrontCamera;
+      }
+    }
+
+    // Fallback: re-acquire camera track and replace on senders
     this.isFrontCamera = !this.isFrontCamera;
     const mediaDevicesObj = mediaDevicesNative || (typeof navigator !== 'undefined' ? navigator.mediaDevices : null);
 
@@ -569,22 +673,87 @@ class WebRTCService {
         const newVideoTrack = newStream.getVideoTracks ? newStream.getVideoTracks()[0] : null;
 
         if (newVideoTrack && this.peerConnection && typeof this.peerConnection.getSenders === 'function') {
-          const sender = this.peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
-          if (sender && typeof sender.replaceTrack === 'function') {
-            await sender.replaceTrack(newVideoTrack);
+          const senders = this.peerConnection.getSenders();
+          const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+          if (videoSender && typeof videoSender.replaceTrack === 'function') {
+            await videoSender.replaceTrack(newVideoTrack);
           }
         }
-      } catch (e) {
-        console.warn('[WEBRTC] switchCamera error:', e.message);
+      } catch (err) {
+        console.error('[WEBRTC] Switch camera error:', err);
       }
     }
     return this.isFrontCamera;
   }
 
   /**
+   * Start WebRTC Stats & Quality Monitoring (WhatsApp/Instagram parity)
+   */
+  startQualityMonitoring() {
+    this.stopQualityMonitoring();
+    this.qualityMonitorTimer = setInterval(async () => {
+      if (!this.peerConnection || typeof this.peerConnection.getStats !== 'function') return;
+      try {
+        const stats = await this.peerConnection.getStats();
+        let packetsLost = 0;
+        let packetsReceived = 0;
+        let currentRtt = null;
+        let candidatePairType = null;
+
+        stats.forEach((report) => {
+          if (report.type === 'inbound-rtp' && (report.kind === 'audio' || report.mediaType === 'audio')) {
+            packetsLost = report.packetsLost || 0;
+            packetsReceived = report.packetsReceived || 0;
+          }
+          if (report.type === 'candidate-pair' && (report.state === 'succeeded' || report.nominated)) {
+            currentRtt = report.currentRoundTripTime ? Math.round(report.currentRoundTripTime * 1000) : null;
+            if (report.remoteCandidateId && stats.get) {
+              const remoteCand = stats.get(report.remoteCandidateId);
+              if (remoteCand) candidatePairType = remoteCand.candidateType;
+            }
+          }
+        });
+
+        if (candidatePairType) {
+          this.lastSelectedCandidatePair = candidatePairType;
+        }
+
+        const totalPackets = packetsLost + packetsReceived;
+        const lossRate = totalPackets > 0 ? (packetsLost / totalPackets) * 100 : 0;
+        const isPoor = lossRate > 15 || (currentRtt !== null && currentRtt > 600);
+
+        this.emit('onQualityReport', {
+          packetsLost,
+          packetsReceived,
+          lossRate: Number(lossRate.toFixed(1)),
+          rttMs: currentRtt,
+          candidatePairType: this.lastSelectedCandidatePair,
+          isPoor,
+        });
+
+        if (isPoor) {
+          this.emit('onPoorConnection', { lossRate, rttMs: currentRtt });
+        }
+      } catch (e) {
+        // Non-fatal telemetry polling error
+      }
+    }, 2500);
+  }
+
+  stopQualityMonitoring() {
+    if (this.qualityMonitorTimer) {
+      clearInterval(this.qualityMonitorTimer);
+      this.qualityMonitorTimer = null;
+    }
+  }
+
+  /**
    * Single idempotent cleanup method
    */
   destroy() {
+    this.clearConnectionWatchdog();
+    this.stopQualityMonitoring();
+
     if (this.localStream) {
       if (typeof this.localStream.getTracks === 'function') {
         this.localStream.getTracks().forEach((track) => {
@@ -608,13 +777,6 @@ class WebRTCService {
     this.hasRemoteAudio = false;
     this.hasRemoteVideo = false;
     this.mediaReadyEmitted = false;
-    this.listeners = {
-      onLocalStream: [],
-      onRemoteStream: [],
-      onConnectionStateChange: [],
-      onIceCandidate: [],
-      onMediaReady: [],
-    };
     console.log('[WEBRTC] All WebRTC resources and tracks cleanly destroyed.');
   }
 }

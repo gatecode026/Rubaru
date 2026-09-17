@@ -57,6 +57,7 @@ class NotificationService {
       case SocialNotificationTypes.MESSAGE:
         return NotificationCategories.DIRECT_MESSAGES;
       case SocialNotificationTypes.CALL:
+      case SocialNotificationTypes.MISSED_CALL:
         return NotificationCategories.CALLS;
       default:
         return NotificationCategories.CONTENT_UPDATES;
@@ -89,6 +90,9 @@ class NotificationService {
         return 'rubaru://safety-help';
       case SocialNotificationTypes.MESSAGE:
         return `rubaru://chat/${subjectId || ''}`;
+      case SocialNotificationTypes.CALL:
+      case SocialNotificationTypes.MISSED_CALL:
+        return `rubaru://call/${subjectId || ''}`;
       default:
         return 'rubaru://notifications';
     }
@@ -130,6 +134,8 @@ class NotificationService {
         return `${actorName} sent you a message.`;
       case SocialNotificationTypes.CALL:
         return `Incoming call from ${actorName}.`;
+      case SocialNotificationTypes.MISSED_CALL:
+        return `Missed call from ${actorName}.`;
       default:
         return 'You have a new notification on Rubaru.';
     }
@@ -206,16 +212,53 @@ class NotificationService {
       return { success: false, suppressed: true, reason: 'IN_APP_PREFERENCE_DISABLED' };
     }
 
-    // 5. Deduplication check
-    const finalDedupKey = deduplicationKey || (sourceEventId ? `${type}_${recipientId}_${sourceEventId}` : null);
+    // 5. Smart Deduplication check
+    let finalDedupKey = deduplicationKey;
+    if (!finalDedupKey) {
+      if (['FOLLOW_REQUEST_ACCEPTED', 'FOLLOW_REQUEST_RECEIVED', 'NEW_FOLLOWER', 'FOLLOW'].includes(type) && actorId && recipientId) {
+        finalDedupKey = `social_${type}_${recipientId}_${actorId}`;
+      } else if (['POST_LIKED', 'REEL_LIKED', 'COMMENT_LIKED'].includes(type) && actorId && recipientId && subjectId) {
+        finalDedupKey = `react_${type}_${recipientId}_${actorId}_${subjectId}`;
+      } else if (sourceEventId) {
+        finalDedupKey = `${type}_${recipientId}_${sourceEventId}`;
+      }
+    }
+
     if (finalDedupKey) {
       const existing = await Notification.findOne({ deduplicationKey: finalDedupKey });
       if (existing) {
+        existing.createdAt = new Date();
+        existing.isRead = false;
+        if (customMessage) existing.message = customMessage;
+        await existing.save();
         return {
           success: true,
           duplicate: true,
           notificationId: existing._id.toString(),
           notification: existing,
+        };
+      }
+    }
+
+    // Check for identical active social notification between same actor and recipient
+    if (actorId && recipientId && ['FOLLOW_REQUEST_ACCEPTED', 'NEW_FOLLOWER', 'FOLLOW_REQUEST_RECEIVED', 'FOLLOW'].includes(type)) {
+      const recentExisting = await Notification.findOne({
+        recipient: recipientId,
+        sender: actorId,
+        type,
+        status: 'ACTIVE',
+      }).sort({ createdAt: -1 });
+
+      if (recentExisting) {
+        recentExisting.createdAt = new Date();
+        recentExisting.isRead = false;
+        if (customMessage) recentExisting.message = customMessage;
+        await recentExisting.save();
+        return {
+          success: true,
+          duplicate: true,
+          notificationId: recentExisting._id.toString(),
+          notification: recentExisting,
         };
       }
     }
@@ -291,6 +334,7 @@ class NotificationService {
         ? {
             userId: actorProfile.user,
             displayName: actorProfile.displayName,
+            username: actorProfile.username || '',
             avatarUri: actorProfile.avatarUri,
           }
         : null,
@@ -298,6 +342,7 @@ class NotificationService {
     };
 
     this._emitSocket(recipientId.toString(), 'notification:new', socketPayload);
+    this._emitSocket(recipientId.toString(), 'notification:badge_update', { unreadCount });
     this._emitSocket(recipientId.toString(), 'notification:unread_count', { unreadCount });
 
     // 9. Push notification dispatch (if enabled)
@@ -363,47 +408,58 @@ class NotificationService {
       nextCursor = Buffer.from(`${new Date(lastItem.createdAt).toISOString()}_${lastItem._id.toString()}`).toString('base64');
     }
 
-    // Hydrate senders and safe status
-    const formattedItems = await Promise.all(
-      items.map(async (n) => {
-        let senderInfo = null;
-        if (n.sender) {
-          const p = await Profile.findOne({ user: n.sender });
-          if (p) {
-            senderInfo = {
-              userId: p.user.toString(),
-              displayName: p.displayName,
-              avatarUri: p.avatarUri,
-            };
-          }
-        }
+    // Hydrate senders and safe status with smart in-feed deduplication
+    const seenSignatures = new Set();
+    const formattedItems = [];
 
-        // Verify content still exists if subjectType is POST/REEL/STORY
-        let isSubjectAvailable = true;
-        if (n.contentId || (n.subjectId && ['POST', 'REEL', 'STORY'].includes(n.subjectType))) {
-          const targetContentId = n.contentId || n.subjectId;
-          const contentDoc = await Content.findById(targetContentId);
-          if (!contentDoc || contentDoc.status === 'DELETED' || contentDoc.status === 'HIDDEN') {
-            isSubjectAvailable = false;
-          }
-        }
+    for (const n of items) {
+      const senderKey = n.sender ? n.sender.toString() : 'system';
+      const subjectKey = n.subjectId ? n.subjectId.toString() : '';
+      const signature = `${n.type}_${senderKey}_${n.message}_${subjectKey}`;
 
-        return {
-          id: n._id.toString(),
-          type: n.type,
-          category: n.category,
-          message: isSubjectAvailable ? n.message : 'This content is no longer available.',
-          deepLink: isSubjectAvailable ? n.deepLink : 'rubaru://notifications',
-          isRead: Boolean(n.isRead),
-          isSubjectAvailable,
-          createdAt: n.createdAt,
-          sender: senderInfo,
-          previewThumbnailUri: isSubjectAvailable ? n.previewThumbnailUri : '',
-          relatedReel: n.relatedReel,
-          relatedChat: n.relatedChat,
-        };
-      })
-    );
+      if (seenSignatures.has(signature)) {
+        continue; // Skip duplicate notification in feed
+      }
+      seenSignatures.add(signature);
+
+      let senderInfo = null;
+      if (n.sender) {
+        const p = await Profile.findOne({ user: n.sender });
+        if (p) {
+          senderInfo = {
+            userId: p.user.toString(),
+            displayName: p.displayName,
+            username: p.username || '',
+            avatarUri: p.avatarUri,
+          };
+        }
+      }
+
+      // Verify content still exists if subjectType is POST/REEL/STORY
+      let isSubjectAvailable = true;
+      if (n.contentId || (n.subjectId && ['POST', 'REEL', 'STORY'].includes(n.subjectType))) {
+        const targetContentId = n.contentId || n.subjectId;
+        const contentDoc = await Content.findById(targetContentId);
+        if (!contentDoc || contentDoc.status === 'DELETED' || contentDoc.status === 'HIDDEN') {
+          isSubjectAvailable = false;
+        }
+      }
+
+      formattedItems.push({
+        id: n._id.toString(),
+        type: n.type,
+        category: n.category,
+        message: isSubjectAvailable ? n.message : 'This content is no longer available.',
+        deepLink: isSubjectAvailable ? n.deepLink : 'rubaru://notifications',
+        isRead: Boolean(n.isRead),
+        isSubjectAvailable,
+        createdAt: n.createdAt,
+        sender: senderInfo,
+        previewThumbnailUri: isSubjectAvailable ? n.previewThumbnailUri : '',
+        relatedReel: n.relatedReel,
+        relatedChat: n.relatedChat,
+      });
+    }
 
     const unreadCount = await Notification.countDocuments({
       recipient: recipientId,

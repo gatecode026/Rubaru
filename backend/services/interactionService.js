@@ -15,6 +15,8 @@ const {
   dispatchSocialCommentAdded,
   dispatchSocialCommentDeleted,
 } = require('./socketDispatchService');
+const notificationService = require('./notificationService');
+const { SocialNotificationTypes } = require('../models/enums');
 
 class InteractionService {
   /**
@@ -378,6 +380,26 @@ class InteractionService {
         } catch (outboxErr) {
           console.warn('[INTERACTION SERVICE] Outbox warning:', outboxErr.message);
         }
+
+        // Real-time Like Notification
+        try {
+          const notifType = content.contentType === 'REEL' ? SocialNotificationTypes.REEL_LIKED : SocialNotificationTypes.POST_LIKED;
+          await notificationService.createNotification({
+            recipientId: content.authorId,
+            actorId: userId,
+            type: notifType,
+            subjectType: content.contentType === 'REEL' ? 'REEL' : 'POST',
+            subjectId: content._id,
+            contentId: content._id,
+            previewThumbnailUri:
+              content.mediaItems?.[0]?.thumbnail?.url ||
+              content.mediaItems?.[0]?.originalUrl ||
+              content.mediaItems?.[0]?.variants?.[0]?.url ||
+              '',
+          });
+        } catch (notifErr) {
+          console.warn('[INTERACTION SERVICE] Like notification error:', notifErr.message);
+        }
       }
 
       const count = updatedContent?.likesCount || 1;
@@ -501,6 +523,7 @@ class InteractionService {
 
     let depth = 0;
     let rootCommentId = null;
+    let parentAuthorId = null;
 
     if (parentCommentId) {
       const parent = await Comment.findById(parentCommentId);
@@ -510,6 +533,7 @@ class InteractionService {
         err.statusCode = 404;
         throw err;
       }
+      parentAuthorId = parent.authorId;
 
       if (parent.contentId.toString() !== contentId.toString()) {
         const err = new Error('Parent comment does not belong to this content.');
@@ -572,6 +596,46 @@ class InteractionService {
 
     const authorProfile = await Profile.findOne({ user: userId });
     const formattedComment = this._formatCommentProjection(comment, authorProfile);
+
+    // Real-time Comment / Reply Notification
+    try {
+      const actorName = authorProfile?.displayName || 'Someone';
+      const previewThumb =
+        content.mediaItems?.[0]?.thumbnail?.url ||
+        content.mediaItems?.[0]?.originalUrl ||
+        content.mediaItems?.[0]?.variants?.[0]?.url ||
+        '';
+      const textSnippet = sanitizedText.length > 50 ? `${sanitizedText.slice(0, 50)}...` : sanitizedText;
+
+      if (parentAuthorId && parentAuthorId.toString() !== userId.toString()) {
+        // Reply notification to parent comment author
+        await notificationService.createNotification({
+          recipientId: parentAuthorId,
+          actorId: userId,
+          type: SocialNotificationTypes.COMMENT_REPLIED,
+          subjectType: 'COMMENT',
+          subjectId: comment._id,
+          contentId: content._id,
+          customMessage: `${actorName} replied: "${textSnippet}"`,
+          previewThumbnailUri: previewThumb,
+        });
+      } else if (!parentAuthorId && content.authorId.toString() !== userId.toString()) {
+        // Comment notification to content author
+        const notifType = content.contentType === 'REEL' ? SocialNotificationTypes.REEL_COMMENTED : SocialNotificationTypes.POST_COMMENTED;
+        await notificationService.createNotification({
+          recipientId: content.authorId,
+          actorId: userId,
+          type: notifType,
+          subjectType: content.contentType === 'REEL' ? 'REEL' : 'POST',
+          subjectId: comment._id,
+          contentId: content._id,
+          customMessage: `${actorName} commented: "${textSnippet}"`,
+          previewThumbnailUri: previewThumb,
+        });
+      }
+    } catch (notifErr) {
+      console.warn('[INTERACTION SERVICE] Comment notification error:', notifErr.message);
+    }
 
     try {
       dispatchSocialCommentAdded({
@@ -833,6 +897,24 @@ class InteractionService {
 
     if (isNew) {
       const updated = await Comment.findByIdAndUpdate(commentId, { $inc: { likesCount: 1 } }, { new: true });
+      
+      if (comment.authorId.toString() !== userId.toString()) {
+        try {
+          const actorProfile = await Profile.findOne({ user: userId });
+          await notificationService.createNotification({
+            recipientId: comment.authorId,
+            actorId: userId,
+            type: SocialNotificationTypes.COMMENT_LIKED,
+            subjectType: 'COMMENT',
+            subjectId: comment._id,
+            contentId: comment.contentId,
+            customMessage: `${actorProfile?.displayName || 'Someone'} liked your comment.`,
+          });
+        } catch (notifErr) {
+          console.warn('[INTERACTION SERVICE] Comment like notification error:', notifErr.message);
+        }
+      }
+
       return { liked: true, likesCount: updated?.likesCount || 1 };
     }
 

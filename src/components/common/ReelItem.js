@@ -20,6 +20,7 @@ import { useRouter } from 'expo-router';
 import PostCommentsModal from './PostCommentsModal';
 import { useTheme } from '../../theme';
 import api from '../../services/api';
+import followService from '../../services/followService';
 import interactionService from '../../services/interactionService';
 import { getSocket } from '../../services/socket';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -264,13 +265,52 @@ export default function ReelItem({ item, height, isActive = true, onBackPress })
     }
   };
 
+  const [followStatus, setFollowStatus] = useState(item.isFollowing ? 'FOLLOWING' : 'NONE');
+
+  useEffect(() => {
+    let isMounted = true;
+    async function checkFollow() {
+      if (item.authorId && currentUserId && item.authorId !== currentUserId) {
+        try {
+          const res = await followService.getFollowStatus(item.authorId);
+          const fData = res.data || res;
+          if (isMounted) {
+            const st = fData.status || (fData.isFollowing ? 'FOLLOWING' : 'NONE');
+            setFollowStatus(st);
+            setIsFollowing(st === 'FOLLOWING' || Boolean(fData.isFollowing));
+          }
+        } catch (e) {}
+      }
+    }
+    checkFollow();
+    return () => { isMounted = false; };
+  }, [item.authorId, currentUserId]);
+
   const handleFollowToggle = async () => {
-    const nextFollowing = !isFollowing;
-    setIsFollowing(nextFollowing);
-    showToast(nextFollowing ? `✨ Following ${item.userName}` : `Unfollowed ${item.userName}`);
+    if (!item.authorId || item.authorId === currentUserId) return;
+    const isCurrentlyFollowing = followStatus === 'FOLLOWING';
+    const isCurrentlyRequested = followStatus === 'REQUESTED';
+
     try {
-      if (item.authorId) {
-        await api.post(`/social/follow/${item.authorId}`);
+      if (isCurrentlyFollowing || isCurrentlyRequested) {
+        setFollowStatus('NONE');
+        setIsFollowing(false);
+        showToast(`Unfollowed ${item.userName || 'user'}`);
+        await followService.unfollowUser(item.authorId);
+      } else {
+        setFollowStatus('FOLLOWING');
+        setIsFollowing(true);
+        const res = await followService.followUser(item.authorId);
+        const relStatus = res.data?.relationship?.status || res.relationship?.status;
+        if (relStatus === 'PENDING') {
+          setFollowStatus('REQUESTED');
+          setIsFollowing(false);
+          showToast(`Requested to follow ${item.userName || 'user'}`);
+        } else {
+          setFollowStatus('FOLLOWING');
+          setIsFollowing(true);
+          showToast(`✨ Following ${item.userName || 'user'}`);
+        }
       }
     } catch (err) {
       console.log('[FOLLOW ERROR]', err.message);
@@ -285,7 +325,11 @@ export default function ReelItem({ item, height, isActive = true, onBackPress })
     try {
       const targetId = item.id || item.postId || item._id;
       if (targetId) {
-        await api.post(`/social/save/${targetId}`);
+        if (nextSaved) {
+          await api.post(`/v1/content/${targetId}/save`);
+        } else {
+          await api.delete(`/v1/content/${targetId}/save`);
+        }
       }
     } catch (err) {
       console.log('[SAVE REEL ERROR]', err.message);
@@ -539,12 +583,12 @@ export default function ReelItem({ item, height, isActive = true, onBackPress })
           {/* Hide Follow button if this is the user's own reel (Instagram behavior) */}
           {!isOwnReel && (
             <TouchableOpacity
-              style={[styles.followBtn, isFollowing && styles.followingBtn]}
+              style={[styles.followBtn, (followStatus === 'FOLLOWING' || followStatus === 'REQUESTED' || isFollowing) && styles.followingBtn]}
               activeOpacity={0.8}
               onPress={handleFollowToggle}
             >
-              <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
-                {isFollowing ? 'Following' : 'Follow'}
+              <Text style={[styles.followBtnText, (followStatus === 'FOLLOWING' || followStatus === 'REQUESTED' || isFollowing) && styles.followingBtnText]}>
+                {followStatus === 'FOLLOWING' || isFollowing ? 'Following' : (followStatus === 'REQUESTED' ? 'Requested' : 'Follow')}
               </Text>
             </TouchableOpacity>
           )}

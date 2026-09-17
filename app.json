@@ -23,7 +23,9 @@
     },
     "android": {
       "package": "com.rubaru.app",
+      "googleServicesFile": "./google-services.json",
       "allowBackup": true,
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"

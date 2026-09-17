@@ -12,9 +12,10 @@
 import { io } from 'socket.io-client';
 import Constants from 'expo-constants';
 
-const getSocketUrl = () => {
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL.replace('/api', '');
+export const getSocketUrl = () => {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl) {
+    return envUrl.replace(/\/api\/?$/, '');
   }
   const debuggerHost = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost || Constants.manifest?.debuggerHost;
   if (debuggerHost) {
@@ -23,7 +24,7 @@ const getSocketUrl = () => {
       return `http://${ip}:5000`;
     }
   }
-  return 'http://192.168.1.33:5000';
+  return 'http://192.168.1.20:5000';
 };
 
 const SOCKET_URL = getSocketUrl();

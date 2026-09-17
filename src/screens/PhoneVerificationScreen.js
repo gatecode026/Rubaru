@@ -16,6 +16,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import api from '@services/api';
 
+import { sendFirebasePhoneOtp } from '@services/firebaseAuth';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const COUNTRIES = [
@@ -47,6 +49,25 @@ export default function PhoneVerificationScreen() {
     const fullPhone = selectedCountry.code + phoneNumber.trim();
 
     setLoading(true);
+
+    // 1. Attempt Firebase Phone Auth (Free 10k SMS/month via Google Identity Platform)
+    try {
+      const fbResult = await sendFirebasePhoneOtp(fullPhone);
+      setLoading(false);
+      router.push({
+        pathname: '/otp-verification',
+        params: {
+          phone: fullPhone,
+          sessionInfo: fbResult.sessionInfo,
+          authProvider: 'firebase',
+        },
+      });
+      return;
+    } catch (fbErr) {
+      console.warn('[FIREBASE PHONE AUTH DISPATCH]', fbErr.message);
+    }
+
+    // 2. Fallback to backend SMS gateway if Firebase phone auth is pending console configuration
     try {
       const response = await api.post('/auth/register-phone', { phone: fullPhone });
       setLoading(false);
@@ -58,6 +79,20 @@ export default function PhoneVerificationScreen() {
     } catch (error) {
       setLoading(false);
       console.error(error);
+      if (error.response?.status === 400 && error.response?.data?.message === 'User already exists') {
+        try {
+          setLoading(true);
+          await api.post('/auth/resend-otp', { phone: fullPhone });
+          setLoading(false);
+          router.push({
+            pathname: '/otp-verification',
+            params: { phone: fullPhone }
+          });
+          return;
+        } catch (resendErr) {
+          setLoading(false);
+        }
+      }
       const errMsg = error.response?.data?.message || 'Failed to connect. Please try again.';
       alert(errMsg);
     }

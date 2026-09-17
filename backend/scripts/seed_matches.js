@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
+const assertSeedPermission = require('../utils/assertSeedPermission');
+assertSeedPermission('seed_matches.js');
 
 async function seedMatches() {
   await mongoose.connect(process.env.MONGO_URI);

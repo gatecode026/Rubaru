@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "69445900488",
+    "project_id": "dating-app-70137",
+    "storage_bucket": "dating-app-70137.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:69445900488:android:d33d5f32eaf9c6067b2dfd",
+        "android_client_info": {
+          "package_name": "com.rubaru.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "69445900488-cgqr785v7c9a7brfovo8jogldnapaaht.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyABA12s3bSdE_iKSNC3x5GWpwN-0F_e9Jw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "69445900488-cgqr785v7c9a7brfovo8jogldnapaaht.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -15,13 +15,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import storage from '@services/storage';
 import { connectSocket } from '@services/socket';
 
+import {
+  confirmFirebasePhoneOtp,
+  completeFirebasePhoneLogin,
+  sendFirebasePhoneOtp,
+} from '@services/firebaseAuth';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function OtpVerificationScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
-  const [otp, setOtp] = useState(['', '', '', '']);
+
+  const isFirebase = params.authProvider === 'firebase' || Boolean(params.sessionInfo);
+  const otpLength = isFirebase ? 6 : 4;
+
+  const [otp, setOtp] = useState(Array(otpLength).fill(''));
+  const [sessionInfo, setSessionInfo] = useState(params.sessionInfo || null);
   const [secondsLeft, setSecondsLeft] = useState(60);
   const [verifying, setVerifying] = useState(false);
 
@@ -46,6 +57,27 @@ export default function OtpVerificationScreen() {
   const verifyOtpCode = async (otpCodeString) => {
     setVerifying(true);
     try {
+      if (isFirebase) {
+        if (!sessionInfo) {
+          throw new Error('Verification session is missing. Please tap Send again.');
+        }
+
+        const confirmRes = await confirmFirebasePhoneOtp(sessionInfo, otpCodeString);
+        const loginRes = await completeFirebasePhoneLogin(confirmRes.idToken);
+
+        setVerifying(false);
+
+        if (loginRes.isProfileSetup) {
+          router.replace('/(tabs)');
+        } else {
+          router.push({
+            pathname: '/create-password',
+            params: { token: loginRes.token },
+          });
+        }
+        return;
+      }
+
       const payload = { otpCode: otpCodeString };
       if (params.email) {
         payload.email = params.email;
@@ -54,7 +86,6 @@ export default function OtpVerificationScreen() {
       }
 
       const response = await api.post('/auth/verify-otp', payload);
-      
       setVerifying(false);
       const { token, isProfileSetup } = response.data;
       
@@ -83,9 +114,9 @@ export default function OtpVerificationScreen() {
     } catch (error) {
       setVerifying(false);
       console.error(error);
-      const errMsg = error.response?.data?.message || 'Invalid OTP. Please try again.';
+      const errMsg = error.message || error.response?.data?.message || 'Invalid OTP. Please try again.';
       alert(errMsg);
-      setOtp(['', '', '', '']);
+      setOtp(Array(otpLength).fill(''));
     }
   };
 
@@ -99,8 +130,8 @@ export default function OtpVerificationScreen() {
       newOtp[emptyIndex] = val.toString();
       setOtp(newOtp);
 
-      // Auto-submit when 4th digit is typed
-      if (emptyIndex === 3) {
+      // Auto-submit when last digit is typed
+      if (emptyIndex === otpLength - 1) {
         const finalOtp = newOtp.join('');
         setTimeout(() => {
           verifyOtpCode(finalOtp);
@@ -124,9 +155,27 @@ export default function OtpVerificationScreen() {
   };
 
   // Handle resend OTP
-  const handleResend = () => {
-    setOtp(['', '', '', '']);
+  const handleResend = async () => {
+    setOtp(Array(otpLength).fill(''));
     setSecondsLeft(60);
+    try {
+      if (isFirebase && params.phone) {
+        const res = await sendFirebasePhoneOtp(params.phone);
+        setSessionInfo(res.sessionInfo);
+        alert('A new Firebase verification code has been sent.');
+        return;
+      }
+
+      const payload = {};
+      if (params.email) payload.email = params.email;
+      else if (params.phone) payload.phone = params.phone;
+      await api.post('/auth/resend-otp', payload);
+      alert('A new verification code has been sent.');
+    } catch (err) {
+      console.warn('[RESEND OTP ERROR]', err.message);
+      const errMsg = err.message || err.response?.data?.message || 'Failed to resend code. Please try again.';
+      alert(errMsg);
+    }
   };
 
   const keypadRows = [
@@ -135,6 +184,11 @@ export default function OtpVerificationScreen() {
     [7, 8, 9],
     [null, 0, 'backspace'],
   ];
+
+  const boxWidth = isFirebase
+    ? Math.min(46, Math.floor((SCREEN_WIDTH - 64) / 6) - 4)
+    : 60;
+  const boxHeight = isFirebase ? 60 : 70;
 
   return (
     <View style={styles.rootContainer}>
@@ -163,23 +217,23 @@ export default function OtpVerificationScreen() {
 
           {/* Subtitle */}
           <Text style={styles.subtitleText}>
-            Type the verification code{'\n'}we've sent you
-            {params.otp ? `\n(Your dummy OTP is: ${params.otp})` : ''}
+            Type the {otpLength}-digit verification code{'\n'}we've sent to your {params.email ? 'email' : 'mobile'}
           </Text>
 
-          {/* 4-Digit OTP Grid Boxes */}
+          {/* OTP Grid Boxes */}
           <View style={styles.otpGridRow}>
-            {Array.from({ length: 4 }).map((_, index) => {
+            {Array.from({ length: otpLength }).map((_, index) => {
               const digit = otp[index] || '';
               const isFilled = digit !== '';
               const nextEmptyIndex = otp.findIndex((d) => d === '');
-              const isCurrentFocus = !isFilled && (nextEmptyIndex === index || (nextEmptyIndex === -1 && index === 3));
+              const isCurrentFocus = !isFilled && (nextEmptyIndex === index || (nextEmptyIndex === -1 && index === otpLength - 1));
 
               return (
                 <View
                   key={index}
                   style={[
                     styles.otpBox,
+                    { width: boxWidth, height: boxHeight, marginHorizontal: isFirebase ? 3 : 6 },
                     isFilled && styles.otpBoxFilled,
                     isCurrentFocus && styles.otpBoxFocused,
                   ]}
@@ -187,6 +241,7 @@ export default function OtpVerificationScreen() {
                   <Text
                     style={[
                       styles.otpDigitText,
+                      isFirebase && { fontSize: 22 },
                       isFilled && styles.otpDigitTextFilled,
                       isCurrentFocus && styles.otpDigitTextFocused,
                     ]}

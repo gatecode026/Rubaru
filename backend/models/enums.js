@@ -153,6 +153,7 @@ const SocialNotificationTypes = Object.freeze({
   FOLLOW: 'follow',
   MESSAGE: 'message',
   CALL: 'call',
+  MISSED_CALL: 'missed_call',
   GROUP_INVITE: 'group_invite',
 });
 

@@ -2,7 +2,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Profile = require('../models/Profile');
+const Content = require('../models/Content');
 const imagekitService = require('../services/imagekitService');
+const otpService = require('../services/otpService');
+const firebaseAuthService = require('../services/firebaseAuthService');
 
 // Helper: Generate JWT (Long-lived for persistent login: 10 years)
 const generateToken = (id) => {
@@ -22,20 +25,37 @@ const registerEmail = async (req, res) => {
   }
 
   try {
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: email.trim().toLowerCase() });
     if (userExists) {
-      return res.status(400).json({ message: 'User already exists' });
+      const otpCode = otpService.generateOtp(4);
+      const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+      userExists.otp = {
+        code: otpCode,
+        expiresAt: otpExpires,
+      };
+      await userExists.save();
+
+      const dispatchResult = await otpService.sendEmailOtp(userExists.email, otpCode);
+
+      return res.status(200).json({
+        message: 'Verification OTP sent to registered email.',
+        email: userExists.email,
+        messageId: dispatchResult.messageId,
+        provider: dispatchResult.provider,
+        otp: process.env.NODE_ENV === 'production' ? undefined : otpCode,
+        isExistingUser: true,
+      });
     }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create OTP
-    const otpCode = '1234'; // Default mock OTP for developer ease
-    const otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+    // Create real cryptographic OTP with 10 minute expiry
+    const otpCode = otpService.generateOtp(4);
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
     const user = await User.create({
-      email,
+      email: email.trim().toLowerCase(),
       password: hashedPassword,
       otp: {
         code: otpCode,
@@ -44,12 +64,14 @@ const registerEmail = async (req, res) => {
       isActive: false, // Wait until OTP is verified
     });
 
-    console.log(`[AUTH] Registered ${email}. Mock OTP is ${otpCode}`);
+    const dispatchResult = await otpService.sendEmailOtp(user.email, otpCode);
 
     res.status(201).json({
       message: 'Registration initiated. Verification OTP sent.',
       email: user.email,
-      otp: otpCode,
+      messageId: dispatchResult.messageId,
+      provider: dispatchResult.provider,
+      otp: process.env.NODE_ENV === 'production' ? undefined : otpCode,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -67,20 +89,41 @@ const registerPhone = async (req, res) => {
   }
 
   try {
-    const userExists = await User.findOne({ phone });
+    const normalizedPhone = otpService.normalizePhone(phone);
+    const userExists = await User.findOne({
+      $or: [{ phone: phone.trim() }, { phone: normalizedPhone }],
+    });
     if (userExists) {
-      return res.status(400).json({ message: 'User already exists' });
+      // Existing user logging in via phone OTP
+      const otpCode = otpService.generateOtp(4);
+      const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+      userExists.otp = {
+        code: otpCode,
+        expiresAt: otpExpires,
+      };
+      await userExists.save();
+
+      const dispatchResult = await otpService.sendSmsOtp(userExists.phone, otpCode);
+
+      return res.status(200).json({
+        message: 'Verification OTP sent to registered mobile.',
+        phone: userExists.phone,
+        messageId: dispatchResult.messageId,
+        provider: dispatchResult.provider,
+        otp: process.env.NODE_ENV === 'production' ? undefined : otpCode,
+        isExistingUser: true,
+      });
     }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create OTP
-    const otpCode = '1234'; // Default mock OTP
-    const otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+    // Create real cryptographic OTP with 10 minute expiry
+    const otpCode = otpService.generateOtp(4);
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
     const user = await User.create({
-      phone,
+      phone: normalizedPhone,
       password: hashedPassword,
       otp: {
         code: otpCode,
@@ -89,12 +132,14 @@ const registerPhone = async (req, res) => {
       isActive: false,
     });
 
-    console.log(`[AUTH] Registered ${phone}. Mock OTP is ${otpCode}`);
+    const dispatchResult = await otpService.sendSmsOtp(user.phone, otpCode);
 
     res.status(201).json({
       message: 'Registration initiated. Verification OTP sent.',
       phone: user.phone,
-      otp: otpCode,
+      messageId: dispatchResult.messageId,
+      provider: dispatchResult.provider,
+      otp: process.env.NODE_ENV === 'production' ? undefined : otpCode,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -191,15 +236,24 @@ const login = async (req, res) => {
     }
 
     if (user) {
+      if (user.accountStatus === 'DELETED') {
+        return res.status(403).json({ message: 'This account has been deleted.' });
+      }
+
       if (!user.isActive) {
-        // Send a new OTP
-        const otpCode = '1234';
+        // Send a new real OTP
+        const otpCode = otpService.generateOtp(4);
         user.otp = {
           code: otpCode,
-          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
         };
         await user.save();
-        console.log(`[AUTH LOGIN] User unverified: ${user.email || user.phone}`);
+        if (user.email) {
+          await otpService.sendEmailOtp(user.email, otpCode);
+        } else if (user.phone) {
+          await otpService.sendSmsOtp(user.phone, otpCode);
+        }
+        console.log(`[AUTH LOGIN] User unverified: ${user.email || user.phone}. Sent OTP.`);
         return res.status(403).json({
           message: 'Account is not verified. A new OTP has been sent.',
           unverified: true,
@@ -413,13 +467,241 @@ const getMe = async (req, res) => {
   }
 };
 
+// @desc    Delete / Deactivate current user account
+// @route   DELETE /api/auth/account
+// @access  Private
+const deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.isActive = false;
+    user.accountStatus = 'DELETED';
+    await user.save();
+
+    await Profile.findOneAndUpdate(
+      { user: userId },
+      { $set: { bio: '[Deleted Account]', displayName: 'Deleted User', avatarUri: null } }
+    );
+
+    await Content.updateMany(
+      { authorId: userId },
+      { $set: { status: 'DELETED' } }
+    );
+
+    return res.status(200).json({ success: true, message: 'Account deleted successfully' });
+  } catch (error) {
+    console.error('[AUTH DELETE ACCOUNT ERROR]', error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Resend OTP to email or phone
+// @route   POST /api/auth/resend-otp
+// @access  Public
+const resendOtp = async (req, res) => {
+  const { email, phone } = req.body;
+  if (!email && !phone) {
+    return res.status(400).json({ message: 'Please provide email or phone' });
+  }
+
+  try {
+    let query = {};
+    if (email) {
+      query.email = email.trim().toLowerCase();
+    } else if (phone) {
+      const normalizedPhone = otpService.normalizePhone(phone);
+      query.$or = [{ phone: phone.trim() }, { phone: normalizedPhone }];
+    }
+
+    const user = await User.findOne(query);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const otpCode = otpService.generateOtp(4);
+    user.otp = {
+      code: otpCode,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    };
+    await user.save();
+
+    let dispatchResult;
+    if (user.email) {
+      dispatchResult = await otpService.sendEmailOtp(user.email, otpCode);
+    } else {
+      dispatchResult = await otpService.sendSmsOtp(user.phone, otpCode);
+    }
+
+    return res.status(200).json({
+      message: 'Verification OTP resent successfully.',
+      messageId: dispatchResult.messageId,
+      provider: dispatchResult.provider,
+      otp: process.env.NODE_ENV === 'production' ? undefined : otpCode,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Verify Phone via Firebase ID Token (Login or Register)
+// @route   POST /api/auth/firebase-verify
+// @access  Public
+const firebasePhoneVerify = async (req, res) => {
+  const { idToken, displayName } = req.body;
+
+  if (!idToken) {
+    return res.status(400).json({ message: 'Firebase ID token is required' });
+  }
+
+  try {
+    const { uid, phoneNumber, email } = await firebaseAuthService.verifyFirebaseToken(idToken);
+
+    if (!phoneNumber && !email) {
+      return res.status(400).json({ message: 'Firebase token did not contain a verified phone or email' });
+    }
+
+    let user = null;
+    if (phoneNumber) {
+      const normalizedPhone = otpService.normalizePhone(phoneNumber);
+      const clean10 = normalizePhone(phoneNumber);
+      user = await User.findOne({
+        $or: [
+          { firebaseUid: uid },
+          { phone: phoneNumber },
+          { phone: normalizedPhone },
+          { phone: clean10 },
+          { phone: `+91${clean10}` },
+        ],
+      });
+    } else if (email) {
+      user = await User.findOne({
+        $or: [{ firebaseUid: uid }, { email: email.trim().toLowerCase() }],
+      });
+    }
+
+    if (!user) {
+      const defaultPassword = await bcrypt.hash(`fb_${uid}_${Date.now()}`, 10);
+      user = await User.create({
+        phone: phoneNumber ? otpService.normalizePhone(phoneNumber) : undefined,
+        email: email ? email.trim().toLowerCase() : undefined,
+        password: defaultPassword,
+        firebaseUid: uid,
+        isActive: true,
+        isVerified: true,
+        isProfileSetup: false,
+      });
+
+      await Profile.create({
+        user: user._id,
+        displayName: displayName || (phoneNumber ? `User ${phoneNumber.slice(-4)}` : 'New User'),
+        gender: 'OTHER',
+      }).catch((e) => console.warn('[PROFILE AUTO-CREATE WARN]', e.message));
+    } else {
+      user.firebaseUid = uid;
+      user.isActive = true;
+      user.isVerified = true;
+      await user.save();
+    }
+
+    const token = generateToken(user._id);
+    const profile = await Profile.findOne({ user: user._id });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Firebase phone verification successful',
+      token,
+      isProfileSetup: user.isProfileSetup,
+      user: {
+        _id: user._id,
+        phone: user.phone,
+        email: user.email,
+        isActive: user.isActive,
+        isProfileSetup: user.isProfileSetup,
+        profile: profile || null,
+      },
+    });
+  } catch (error) {
+    console.error('[FIREBASE PHONE VERIFY ERROR]', error);
+    return res.status(401).json({ message: error.message });
+  }
+};
+
+// @desc    Reset Password via Firebase verification
+// @route   POST /api/auth/firebase-reset-password
+// @access  Public
+const firebaseResetPassword = async (req, res) => {
+  const { idToken, newPassword } = req.body;
+
+  if (!idToken || !newPassword) {
+    return res.status(400).json({ message: 'Please provide Firebase ID token and new password' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ message: 'Password must be at least 6 characters' });
+  }
+
+  try {
+    const { uid, phoneNumber, email } = await firebaseAuthService.verifyFirebaseToken(idToken);
+
+    let user = null;
+    if (phoneNumber) {
+      const normalizedPhone = otpService.normalizePhone(phoneNumber);
+      const clean10 = normalizePhone(phoneNumber);
+      user = await User.findOne({
+        $or: [
+          { firebaseUid: uid },
+          { phone: phoneNumber },
+          { phone: normalizedPhone },
+          { phone: clean10 },
+          { phone: `+91${clean10}` },
+        ],
+      });
+    } else if (email) {
+      user = await User.findOne({
+        $or: [{ firebaseUid: uid }, { email: email.trim().toLowerCase() }],
+      });
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: 'No account found matching this verified credential' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    user.firebaseUid = uid;
+    user.isActive = true;
+    user.isVerified = true;
+    await user.save();
+
+    const token = generateToken(user._id);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password reset successfully',
+      token,
+    });
+  } catch (error) {
+    console.error('[FIREBASE RESET PASSWORD ERROR]', error);
+    return res.status(401).json({ message: error.message });
+  }
+};
+
 module.exports = {
   registerEmail,
   registerPhone,
   register,
   verifyOtp,
+  resendOtp,
+  firebasePhoneVerify,
+  firebaseResetPassword,
   login,
   profileSetup,
   setPassword,
   getMe,
+  deleteAccount,
 };
+

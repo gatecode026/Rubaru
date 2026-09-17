@@ -206,6 +206,7 @@ const sendMessage = async (req, res) => {
       if (!existingChat) {
         existingChat = await Chat.create({
           participants: [req.user._id, recipientId],
+          canonicalParticipantKey: [req.user._id.toString(), recipientId.toString()].sort().join(':'),
         });
       }
       targetChatId = existingChat._id;
@@ -213,6 +214,27 @@ const sendMessage = async (req, res) => {
 
     if (!targetChatId) {
       return res.status(400).json({ message: 'Please provide chatId or recipientId' });
+    }
+
+    // Ensure ConversationMember records exist for all chat participants
+    const chatDoc = await Chat.findById(targetChatId);
+    if (chatDoc && Array.isArray(chatDoc.participants)) {
+      await Promise.all(
+        chatDoc.participants.map((pId) =>
+          ConversationMember.findOneAndUpdate(
+            { conversationId: targetChatId, userId: pId },
+            {
+              $setOnInsert: {
+                conversationId: targetChatId,
+                userId: pId,
+                role: 'MEMBER',
+                state: 'ACTIVE',
+              },
+            },
+            { upsert: true, new: true }
+          )
+        )
+      );
     }
 
     // Double check chat access with active Match authorization
@@ -302,6 +324,10 @@ const sendMessage = async (req, res) => {
       const { getSocketIO } = require('../services/socketDispatchService');
       const io = getSocketIO();
       if (io) {
+        const senderProfile = await Profile.findOne({ user: req.user._id });
+        const senderName = senderProfile?.displayName || 'Rubaru User';
+        const senderAvatar = senderProfile?.avatarUri || '';
+
         const msgPayload = {
           id: newMessage._id.toString(),
           _id: newMessage._id.toString(),
@@ -310,6 +336,8 @@ const sendMessage = async (req, res) => {
           conversationId: targetChatId.toString(),
           senderId: req.user._id.toString(),
           sender: req.user._id.toString(),
+          senderName,
+          senderAvatar,
           type: messageType,
           text: text || '',
           attachmentUri: newMessage.attachmentUri,
@@ -321,6 +349,21 @@ const sendMessage = async (req, res) => {
         io.to(`conversation:${targetChatId}`).emit('message.created', { version: 1, data: { message: msgPayload } });
         io.to(`chat_${targetChatId}`).emit('receive_message', msgPayload);
 
+        // Alert payload for in-app banner popup
+        const alertSnippet = text || (messageType === 'image' ? '📷 Sent a photo' : (messageType === 'voice' ? '🎤 Sent a voice message' : 'Sent an attachment'));
+        const inAppPopupPayload = {
+          id: `msg_notif_${newMessage._id}`,
+          type: 'CHAT_MESSAGE',
+          sender: {
+            _id: req.user._id.toString(),
+            displayName: senderName,
+            avatarUri: senderAvatar,
+          },
+          message: alertSnippet,
+          deepLink: `rubaru://chat/${targetChatId}`,
+          createdAt: newMessage.createdAt,
+        };
+
         if (Array.isArray(chat.participants)) {
           chat.participants.forEach((p) => {
             const participantId = (p._id || p).toString();
@@ -328,6 +371,12 @@ const sendMessage = async (req, res) => {
             io.to(`user_${participantId}`).emit('receive_message', msgPayload);
             io.to(`user:${participantId}`).emit('message.created', { version: 1, data: { message: msgPayload } });
             io.to(`user:${participantId}`).emit('new_message', msgPayload);
+
+            // Dispatch popup alert to recipient device (skip sender itself)
+            if (participantId !== req.user._id.toString()) {
+              io.to(`user:${participantId}`).emit('notification:new', inAppPopupPayload);
+              io.to(`user_${participantId}`).emit('notification:new', inAppPopupPayload);
+            }
           });
         }
       }
