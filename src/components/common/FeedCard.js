@@ -34,7 +34,7 @@ export default function FeedCard({ item }) {
     }
     if (typeof target !== 'string' || !target) return 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800';
     if (target.startsWith('http') || target.startsWith('file://') || target.startsWith('content://')) return target;
-    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.33:5000/api';
+    const apiBase = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.104:5000/api';
     const host = apiBase.replace('/api', '');
     return `${host}${target.startsWith('/') ? '' : '/'}${target}`;
   };

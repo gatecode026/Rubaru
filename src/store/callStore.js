@@ -4,7 +4,6 @@ import webRTCService from '../services/webRTCService';
 import callSoundService from '../services/callSoundService';
 import paidCommunicationClient from '../services/paidCommunicationService';
 import { usePointsStore } from './pointsStore';
-import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Single Application-Level Call Store for Rubaru Calling (R4-C4)

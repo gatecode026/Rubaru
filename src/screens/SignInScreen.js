@@ -16,6 +16,7 @@ import api from '@services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import storage from '@services/storage';
 import { connectSocket } from '@services/socket';
+import { usePointsStore } from '../store/pointsStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -67,6 +68,12 @@ export default function SignInScreen() {
 
       // Set headers for all future requests
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+      // Update wallet balance from login response and sync from DB
+      if (response.data?.points !== undefined || response.data?.walletBalance !== undefined) {
+        usePointsStore.getState().setBalance(response.data.walletBalance ?? response.data.points);
+      }
+      usePointsStore.getState().fetchBalance().catch(() => {});
 
       // Connect socket with the fresh token so real-time events work immediately
       connectSocket(token);

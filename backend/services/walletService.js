@@ -11,6 +11,8 @@ const {
   OutboxStatuses,
 } = require('../models/enums');
 
+const User = require('../models/User');
+
 class WalletError extends Error {
   constructor(code, message, statusCode = 400, details = null) {
     super(message);
@@ -35,13 +37,16 @@ async function getOrCreateWallet(userId, session = null) {
 
   if (!wallet) {
     try {
+      const user = await User.findById(userId);
+      const startingPoints = (user && typeof user.points === 'number') ? user.points : 250;
+
       const createOptions = session ? { session } : {};
       const created = await Wallet.create(
         [
           {
             userId,
-            availableBalance: 0,
-            lifetimeEarned: 0,
+            availableBalance: startingPoints,
+            lifetimeEarned: startingPoints,
             lifetimeSpent: 0,
             status: WalletStatuses.ACTIVE,
             version: 0,
@@ -50,6 +55,23 @@ async function getOrCreateWallet(userId, session = null) {
         createOptions
       );
       wallet = created[0];
+
+      if (startingPoints > 0) {
+        await WalletLedger.create(
+          [
+            {
+              transactionId: uuidv4(),
+              userId,
+              entryType: LedgerEntryTypes.CREDIT,
+              transactionType: LedgerTransactionTypes.INITIAL_MIGRATION,
+              amount: startingPoints,
+              balanceAfter: startingPoints,
+              description: 'Initial Welcome Bonus Coins',
+            },
+          ],
+          createOptions
+        );
+      }
     } catch (err) {
       // Handle potential race condition on unique index
       if (err.code === 11000) {
@@ -58,6 +80,28 @@ async function getOrCreateWallet(userId, session = null) {
         wallet = await retryQuery;
       } else {
         throw err;
+      }
+    }
+  } else if (wallet.availableBalance === 0 && wallet.lifetimeEarned === 0) {
+    // If wallet was previously created with 0 balance, synchronize user starting points
+    const user = await User.findById(userId);
+    const startingPoints = (user && typeof user.points === 'number' && user.points > 0) ? user.points : 250;
+    if (startingPoints > 0) {
+      wallet.availableBalance = startingPoints;
+      wallet.lifetimeEarned = startingPoints;
+      await wallet.save();
+      try {
+        await WalletLedger.create({
+          transactionId: uuidv4(),
+          userId,
+          entryType: LedgerEntryTypes.CREDIT,
+          transactionType: LedgerTransactionTypes.INITIAL_MIGRATION,
+          amount: startingPoints,
+          balanceAfter: startingPoints,
+          description: 'Initial Welcome Bonus Coins',
+        });
+      } catch (ledgerErr) {
+        console.warn('[WALLET] Initial migration ledger creation warning:', ledgerErr.message);
       }
     }
   }

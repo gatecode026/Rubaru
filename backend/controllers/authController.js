@@ -184,9 +184,22 @@ const verifyOtp = async (req, res) => {
     user.otp = undefined; // clear OTP
     await user.save();
 
+    let walletBalance = user.points || 250;
+    try {
+      const walletInfo = await walletService.getWalletBalance(user._id);
+      walletBalance = walletInfo.availableBalance;
+    } catch (wErr) {
+      console.warn('[AUTH OTP] Wallet lookup error:', wErr.message);
+    }
+
     res.status(200).json({
       message: 'OTP verified successfully',
       token: generateToken(user._id),
+      _id: user._id,
+      email: user.email,
+      phone: user.phone,
+      points: walletBalance,
+      walletBalance: walletBalance,
       isProfileSetup: user.isProfileSetup,
     });
   } catch (error) {
@@ -261,11 +274,21 @@ const login = async (req, res) => {
       }
 
       console.log(`[AUTH LOGIN] Successful login for: ${user.email || user.phone} (ID: ${user._id})`);
+
+      let liveWalletBalance = user.points || 250;
+      try {
+        const walletInfo = await walletService.getWalletBalance(user._id);
+        liveWalletBalance = walletInfo.availableBalance;
+      } catch (wErr) {
+        console.warn('[AUTH LOGIN] Wallet lookup warning:', wErr.message);
+      }
+
       return res.status(200).json({
         _id: user._id,
         email: user.email,
         phone: user.phone,
-        points: user.points,
+        points: liveWalletBalance,
+        walletBalance: liveWalletBalance,
         isProfileSetup: user.isProfileSetup,
         token: generateToken(user._id),
       });
@@ -452,11 +475,21 @@ const getMe = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
     const profile = await Profile.findOne({ user: user._id });
+
+    let liveWalletBalance = user.points || 250;
+    try {
+      const walletInfo = await walletService.getWalletBalance(user._id);
+      liveWalletBalance = walletInfo.availableBalance;
+    } catch (wErr) {
+      console.warn('[AUTH ME] Wallet lookup warning:', wErr.message);
+    }
+
     res.status(200).json({
       _id: user._id,
       email: user.email,
       phone: user.phone,
-      points: user.points,
+      points: liveWalletBalance,
+      walletBalance: liveWalletBalance,
       isActive: user.isActive,
       isProfileSetup: user.isProfileSetup,
       accountStatus: user.accountStatus,
