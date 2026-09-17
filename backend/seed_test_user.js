@@ -6,6 +6,9 @@ const User = require('./models/User');
 const Profile = require('./models/Profile');
 const DatingProfile = require('./models/DatingProfile');
 
+const assertSeedPermission = require('./utils/assertSeedPermission');
+assertSeedPermission('seed_test_user.js');
+
 async function seedTestUser() {
   await connectDB();
   console.log('[SEED] Connected to database');

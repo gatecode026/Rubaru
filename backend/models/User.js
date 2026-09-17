@@ -55,6 +55,15 @@ const UserSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    firebaseUid: {
+      type: String,
+      sparse: true,
+      index: true,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

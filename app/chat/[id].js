@@ -75,10 +75,14 @@ function getDateLabel(dateInput) {
 }
 
 function sortMessagesChronologically(msgList) {
-  return [...msgList].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  if (!Array.isArray(msgList)) return [];
+  return [...msgList]
+    .filter(Boolean)
+    .sort((a, b) => new Date(a?.createdAt || 0).getTime() - new Date(b?.createdAt || 0).getTime());
 }
 
 function formatServerMessage(m, currentUserId) {
+  if (!m) return null;
   const senderIdStr = String(m.senderId?._id || m.senderId || m.sender?._id || m.sender || '');
   const isSent = Boolean(currentUserId && senderIdStr && senderIdStr === String(currentUserId));
   const createdAt = m.createdAt || new Date().toISOString();
@@ -94,8 +98,10 @@ function formatServerMessage(m, currentUserId) {
     }));
   }
 
+  const messageId = String(m.id || m._id || m.clientMessageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+
   return {
-    id: String(m.id || m._id),
+    id: messageId,
     clientMessageId: m.clientMessageId || undefined,
     type: (m.type || 'text').toLowerCase(),
     text: m.text || '',
@@ -298,7 +304,9 @@ export default function ChatDetailScreen() {
           const serverMsgs = Array.isArray(msgsRes.data) ? msgsRes.data : [];
           
           // Chronological sort: oldest at top (index 0), newest at bottom (index last)
-          const formatted = serverMsgs.map((m) => formatServerMessage(m, resolvedMyId));
+          const formatted = serverMsgs
+            .map((m) => formatServerMessage(m, resolvedMyId))
+            .filter(Boolean);
           const sorted = sortMessagesChronologically(formatted);
 
           if (isMounted) {
@@ -349,15 +357,18 @@ export default function ChatDetailScreen() {
       if (olderList.length === 0) {
         setHasMore(false);
       } else {
-        const formattedOlder = olderList.map((m) => formatServerMessage(m, myUserId));
+        const formattedOlder = olderList
+          .map((m) => formatServerMessage(m, myUserId))
+          .filter(Boolean);
         setMessages((prev) => {
-          const existingIds = new Set(prev.map((m) => String(m.id)));
-          const filtered = formattedOlder.filter((m) => !existingIds.has(String(m.id)));
+          const safePrev = Array.isArray(prev) ? prev.filter(Boolean) : [];
+          const existingIds = new Set(safePrev.map((m) => String(m.id || m._id)));
+          const filtered = formattedOlder.filter((m) => !existingIds.has(String(m.id || m._id)));
           if (filtered.length === 0) {
             setHasMore(false);
-            return prev;
+            return safePrev;
           }
-          return sortMessagesChronologically([...filtered, ...prev]);
+          return sortMessagesChronologically([...filtered, ...safePrev]);
         });
         setPage(nextPage);
         setHasMore(olderList.length >= 40);
@@ -403,20 +414,22 @@ export default function ChatDetailScreen() {
       const rawClientMsgId = msg.clientMessageId || rawMsg.clientMessageId;
 
       const newFormatted = formatServerMessage(msg, myUserId);
+      if (!newFormatted) return;
 
       setMessages((prev) => {
+        const safePrev = Array.isArray(prev) ? prev.filter(Boolean) : [];
         // 1. Direct ID match
-        const existsById = prev.some((m) => String(m.id) === msgId);
-        if (existsById) return prev;
+        const existsById = safePrev.some((m) => String(m.id || m._id) === msgId);
+        if (existsById) return safePrev;
 
         // 2. Reconcile optimistic sending message
         if (isSentByMe) {
-          const optIdx = prev.findIndex((m) =>
+          const optIdx = safePrev.findIndex((m) =>
             (rawClientMsgId && m.clientMessageId === rawClientMsgId) ||
-            (m.status === 'sending' && m.text === newFormatted.text && (Date.now() - new Date(m.createdAt).getTime() < 30000))
+            (m.status === 'sending' && m.text === newFormatted.text && (Date.now() - new Date(m.createdAt || 0).getTime() < 30000))
           );
           if (optIdx > -1) {
-            const copy = [...prev];
+            const copy = [...safePrev];
             copy[optIdx] = {
               ...newFormatted,
               status: 'sent',
@@ -426,7 +439,7 @@ export default function ChatDetailScreen() {
         }
 
         // 3. Append to chronological list (appears at bottom)
-        return sortMessagesChronologically([...prev, newFormatted]);
+        return sortMessagesChronologically([...safePrev, newFormatted]);
       });
 
       // If viewing incoming message, mark as read and handle auto-scroll
@@ -499,11 +512,6 @@ export default function ChatDetailScreen() {
   const handleSend = async () => {
     if (inputText.trim() === '') return;
 
-    // Enforce Paid Chat: cannot send if paid chat is off
-    if (!isPaidActive) {
-      handleOpenPaidConfirm('MESSAGE');
-      return;
-    }
 
     const text = inputText.trim();
     setInputText('');
@@ -599,10 +607,6 @@ export default function ChatDetailScreen() {
   };
 
   const handleRetrySend = async (failedMsg) => {
-    if (!isPaidActive) {
-      handleOpenPaidConfirm('MESSAGE');
-      return;
-    }
     setMessages((prev) =>
       prev.map((m) => (m.id === failedMsg.id ? { ...m, status: 'sending' } : m))
     );
@@ -627,10 +631,6 @@ export default function ChatDetailScreen() {
   const uploadAttachment = async (uri, type, duration = '') => {
     if (!uri) return;
 
-    if (!isPaidActive) {
-      handleOpenPaidConfirm('MESSAGE');
-      return;
-    }
 
     const tempId = `temp_${Date.now()}`;
     const nowIso = new Date().toISOString();
@@ -708,10 +708,6 @@ export default function ChatDetailScreen() {
   const handleSendImage = (uri) => uploadAttachment(uri, 'image');
 
   const handleSendSticker = async (emoji) => {
-    if (!isPaidActive) {
-      handleOpenPaidConfirm('MESSAGE');
-      return;
-    }
 
     const tempId = `temp_${Date.now()}`;
     const nowIso = new Date().toISOString();
@@ -750,10 +746,6 @@ export default function ChatDetailScreen() {
   };
 
   const handleCreatePoll = async (pollData) => {
-    if (!isPaidActive) {
-      handleOpenPaidConfirm('MESSAGE');
-      return;
-    }
 
     try {
       if (activeChatId) {
@@ -1006,6 +998,7 @@ export default function ChatDetailScreen() {
 
   // --- Render Single Message Item in Chronological Order ---
   const renderMessageItem = ({ item, index }) => {
+    if (!item) return null;
     // Chronological order: index 0 is oldest (top), index + 1 is newer message (below on screen)
     const prevMsg = messages[index - 1]; // older message above
     const nextMsg = messages[index + 1]; // newer message below
@@ -1019,12 +1012,12 @@ export default function ChatDetailScreen() {
     const isGroupedAbove = Boolean(
       prevMsg &&
       prevMsg.isSent === item.isSent &&
-      Math.abs(new Date(item.createdAt).getTime() - new Date(prevMsg.createdAt).getTime()) < 120000
+      Math.abs(new Date(item.createdAt || 0).getTime() - new Date(prevMsg.createdAt || 0).getTime()) < 120000
     );
     const isGroupedBelow = Boolean(
       nextMsg &&
       nextMsg.isSent === item.isSent &&
-      Math.abs(new Date(nextMsg.createdAt).getTime() - new Date(item.createdAt).getTime()) < 120000
+      Math.abs(new Date(nextMsg.createdAt || 0).getTime() - new Date(item.createdAt || 0).getTime()) < 120000
     );
 
     let bubbleContent = null;
@@ -1093,7 +1086,7 @@ export default function ChatDetailScreen() {
     }
 
     return (
-      <View key={item.id}>
+      <View>
         {/* Date header rendered directly ABOVE the first message of each day */}
         {showDateHeader && (
           <View style={styles.dateSeparatorContainer}>
@@ -1271,26 +1264,24 @@ export default function ChatDetailScreen() {
           ) : (
             <FlatList
               ref={flatListRef}
-              data={messages}
-              keyExtractor={(item) => String(item.id)}
+              data={Array.isArray(messages) ? messages.filter(Boolean) : []}
+              keyExtractor={(item, index) => String(item?.id || item?._id || item?.clientMessageId || index)}
               renderItem={renderMessageItem}
               contentContainerStyle={styles.messageList}
               showsVerticalScrollIndicator={false}
               onContentSizeChange={() => {
-                if (!isScrolledUp) {
+                if (!isScrolledUp && messages?.length > 0) {
                   flatListRef.current?.scrollToEnd({ animated: false });
                 }
               }}
-              onLayout={() => {
-                flatListRef.current?.scrollToEnd({ animated: false });
-              }}
               onScroll={(e) => {
                 const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+                if (!contentSize || contentSize.height === 0) return;
                 const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 100;
-                setIsScrolledUp(!isNearBottom);
+                setIsScrolledUp((prev) => (prev !== !isNearBottom ? !isNearBottom : prev));
                 if (isNearBottom) setNewIncomingCount(0);
-                // Trigger load more when user scrolls to top
-                if (contentOffset.y <= 30 && hasMore && !loadingMore) {
+                // Trigger load more when user scrolls near top AND content overflows viewport
+                if (contentOffset.y <= 20 && contentSize.height > layoutMeasurement.height && hasMore && !loadingMore && !loadingMsgs) {
                   handleLoadMore();
                 }
               }}

@@ -44,6 +44,20 @@ export default function EmailVerificationScreen() {
     } catch (error) {
       setLoading(false);
       console.error(error);
+      if (error.response?.status === 400 && error.response?.data?.message === 'User already exists') {
+        try {
+          setLoading(true);
+          await api.post('/auth/resend-otp', { email: cleanEmail });
+          setLoading(false);
+          router.push({
+            pathname: '/otp-verification',
+            params: { email: cleanEmail }
+          });
+          return;
+        } catch (resendErr) {
+          setLoading(false);
+        }
+      }
       const errMsg = error.response?.data?.message || 'Failed to connect. Please try again.';
       alert(errMsg);
     }

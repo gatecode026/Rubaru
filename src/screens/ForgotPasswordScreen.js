@@ -15,6 +15,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import {
+  sendFirebasePhoneOtp,
+  confirmFirebasePhoneOtp,
+  resetPasswordWithFirebase,
+  formatPhoneNumber,
+} from '@services/firebaseAuth';
+import api from '@services/api';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function ForgotPasswordScreen() {
@@ -23,23 +31,30 @@ export default function ForgotPasswordScreen() {
 
   // Step state: 1 = Email/Phone, 2 = Verification Code, 3 = Reset Password, 4 = Success
   const [step, setStep] = useState(1);
-  const [resetMethod, setResetMethod] = useState('email'); // 'email' or 'phone'
+  const [resetMethod, setResetMethod] = useState('phone'); // 'phone' or 'email'
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '']);
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [sessionInfo, setSessionInfo] = useState(null);
+  const [firebaseIdToken, setFirebaseIdToken] = useState(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [resendTimer, setResendTimer] = useState(30);
+  const [loading, setLoading] = useState(false);
 
-  // OTP input refs
+  // OTP input refs (6 boxes for phone, 4 for email)
   const otpRef0 = useRef(null);
   const otpRef1 = useRef(null);
   const otpRef2 = useRef(null);
   const otpRef3 = useRef(null);
-  const otpRefs = [otpRef0, otpRef1, otpRef2, otpRef3];
+  const otpRef4 = useRef(null);
+  const otpRef5 = useRef(null);
+  const otpRefs = [otpRef0, otpRef1, otpRef2, otpRef3, otpRef4, otpRef5];
+
+  const otpLength = resetMethod === 'phone' ? 6 : 4;
 
   useEffect(() => {
     let interval = null;
@@ -51,21 +66,43 @@ export default function ForgotPasswordScreen() {
     return () => clearInterval(interval);
   }, [step, resendTimer]);
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     setErrorMessage('');
     if (resetMethod === 'email') {
       if (!email.trim() || !email.includes('@')) {
         setErrorMessage('Please enter a valid email address.');
         return;
       }
+      setLoading(true);
+      try {
+        await api.post('/auth/resend-otp', { email: email.trim() });
+        setLoading(false);
+        setOtp(['', '', '', '']);
+        setStep(2);
+        setResendTimer(30);
+      } catch (err) {
+        setLoading(false);
+        setErrorMessage(err.response?.data?.message || 'Failed to send reset code.');
+      }
     } else {
-      if (!phone.trim() || phone.length < 10) {
-        setErrorMessage('Please enter a valid phone number.');
+      if (!phone.trim() || phone.replace(/[^0-9]/g, '').length < 10) {
+        setErrorMessage('Please enter a valid 10-digit phone number.');
         return;
       }
+      const formatted = formatPhoneNumber(phone.trim(), '+91');
+      setLoading(true);
+      try {
+        const res = await sendFirebasePhoneOtp(formatted);
+        setSessionInfo(res.sessionInfo);
+        setLoading(false);
+        setOtp(['', '', '', '', '', '']);
+        setStep(2);
+        setResendTimer(30);
+      } catch (err) {
+        setLoading(false);
+        setErrorMessage(err.message || 'Failed to send verification code. Please check your network and try again.');
+      }
     }
-    setStep(2);
-    setResendTimer(30);
   };
 
   const handleOtpChange = (text, index) => {
@@ -73,7 +110,7 @@ export default function ForgotPasswordScreen() {
     newOtp[index] = text;
     setOtp(newOtp);
 
-    if (text && index < 3) {
+    if (text && index < otpLength - 1) {
       otpRefs[index + 1].current?.focus();
     }
   };
@@ -84,17 +121,36 @@ export default function ForgotPasswordScreen() {
     }
   };
 
-  const handleVerifyOtp = () => {
+  const handleVerifyOtp = async () => {
     setErrorMessage('');
-    const code = otp.join('');
-    if (code.length < 4) {
-      setErrorMessage('Please enter the full 4-digit code.');
+    const code = otp.slice(0, otpLength).join('');
+    if (code.length < otpLength) {
+      setErrorMessage(`Please enter the complete ${otpLength}-digit code.`);
       return;
     }
-    setStep(3);
+
+    if (resetMethod === 'phone') {
+      if (!sessionInfo) {
+        setErrorMessage('Session expired. Please request a new code.');
+        return;
+      }
+      setLoading(true);
+      try {
+        const confirmRes = await confirmFirebasePhoneOtp(sessionInfo, code);
+        setFirebaseIdToken(confirmRes.idToken);
+        setLoading(false);
+        setStep(3);
+      } catch (err) {
+        setLoading(false);
+        setErrorMessage(err.message || 'Incorrect verification code.');
+      }
+    } else {
+      // Email verify code
+      setStep(3);
+    }
   };
 
-  const handleResetPassword = () => {
+  const handleResetPassword = async () => {
     setErrorMessage('');
     if (!newPassword || newPassword.length < 6) {
       setErrorMessage('Password must be at least 6 characters long.');
@@ -104,18 +160,42 @@ export default function ForgotPasswordScreen() {
       setErrorMessage('Passwords do not match.');
       return;
     }
-    setStep(4);
+
+    setLoading(true);
+    try {
+      if (resetMethod === 'phone' && firebaseIdToken) {
+        await resetPasswordWithFirebase(firebaseIdToken, newPassword);
+      } else {
+        await api.post('/auth/set-password', { password: newPassword });
+      }
+      setLoading(false);
+      setStep(4);
+    } catch (err) {
+      setLoading(false);
+      setErrorMessage(err.response?.data?.message || err.message || 'Failed to reset password.');
+    }
   };
 
   const handleBackToSignIn = () => {
     router.replace('/sign-in');
   };
 
-  const handleResendCode = () => {
+  const handleResendCode = async () => {
     if (resendTimer === 0) {
-      setResendTimer(30);
-      setOtp(['', '', '', '']);
       setErrorMessage('');
+      setOtp(Array(otpLength).fill(''));
+      if (resetMethod === 'phone') {
+        const formatted = formatPhoneNumber(phone.trim(), '+91');
+        try {
+          const res = await sendFirebasePhoneOtp(formatted);
+          setSessionInfo(res.sessionInfo);
+          setResendTimer(30);
+        } catch (e) {
+          setErrorMessage(e.message || 'Failed to resend code');
+        }
+      } else {
+        setResendTimer(30);
+      }
     }
   };
 
@@ -293,20 +373,21 @@ export default function ForgotPasswordScreen() {
                 <>
                   <Text style={styles.titleText}>Verify Code</Text>
                   <Text style={styles.subtitleText}>
-                    Enter the 4-digit code sent to{' '}
+                    Enter the {otpLength}-digit code sent to{' '}
                     <Text style={{ fontWeight: '700', color: '#111827' }}>
                       {resetMethod === 'email' ? email : phone}
                     </Text>
                   </Text>
 
-                  {/* OTP 4-Box Container */}
-                  <View style={styles.otpContainer}>
-                    {otp.map((digit, idx) => (
+                  {/* Dynamic OTP Container */}
+                  <View style={[styles.otpContainer, otpLength === 6 && { gap: 6 }]}>
+                    {otp.slice(0, otpLength).map((digit, idx) => (
                       <TextInput
                         key={idx}
                         ref={otpRefs[idx]}
                         style={[
                           styles.otpBox,
+                          otpLength === 6 && { height: 56, borderRadius: 12 },
                           digit ? styles.otpBoxFilled : null,
                           errorMessage ? styles.inputCardError : null,
                         ]}

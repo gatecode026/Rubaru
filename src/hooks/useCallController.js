@@ -28,6 +28,18 @@ export function useCallController() {
       store.emitMediaReady();
     });
 
+    const unsubConnectionFailed = webRTCService.on('onConnectionFailed', (data) => {
+      store.handleConnectionFailed(data?.reason || 'ICE_FAILED');
+    });
+
+    const unsubConnectionReconnecting = webRTCService.on('onConnectionReconnecting', () => {
+      store.handleConnectionReconnecting();
+    });
+
+    const unsubQualityReport = webRTCService.on('onQualityReport', (report) => {
+      store.handleQualityReport(report);
+    });
+
     const unsubIceCandidate = webRTCService.on('onIceCandidate', ({ candidate, generation }) => {
       const state = useCallStore.getState();
       if (state.callId && socket.connected) {
@@ -54,6 +66,7 @@ export function useCallController() {
     const onConnected = (data) => store.handleConnected(data);
     const onReconnecting = (data) => store.handleReconnecting(data);
     const onReconnected = (data) => store.handleReconnected(data);
+    const onMediaControl = (data) => store.handleRemoteMediaControl(data);
     const onCallEnded = (data) => store.handleCallEnded(data);
     const onCallRejected = (data) => store.handleCallEnded(data);
     const onCallCancelled = (data) => store.handleCallEnded(data);
@@ -73,6 +86,7 @@ export function useCallController() {
     socket.on('call.ice_candidate', onSignalIce);
     socket.on('call:connected', onConnected);
     socket.on('call_connected', (data) => onConnected({ callId: data?.callSessionId || data?.callId, ...data }));
+    socket.on('call:media-control', onMediaControl);
     socket.on('call:reconnecting', onReconnecting);
     socket.on('call:reconnected', onReconnected);
     socket.on('call:ended', onCallEnded);
@@ -91,6 +105,9 @@ export function useCallController() {
       unsubLocalStream();
       unsubRemoteStream();
       unsubMediaReady();
+      unsubConnectionFailed();
+      unsubConnectionReconnecting();
+      unsubQualityReport();
       unsubIceCandidate();
 
       if (socket) {
@@ -107,6 +124,7 @@ export function useCallController() {
         socket.off('call.ice_candidate', onSignalIce);
         socket.off('call:connected', onConnected);
         socket.off('call_connected', onConnected);
+        socket.off('call:media-control', onMediaControl);
         socket.off('call:reconnecting', onReconnecting);
         socket.off('call:reconnected', onReconnected);
         socket.off('call:ended', onCallEnded);

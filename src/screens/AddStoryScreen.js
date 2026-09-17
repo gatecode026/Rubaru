@@ -329,25 +329,38 @@ export default function AddStoryScreen() {
       const purpose = isStory ? 'STORY_MEDIA' : activeMode === 'REEL' ? 'REEL_VIDEO' : 'POST_MEDIA';
       let mediaAssetId = null;
 
-      if (isCreateMode) {
-        // Create mode text-only story uses fallback canvas asset or direct story upload
-        mediaAssetId = 'create_canvas_' + Date.now();
-      } else {
-        const filename = `${purpose.toLowerCase()}_${Date.now()}.jpg`;
-        const uploadRes = await mediaService.uploadMedia(
-          {
-            uri: capturedImage,
-            name: filename,
-            type: 'image/jpeg',
-          },
-          purpose
-        );
+      if (isCreateMode || capturedImage === 'CREATE_CANVAS') {
+        Alert.alert('Background Required', 'Please select or capture a photo to share your story.');
+        setIsPublishing(false);
+        return;
+      }
 
-        mediaAssetId =
-          uploadRes.mediaAssetId ||
-          uploadRes.data?.mediaAssetId ||
-          uploadRes._id ||
-          uploadRes.data?._id;
+      if (!capturedImage) {
+        Alert.alert('No Media', 'Please select or capture a photo or video before publishing.');
+        setIsPublishing(false);
+        return;
+      }
+
+      const filename = `${purpose.toLowerCase()}_${Date.now()}.jpg`;
+      const uploadRes = await mediaService.uploadMedia(
+        {
+          uri: capturedImage,
+          name: filename,
+          type: 'image/jpeg',
+        },
+        purpose
+      );
+
+      mediaAssetId =
+        uploadRes.mediaAssetId ||
+        uploadRes.data?.mediaAssetId ||
+        uploadRes._id ||
+        uploadRes.data?._id;
+
+      if (!mediaAssetId) {
+        Alert.alert('Upload Failed', 'Failed to upload media asset. Please check your network and try again.');
+        setIsPublishing(false);
+        return;
       }
 
       const combinedCaptionParts = [];
@@ -359,20 +372,20 @@ export default function AddStoryScreen() {
 
       if (isStory) {
         await storyService.createStory({
-          mediaAssetId: mediaAssetId || 'story_asset_fallback',
+          mediaAssetId,
           caption: finalCaption,
           audience,
         });
         Alert.alert('Shared', audience === 'CLOSE_FRIENDS' ? 'Story shared with Close Friends! 💚' : 'Added to Your Story! 🩷');
       } else if (activeMode === 'REEL') {
         await reelService.createReel({
-          mediaAssetId: mediaAssetId || 'reel_asset_fallback',
+          mediaAssetId,
           caption: finalCaption,
         });
         Alert.alert('Success', 'Reel published! ✨');
       } else {
         await postService.createPost({
-          mediaAssetIds: [mediaAssetId || 'post_asset_fallback'],
+          mediaAssetIds: [mediaAssetId],
           caption: finalCaption,
         });
         Alert.alert('Success', 'Post published to feed! 📸');

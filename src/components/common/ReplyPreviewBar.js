@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 export default function ReplyPreviewBar({ replyingTo, displayName, onClose }) {
   if (!replyingTo) return null;
 
-  const senderName = replyingTo.isSent ? 'You' : (displayName || 'Rahul Kumawat');
+  const senderName = replyingTo.isSent ? 'You' : (displayName || 'User');
 
   const getSnippetText = () => {
     if (replyingTo.text) return replyingTo.text;

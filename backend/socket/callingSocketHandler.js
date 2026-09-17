@@ -154,15 +154,20 @@ function registerCallingHandlers(io, socket, userSocketMap) {
       // 2. Bind receiver device socket as the winning device
       await callLockService.bindCallDevice(callId, userId, socket.id);
 
-      // 3. Emit call:accepted to caller room
-      io.to(`user:${session.callerId}`).emit(SocketEvents.CALL_ACCEPTED, {
+      // 3. Emit call:accepted to both caller and receiver rooms (OMS standard)
+      const acceptedPayload = {
         callId: session.callId,
         receiverId: session.receiverId,
         acceptedAt: session.acceptedAt,
-      });
+      };
+      io.to(`user:${session.callerId}`).emit(SocketEvents.CALL_ACCEPTED, acceptedPayload);
+      io.to(`user:${session.receiverId}`).emit(SocketEvents.CALL_ACCEPTED, acceptedPayload);
 
       // Legacy call_connected event
       io.to(`user:${session.callerId}`).emit(SocketEvents.LEGACY_CALL_CONNECTED, {
+        callSessionId: session.callId,
+      });
+      io.to(`user:${session.receiverId}`).emit(SocketEvents.LEGACY_CALL_CONNECTED, {
         callSessionId: session.callId,
       });
 
@@ -301,10 +306,11 @@ function registerCallingHandlers(io, socket, userSocketMap) {
       }
       const peerId = session.callerId === userId ? session.receiverId : session.callerId;
 
-      // 3. Selected-Device Check
+      // 3. Selected-Device Check (auto-rebind on reconnect/transport-upgrade)
       const boundSocketId = await callLockService.getCallDevice(callId, userId);
       if (boundSocketId && boundSocketId !== socket.id) {
-        return cb(formatAckError(requestId, { code: 'DEVICE_NOT_SELECTED', message: 'Another device is active for this call' }));
+        console.log(`[SOCKET CALL] Rebinding updated socket for caller ${userId} in call ${callId}: ${boundSocketId} -> ${socket.id}`);
+        await callLockService.bindCallDevice(callId, userId, socket.id);
       }
 
       // 4. Transition to CONNECTING if initially accepted
@@ -312,22 +318,33 @@ function registerCallingHandlers(io, socket, userSocketMap) {
         await callService.markConnecting({ callId, actorUserId: userId });
       }
 
-      // 4. Relay to authoritative peer's selected media socket
+      // 5. Relay to authoritative peer's user room and media socket
       const peerSocketId = await callLockService.getCallDevice(callId, peerId);
-      const targetRoom = peerSocketId || `user:${peerId}`;
-
-      io.to(targetRoom).emit(SocketEvents.CALL_SIGNAL_OFFER, {
+      const offerPayload = {
         callId,
         senderId: userId,
         sdp,
-      });
+        type: data?.type || 'offer',
+      };
+
+      io.to(`user:${peerId}`).emit(SocketEvents.CALL_SIGNAL_OFFER, offerPayload);
+      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
+        io.to(peerSocketId).emit(SocketEvents.CALL_SIGNAL_OFFER, offerPayload);
+      }
 
       // Legacy call.offer support
-      io.to(targetRoom).emit('call.offer', {
+      io.to(`user:${peerId}`).emit('call.offer', {
         sessionId: callId,
         senderId: userId,
         sdp,
       });
+      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
+        io.to(peerSocketId).emit('call.offer', {
+          sessionId: callId,
+          senderId: userId,
+          sdp,
+        });
+      }
 
       return cb(formatAckSuccess(requestId, { callId, relayed: true }));
     } catch (err) {
@@ -366,28 +383,40 @@ function registerCallingHandlers(io, socket, userSocketMap) {
       }
       const peerId = session.callerId === userId ? session.receiverId : session.callerId;
 
-      // 3. Selected-Device Check
+      // 3. Selected-Device Check (auto-rebind on reconnect/transport-upgrade)
       const boundSocketId = await callLockService.getCallDevice(callId, userId);
       if (boundSocketId && boundSocketId !== socket.id) {
-        return cb(formatAckError(requestId, { code: 'DEVICE_NOT_SELECTED', message: 'Another device is active for this call' }));
+        console.log(`[SOCKET CALL] Rebinding updated socket for receiver ${userId} in call ${callId}: ${boundSocketId} -> ${socket.id}`);
+        await callLockService.bindCallDevice(callId, userId, socket.id);
       }
 
-      // 4. Relay to authoritative peer's selected media socket
+      // 4. Relay to authoritative peer's user room and media socket
       const peerSocketId = await callLockService.getCallDevice(callId, peerId);
-      const targetRoom = peerSocketId || `user:${peerId}`;
-
-      io.to(targetRoom).emit(SocketEvents.CALL_SIGNAL_ANSWER, {
+      const answerPayload = {
         callId,
         senderId: userId,
         sdp,
-      });
+        type: data?.type || 'answer',
+      };
+
+      io.to(`user:${peerId}`).emit(SocketEvents.CALL_SIGNAL_ANSWER, answerPayload);
+      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
+        io.to(peerSocketId).emit(SocketEvents.CALL_SIGNAL_ANSWER, answerPayload);
+      }
 
       // Legacy call.answer support
-      io.to(targetRoom).emit('call.answer', {
+      io.to(`user:${peerId}`).emit('call.answer', {
         sessionId: callId,
         senderId: userId,
         sdp,
       });
+      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
+        io.to(peerSocketId).emit('call.answer', {
+          sessionId: callId,
+          senderId: userId,
+          sdp,
+        });
+      }
 
       return cb(formatAckSuccess(requestId, { callId, relayed: true }));
     } catch (err) {
@@ -426,28 +455,38 @@ function registerCallingHandlers(io, socket, userSocketMap) {
       }
       const peerId = session.callerId === userId ? session.receiverId : session.callerId;
 
-      // 3. Selected-Device Check
+      // 3. Selected-Device Check (auto-rebind on reconnect/transport-upgrade)
       const boundSocketId = await callLockService.getCallDevice(callId, userId);
       if (boundSocketId && boundSocketId !== socket.id) {
-        return cb(formatAckError(requestId, { code: 'DEVICE_NOT_SELECTED', message: 'Another device is active for this call' }));
+        await callLockService.bindCallDevice(callId, userId, socket.id);
       }
 
-      // 4. Relay strictly to peer's selected media socket
+      // 4. Relay to peer's user room and selected media socket
       const peerSocketId = await callLockService.getCallDevice(callId, peerId);
-      const targetRoom = peerSocketId || `user:${peerId}`;
-
-      io.to(targetRoom).emit(SocketEvents.CALL_SIGNAL_ICE, {
+      const icePayload = {
         callId,
         senderId: userId,
         candidate,
-      });
+      };
+
+      io.to(`user:${peerId}`).emit(SocketEvents.CALL_SIGNAL_ICE, icePayload);
+      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
+        io.to(peerSocketId).emit(SocketEvents.CALL_SIGNAL_ICE, icePayload);
+      }
 
       // Legacy call.ice_candidate support
-      io.to(targetRoom).emit('call.ice_candidate', {
+      io.to(`user:${peerId}`).emit('call.ice_candidate', {
         sessionId: callId,
         senderId: userId,
         candidate,
       });
+      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
+        io.to(peerSocketId).emit('call.ice_candidate', {
+          sessionId: callId,
+          senderId: userId,
+          candidate,
+        });
+      }
 
       return cb(formatAckSuccess(requestId, { callId, relayed: true }));
     } catch (err) {
@@ -470,10 +509,11 @@ function registerCallingHandlers(io, socket, userSocketMap) {
     const { callId, requestId } = validation.data;
 
     try {
-      // Selected-Device Check
+      // Selected-Device Check (auto-rebind on reconnect/transport-upgrade)
       const boundSocketId = await callLockService.getCallDevice(callId, userId);
       if (boundSocketId && boundSocketId !== socket.id) {
-        return cb(formatAckError(requestId, { code: 'DEVICE_NOT_SELECTED', message: 'Another device is active for this call' }));
+        console.log(`[SOCKET CALL] Rebinding updated socket for media-ready user ${userId} in call ${callId}: ${boundSocketId} -> ${socket.id}`);
+        await callLockService.bindCallDevice(callId, userId, socket.id);
       }
 
       const session = await callService.markMediaConnected({
@@ -607,6 +647,40 @@ function registerCallingHandlers(io, socket, userSocketMap) {
     } catch (err) {
       console.warn(`[SOCKET CALL] Reconnected restore error (${callId}):`, err.message);
       callMetrics.increment('reconnection_failures');
+      return cb(formatAckError(requestId, err));
+    }
+  });
+
+  // ===========================================================================
+  // 9b. MEDIA CONTROL SYNCHRONIZATION (call:media-control)
+  // ===========================================================================
+  socket.on(SocketEvents.CALL_MEDIA_CONTROL, async (data, callback) => {
+    const cb = typeof callback === 'function' ? callback : () => {};
+    const callId = data?.callId || data?.sessionId;
+    const requestId = data?.requestId || `req_${Date.now()}`;
+    if (!callId) {
+      return cb(formatAckError(requestId, 'callId is required'));
+    }
+
+    try {
+      const session = await callService.getCallForParticipant({ callId, userId });
+      const peerId = session.callerId === userId ? session.receiverId : session.callerId;
+      const peerSocketId = await callLockService.getCallDevice(callId, peerId);
+      const mediaControlPayload = {
+        callId,
+        senderId: userId,
+        isAudioMuted: data.isAudioMuted,
+        isVideoEnabled: data.isVideoEnabled,
+      };
+
+      io.to(`user:${peerId}`).emit(SocketEvents.CALL_MEDIA_CONTROL, mediaControlPayload);
+      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
+        io.to(peerSocketId).emit(SocketEvents.CALL_MEDIA_CONTROL, mediaControlPayload);
+      }
+
+      return cb(formatAckSuccess(requestId, { relayed: true }));
+    } catch (err) {
+      console.warn(`[SOCKET CALL] Media control relay error (${callId}):`, err.message);
       return cb(formatAckError(requestId, err));
     }
   });

@@ -35,6 +35,7 @@ class StoryService {
       throw err;
     }
 
+
     // 1. Verify Author Account
     const authorUser = await User.findById(authorId).select('_id isActive accountStatus').lean();
     if (!authorUser || !authorUser.isActive || authorUser.accountStatus !== 'ACTIVE') {
@@ -82,7 +83,7 @@ class StoryService {
 
     // 4. Determine Sequence Position
     const now = new Date();
-    const activeStoriesCount = await Content.countDocuments({
+    const activeStoriesCount = await Content.countDocuments({ 
       authorId,
       contentType: 'STORY',
       status: 'PUBLISHED',
@@ -126,7 +127,7 @@ class StoryService {
     });
 
     // 7. Emit Durable Outbox Event
-    try {
+    try { 
       await OutboxEvent.create({
         eventType: 'story.created',
         aggregateType: 'CONTENT',
@@ -166,7 +167,7 @@ class StoryService {
         followerId: viewerId,
         status: 'ACCEPTED',
       })
-        .select('followingId')
+        .select('followingId')   
         .lean(),
       Block.find({
         $or: [{ blocker: viewerId }, { blocked: viewerId }],
@@ -365,7 +366,7 @@ class StoryService {
       err.code = 'INVALID_USER_ID';
       err.statusCode = 400;
       throw err;
-    }
+  }
 
     const now = new Date();
     const stories = await Content.find({

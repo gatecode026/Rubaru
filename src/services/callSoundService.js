@@ -169,6 +169,21 @@ class CallSoundService {
       } catch (e) {}
     }
   }
+
+  async setAudioRoute(isSpeakerOn = true) {
+    try {
+      if (ExpoAV && ExpoAV.Audio && typeof ExpoAV.Audio.setAudioModeAsync === 'function') {
+        await ExpoAV.Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: !isSpeakerOn,
+        });
+      }
+    } catch (e) {
+      console.warn('[CALL SOUNDS] Failed to set audio route:', e.message);
+    }
+  }
 }
 
 export const callSoundService = new CallSoundService();

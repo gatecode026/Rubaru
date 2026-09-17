@@ -138,6 +138,7 @@ class CallService {
     const fraudCheck = await fraudProtectionService.validateSessionInitiation({
       initiatorId: callerId,
       receiverId,
+      communicationType: normalizedType,
     });
     if (!fraudCheck.allowed) {
       throw new CallDomainError(fraudCheck.code, fraudCheck.message, 429);
@@ -200,14 +201,51 @@ class CallService {
     }
 
     // 4. Atomic Dual-User Distributed Redis Lock Acquisition
-    const lockResult = await callLockService.acquireDualUserCallLock(callerId, receiverId, callId, 60);
+    let lockResult = await callLockService.acquireDualUserCallLock(callerId, receiverId, callId, 60);
     if (!lockResult.acquired) {
-      throw new CallDomainError(
-        CallDomainErrors.USER_BUSY,
-        `User ${lockResult.busyUserId === callerId.toString() ? 'caller' : 'receiver'} is currently in another active or pending call.`,
-        409,
-        { busyUserId: lockResult.busyUserId }
-      );
+      // Check if conflicting call is stale or can be cleaned up
+      const conflictingCallId = lockResult.conflictingCallId;
+      if (conflictingCallId) {
+        const conflictingDoc = await PaidCommunicationSession.findOne({
+          $or: [{ sessionId: conflictingCallId }, { callId: conflictingCallId }]
+        });
+        const isTerminal = !conflictingDoc || [
+          CallStatuses.ENDED,
+          CallStatuses.CANCELLED,
+          CallStatuses.REJECTED,
+          CallStatuses.MISSED,
+          CallStatuses.FAILED,
+          CallStatuses.COMPLETED
+        ].includes(conflictingDoc.status);
+
+        if (isTerminal) {
+          // Stale lock from a finished call! Force release and re-acquire
+          console.log(`[CALL SERVICE] Auto-clearing stale lock from finished call ${conflictingCallId} for user ${lockResult.busyUserId}`);
+          await callLockService.forceReleaseUserLock(lockResult.busyUserId, conflictingCallId);
+          lockResult = await callLockService.acquireDualUserCallLock(callerId, receiverId, callId, 60);
+        } else if (lockResult.busyUserId === callerId.toString()) {
+          // Caller is starting a new call over their own previous pending attempt - clean it up
+          console.log(`[CALL SERVICE] Caller ${callerId} re-initiating over previous attempt ${conflictingCallId}; cleaning up previous session`);
+          try {
+            await this.cancelCall({ callId: conflictingCallId, callerId, reason: 'NEW_CALL_INITIATED' });
+          } catch (e) {
+            try {
+              await this.endCall({ callId: conflictingCallId, actorUserId: callerId, reason: 'NEW_CALL_INITIATED' });
+            } catch (e2) {}
+          }
+          await callLockService.forceReleaseUserLock(callerId, conflictingCallId);
+          lockResult = await callLockService.acquireDualUserCallLock(callerId, receiverId, callId, 60);
+        }
+      }
+
+      if (!lockResult.acquired) {
+        throw new CallDomainError(
+          CallDomainErrors.USER_BUSY,
+          `User ${lockResult.busyUserId === callerId.toString() ? 'caller' : 'receiver'} is currently in another active or pending call.`,
+          409,
+          { busyUserId: lockResult.busyUserId }
+        );
+      }
     }
 
     // 5. Resolve Conversation ID if provided or bound to match
@@ -301,6 +339,25 @@ class CallService {
       console.warn('[CALL SERVICE] Push notification warning:', pushErr.message);
     }
 
+    // Real-time Incoming Call Notification
+    try {
+      const notificationService = require('./notificationService');
+      const { SocialNotificationTypes } = require('../models/enums');
+      const callerName = eligibility.caller.displayName || eligibility.caller.email || 'Rubaru User';
+      const callTypeLabel = normalizedType === 'VIDEO' ? 'video' : 'audio';
+      await notificationService.createNotification({
+        recipientId: receiverId,
+        actorId: callerId,
+        type: SocialNotificationTypes.CALL,
+        subjectType: 'CALL',
+        subjectId: sessionDoc._id,
+        customMessage: `Incoming ${callTypeLabel} call from ${callerName}.`,
+        deepLink: `rubaru://call/${callId}?type=${normalizedType}`,
+      });
+    } catch (notifErr) {
+      console.warn('[CALL SERVICE] Incoming call notification warning:', notifErr.message);
+    }
+
     return this.formatSessionDto(sessionDoc, callerId);
   }
 
@@ -381,7 +438,14 @@ class CallService {
     const sessionDoc = await this._loadSession(callId);
     this._assertParticipant(sessionDoc, actorUserId);
 
-    if (sessionDoc.status === CallStatuses.CONNECTING) {
+    if (
+      sessionDoc.status === CallStatuses.CONNECTING ||
+      sessionDoc.status === CallStatuses.ENDED ||
+      sessionDoc.status === CallStatuses.CANCELLED ||
+      sessionDoc.status === CallStatuses.REJECTED ||
+      sessionDoc.status === CallStatuses.MISSED ||
+      sessionDoc.status === CallStatuses.FAILED
+    ) {
       return this.formatSessionDto(sessionDoc, actorUserId);
     }
 
@@ -407,6 +471,16 @@ class CallService {
     const sessionDoc = await this._loadSession(callId);
     this._assertParticipant(sessionDoc, userId);
 
+    if (
+      sessionDoc.status === CallStatuses.ENDED ||
+      sessionDoc.status === CallStatuses.CANCELLED ||
+      sessionDoc.status === CallStatuses.REJECTED ||
+      sessionDoc.status === CallStatuses.MISSED ||
+      sessionDoc.status === CallStatuses.FAILED
+    ) {
+      return this.formatSessionDto(sessionDoc, userId);
+    }
+
     if (connectionNonce && sessionDoc.metadata?.connectionNonce) {
       if (connectionNonce !== sessionDoc.metadata.connectionNonce) {
         throw new CallDomainError('INVALID_CONNECTION_NONCE', 'Connection token is invalid or expired', 403);
@@ -427,13 +501,20 @@ class CallService {
     }
 
     // If already active, just return updated DTO
-    // If already active, just return updated DTO
     if (sessionDoc.status === CallStatuses.ACTIVE) {
       await sessionDoc.save();
       return this.formatSessionDto(sessionDoc, userId);
     }
 
-    // When media readiness is confirmed and state is ACCEPTED or CONNECTING -> transition to ACTIVE
+    const bothConnected = Boolean(sessionDoc.initiatorConnectedAt && sessionDoc.receiverConnectedAt);
+
+    if (!bothConnected) {
+      sessionDoc.status = CallStatuses.CONNECTING;
+      await sessionDoc.save();
+      return this.formatSessionDto(sessionDoc, userId);
+    }
+
+    // When media readiness is confirmed by both and state is ACCEPTED or CONNECTING -> transition to ACTIVE
     if (
       sessionDoc.status === CallStatuses.ACCEPTED ||
       sessionDoc.status === CallStatuses.CONNECTING
@@ -621,6 +702,27 @@ class CallService {
       io.to(`user:${receiverId}`).emit('call:ended', missedPayload);
     }
 
+    // Real-time Missed Call Notification
+    try {
+      const notificationService = require('./notificationService');
+      const { SocialNotificationTypes } = require('../models/enums');
+      const Profile = require('../models/Profile');
+      const callerProfile = await Profile.findOne({ user: callerId });
+      const callerName = callerProfile?.displayName || 'Someone';
+      const callTypeLabel = sessionDoc.communicationType === 'VIDEO' ? 'video' : 'audio';
+      await notificationService.createNotification({
+        recipientId: receiverId,
+        actorId: callerId,
+        type: SocialNotificationTypes.MISSED_CALL,
+        subjectType: 'CALL',
+        subjectId: sessionDoc._id,
+        customMessage: `Missed ${callTypeLabel} call from ${callerName}.`,
+        deepLink: `rubaru://call/${sessionDoc.callId || sessionDoc.sessionId}?type=${sessionDoc.communicationType}`,
+      });
+    } catch (notifErr) {
+      console.warn('[CALL SERVICE] Missed call notification warning:', notifErr.message);
+    }
+
     return this.formatSessionDto(sessionDoc, sessionDoc.caller);
   }
 
@@ -695,6 +797,9 @@ class CallService {
     const sessionDoc = await this._loadSession(callId);
     this._assertParticipant(sessionDoc, actorUserId);
 
+    const cId = sessionDoc.caller || sessionDoc.initiatorId;
+    const rId = sessionDoc.receiver || sessionDoc.receiverId;
+
     if (
       sessionDoc.status === CallStatuses.ENDED ||
       sessionDoc.status === CallStatuses.REJECTED ||
@@ -702,6 +807,7 @@ class CallService {
       sessionDoc.status === CallStatuses.MISSED ||
       sessionDoc.status === CallStatuses.FAILED
     ) {
+      await callLockService.releaseDualUserCallLock(cId, rId, callId);
       return this.formatSessionDto(sessionDoc, actorUserId);
     }
 
@@ -715,7 +821,7 @@ class CallService {
       sessionDoc.durationSeconds = Math.max(0, Math.floor((now.getTime() - sessionDoc.connectedAt.getTime()) / 1000));
       sessionDoc.billableSeconds = sessionDoc.durationSeconds;
       const totalMinutes = Math.max(1, Math.ceil(sessionDoc.durationSeconds / 60));
-      sessionDoc.billedMinutes = totalMinutes;
+      let successfulMinutes = sessionDoc.billedMinutes || 0;
 
       // Authoritatively ensure all elapsed started minutes are charged
       for (let m = 1; m <= totalMinutes; m++) {
@@ -724,17 +830,22 @@ class CallService {
             sessionDoc,
             minuteIndex: m,
           });
+          successfulMinutes = Math.max(successfulMinutes, m);
         } catch (mErr) {
           console.warn(`[CALL SERVICE] Final settlement charge minute ${m}:`, mErr.message);
+          if (mErr.code === 'INSUFFICIENT_BALANCE' || mErr.message?.includes('insufficient')) {
+            break;
+          }
         }
       }
 
-      sessionDoc.totalCoinsCharged = totalMinutes * sessionDoc.ratePerMinuteSnapshot;
+      sessionDoc.billedMinutes = successfulMinutes;
+      sessionDoc.totalCoinsCharged = successfulMinutes * sessionDoc.ratePerMinuteSnapshot;
       sessionDoc.totalCoinsEarned = sessionDoc.totalCoinsCharged;
     }
 
     await sessionDoc.save();
-    await callLockService.releaseDualUserCallLock(sessionDoc.caller, sessionDoc.receiver, callId);
+    await callLockService.releaseDualUserCallLock(cId, rId, callId);
 
     return this.formatSessionDto(sessionDoc, actorUserId);
   }

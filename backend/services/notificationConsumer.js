@@ -46,7 +46,7 @@ class NotificationConsumer {
               subjectType: 'USER',
               subjectId: followingId,
               sourceEventId,
-              deduplicationKey: `follow_acc_${followerId}_${followingId}_${sourceEventId}`,
+              deduplicationKey: `follow_acc_${followerId}_${followingId}`,
             });
             results.push(res);
           }
@@ -258,10 +258,10 @@ class NotificationConsumer {
 
       const result = await this.processEvent(event);
       if (result.processed || result.reason === 'IGNORED_EVENT_TYPE') {
-        event.status = 'PUBLISHED';
+        event.status = 'PROCESSED';
         event.processedAt = new Date();
       } else {
-        event.status = event.attemptCount >= 5 ? 'DEAD_LETTER' : 'PENDING';
+        event.status = event.attemptCount >= 5 ? 'FAILED' : 'PENDING';
         event.lastError = result.error || 'PROCESSING_FAILED';
       }
       await event.save();

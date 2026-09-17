@@ -736,13 +736,14 @@ async function endPaidSession({ actorUserId, sessionId, endReason = null }) {
     return sessionDoc; // Idempotent
   }
 
+  sessionDoc.status = PaidSessionStatuses.ENDED;
   sessionDoc.endedAt = new Date();
   sessionDoc.endReason = endReason || PaidSessionEndReasons.USER_HANGUP;
 
   if (sessionDoc.connectedAt) {
     sessionDoc.durationSeconds = Math.max(0, Math.floor((sessionDoc.endedAt.getTime() - sessionDoc.connectedAt.getTime()) / 1000));
     const totalMinutes = Math.max(1, Math.ceil(sessionDoc.durationSeconds / 60));
-    sessionDoc.billedMinutes = totalMinutes;
+    let successfulMinutes = sessionDoc.billedMinutes || 0;
 
     for (let m = 1; m <= totalMinutes; m++) {
       try {
@@ -750,11 +751,16 @@ async function endPaidSession({ actorUserId, sessionId, endReason = null }) {
           sessionDoc,
           minuteIndex: m,
         });
+        successfulMinutes = Math.max(successfulMinutes, m);
       } catch (mErr) {
         console.warn(`[PAID COMM] Final settlement charge minute ${m}:`, mErr.message);
+        if (mErr.code === 'INSUFFICIENT_BALANCE' || mErr.message?.includes('insufficient')) {
+          break;
+        }
       }
     }
-    sessionDoc.totalCoinsCharged = totalMinutes * sessionDoc.ratePerMinuteSnapshot;
+    sessionDoc.billedMinutes = successfulMinutes;
+    sessionDoc.totalCoinsCharged = successfulMinutes * sessionDoc.ratePerMinuteSnapshot;
     sessionDoc.totalCoinsEarned = sessionDoc.totalCoinsCharged;
   }
 

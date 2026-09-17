@@ -263,16 +263,52 @@ function registerMessagingHandlers(io, socket) {
       try {
         const ChatModel = require('../models/Chat');
         const ConversationModel = require('../models/Conversation');
-        const targetChat = (await ChatModel.findById(conversationId)) || (await ConversationModel.findById(conversationId));
+        const ConversationMemberModel = require('../models/ConversationMember');
+        const ProfileModel = require('../models/Profile');
+
+        const [targetChat, memberRecords, senderProfile] = await Promise.all([
+          ChatModel.findById(conversationId) || ConversationModel.findById(conversationId),
+          ConversationMemberModel.find({ conversationId, state: 'ACTIVE' }),
+          ProfileModel.findOne({ user: userId }),
+        ]);
+
+        const senderName = senderProfile?.displayName || 'Rubaru User';
+        const senderAvatar = senderProfile?.avatarUri || '';
+        const alertSnippet = result.message.text || (result.message.type === 'IMAGE' ? '📷 Sent a photo' : (result.message.type === 'VOICE_NOTE' ? '🎤 Sent a voice message' : 'Sent an attachment'));
+
+        const inAppPopupPayload = {
+          id: `msg_notif_${result.message.id}`,
+          type: 'CHAT_MESSAGE',
+          sender: {
+            _id: userId.toString(),
+            displayName: senderName,
+            avatarUri: senderAvatar,
+          },
+          message: alertSnippet,
+          deepLink: `rubaru://chat/${conversationId}`,
+          createdAt: result.message.createdAt,
+        };
+
+        const participantSet = new Set();
         if (targetChat && Array.isArray(targetChat.participants)) {
-          targetChat.participants.forEach((p) => {
-            const participantId = (p._id || p).toString();
-            io.to(`user:${participantId}`).emit(SocketEvents.LEGACY_RECEIVE_MESSAGE, legacyPayload);
-            io.to(`user_${participantId}`).emit(SocketEvents.LEGACY_RECEIVE_MESSAGE, legacyPayload);
-            io.to(`user:${participantId}`).emit(SocketEvents.MESSAGE_CREATED, messageCreatedEnvelope);
-            io.to(`user:${participantId}`).emit('new_message', legacyPayload);
-          });
+          targetChat.participants.forEach((p) => participantSet.add((p._id || p).toString()));
         }
+        if (Array.isArray(memberRecords)) {
+          memberRecords.forEach((m) => participantSet.add(m.userId.toString()));
+        }
+
+        participantSet.forEach((participantId) => {
+          io.to(`user:${participantId}`).emit(SocketEvents.LEGACY_RECEIVE_MESSAGE, legacyPayload);
+          io.to(`user_${participantId}`).emit(SocketEvents.LEGACY_RECEIVE_MESSAGE, legacyPayload);
+          io.to(`user:${participantId}`).emit(SocketEvents.MESSAGE_CREATED, messageCreatedEnvelope);
+          io.to(`user:${participantId}`).emit('new_message', legacyPayload);
+
+          // In-app popup banner for recipient device
+          if (participantId !== userId.toString()) {
+            io.to(`user:${participantId}`).emit('notification:new', inAppPopupPayload);
+            io.to(`user_${participantId}`).emit('notification:new', inAppPopupPayload);
+          }
+        });
       } catch (userBroadcastErr) {
         console.warn('[USER ROOM BROADCAST NOTE]:', userBroadcastErr.message);
       }

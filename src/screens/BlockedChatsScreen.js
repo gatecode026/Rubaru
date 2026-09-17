@@ -16,51 +16,13 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../localization/LanguageContext';
 
-const INITIAL_BLOCKED_USERS = [
-  {
-    id: '1',
-    name: 'Geeta Bisht',
-    username: '@geetabisht',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-    blockedDate: '17 Aug 2026 . 10:30 AM',
-  },
-  {
-    id: '2',
-    name: 'Priya Sharma',
-    username: '@priyasharma',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=80',
-    blockedDate: '17 Aug 2026 . 10:30 AM',
-  },
-  {
-    id: '3',
-    name: 'Ananya Roy',
-    username: '@ananya_roy',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80',
-    blockedDate: '17 Aug 2026 . 10:30 AM',
-  },
-  {
-    id: '4',
-    name: 'Kavita Mehta',
-    username: '@kavita_m',
-    avatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=80',
-    blockedDate: '17 Aug 2026 . 10:30 AM',
-  },
-  {
-    id: '5',
-    name: 'Sneha Patel',
-    username: '@snehap',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80',
-    blockedDate: '17 Aug 2026 . 10:30 AM',
-  },
-];
-
 export default function BlockedChatsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [blockedUsers, setBlockedUsers] = useState(INITIAL_BLOCKED_USERS);
+  const [blockedUsers, setBlockedUsers] = useState([]);
 
   const handleBack = () => {
     router.push('/user-profile?openSettings=true');

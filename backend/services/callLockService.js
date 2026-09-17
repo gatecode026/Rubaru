@@ -138,6 +138,37 @@ class CallLockService {
   }
 
   /**
+   * Forcefully release call lock for a specific user (used for stale call cleanup)
+   * @param {string} userId
+   * @param {string} [callId]
+   */
+  async forceReleaseUserLock(userId, callId = null) {
+    if (!userId) return;
+    const key = this.getUserLockKey(userId.toString());
+    inMemoryLocks.delete(key);
+
+    const client = this._getClient();
+    if (client) {
+      try {
+        if (callId) {
+          const script = `
+            if redis.call('GET', KEYS[1]) == ARGV[1] then
+              return redis.call('DEL', KEYS[1])
+            else
+              return 0
+            end
+          `;
+          await client.eval(script, 1, key, callId);
+        } else {
+          await client.del(key);
+        }
+      } catch (err) {
+        console.warn('[CALL LOCK] Force release lock warning:', err.message);
+      }
+    }
+  }
+
+  /**
    * Atomically release call locks for both participants (compare-and-delete)
    * Only deletes the key if its value matches the expected callId
    * @param {string} callerId
@@ -156,8 +187,8 @@ class CallLockService {
     if (!client) {
       const existingA = inMemoryLocks.get(keyA);
       const existingB = inMemoryLocks.get(keyB);
-      if (existingA && existingA.callId === callId) inMemoryLocks.delete(keyA);
-      if (existingB && existingB.callId === callId) inMemoryLocks.delete(keyB);
+      if (existingA && (!callId || existingA.callId === callId)) inMemoryLocks.delete(keyA);
+      if (existingB && (!callId || existingB.callId === callId)) inMemoryLocks.delete(keyB);
       return;
     }
 

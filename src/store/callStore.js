@@ -25,6 +25,15 @@ export const useCallStore = create((set, get) => ({
   endReason: null,
   billingSummary: null,
 
+  // Remote Peer Media States (WhatsApp/Instagram parity)
+  isRemoteAudioMuted: false,
+  isRemoteVideoDisabled: false,
+
+  // Network Quality & Telemetry (WhatsApp/Instagram parity)
+  networkQuality: 'excellent', // 'excellent' | 'good' | 'poor'
+  candidatePairType: null,     // 'relay' | 'srflx' | 'host'
+  isReconnecting: false,
+
   // Device & Track Controls
   isAudioMuted: false,
   isVideoEnabled: true,
@@ -116,12 +125,14 @@ export const useCallStore = create((set, get) => ({
       peerAvatar: avatarUri,
       isInitiator: true,
       ratePerMinute: isVideo ? 10 : 5,
+      isSpeakerOn: isVideo,
       activeRequestId: requestId,
       endReason: null,
       errorMessage: null,
       billingSummary: null,
       durationSeconds: 0,
     });
+    callSoundService.setAudioRoute(isVideo);
 
     try {
       // 1. Capture local media tracks
@@ -186,7 +197,8 @@ export const useCallStore = create((set, get) => ({
     const requestId = uuidv4();
     const isVideo = state.callType === 'video';
 
-    set({ callStatus: 'CONNECTING', isHandlingAction: true });
+    set({ callStatus: 'CONNECTING', isHandlingAction: true, isSpeakerOn: isVideo });
+    callSoundService.setAudioRoute(isVideo);
 
     try {
       // 1. Request permissions and capture local tracks only on acceptance
@@ -206,9 +218,6 @@ export const useCallStore = create((set, get) => ({
             const isOk = ack?.ok === true || ack?.success === true;
             if (isOk) {
               console.log('[CALL STORE] Call accept acknowledged by server');
-              setTimeout(() => {
-                get().emitMediaReady();
-              }, 400);
               resolve({ success: true });
             } else {
               const errMsg = ack?.error?.message || 'Accept failed';
@@ -326,12 +335,10 @@ export const useCallStore = create((set, get) => ({
           socket.emit('call:signal:offer', {
             callId: state.callId,
             sdp: offer.sdp,
+            type: offer.type || 'offer',
             requestId: uuidv4(),
           });
         }
-        setTimeout(() => {
-          get().emitMediaReady();
-        }, 500);
       } catch (err) {
         console.error('[CALL STORE] Create offer error:', err);
       }
@@ -346,18 +353,17 @@ export const useCallStore = create((set, get) => ({
     if (state.callId !== data.callId) return;
 
     try {
-      const answer = await webRTCService.handleOfferAndCreateAnswer(data.sdp);
+      const offerPayload = (data.sdp && typeof data.sdp === 'object') ? data.sdp : { type: data.type || 'offer', sdp: data.sdp };
+      const answer = await webRTCService.handleOfferAndCreateAnswer(offerPayload);
       const socket = getSocket();
       if (socket && socket.connected) {
         socket.emit('call:signal:answer', {
           callId: state.callId,
           sdp: answer.sdp,
+          type: answer.type || 'answer',
           requestId: uuidv4(),
         });
       }
-      setTimeout(() => {
-        get().emitMediaReady();
-      }, 300);
     } catch (err) {
       console.error('[CALL STORE] Handle offer and create answer error:', err);
     }
@@ -371,13 +377,27 @@ export const useCallStore = create((set, get) => ({
     if (state.callId !== data.callId) return;
 
     try {
-      await webRTCService.handleAnswer(data.sdp);
-      setTimeout(() => {
-        get().emitMediaReady();
-      }, 300);
+      const answerPayload = (data.sdp && typeof data.sdp === 'object') ? data.sdp : { type: data.type || 'answer', sdp: data.sdp };
+      await webRTCService.handleAnswer(answerPayload);
     } catch (err) {
       console.error('[CALL STORE] Handle answer error:', err);
     }
+  },
+
+  /**
+   * Handle Connection Failure from WebRTC
+   */
+  handleConnectionFailed: (reason = 'ICE_CONNECTION_FAILED') => {
+    const state = get();
+    console.error('[CALL STORE] WebRTC connection failed:', reason);
+    callSoundService.stopAll();
+    callSoundService.playDisconnect();
+    set({
+      callStatus: 'ENDED',
+      endReason: reason,
+      errorMessage: 'Connection failed. Please check your network.',
+    });
+    get().cleanup(reason);
   },
 
   /**
@@ -453,8 +473,68 @@ export const useCallStore = create((set, get) => ({
 
     set({
       callStatus: 'ACTIVE',
+      isReconnecting: false,
       reconnectGraceExpiresAt: null,
     });
+  },
+
+  /**
+   * Handle Remote Peer Media Control Sync (WhatsApp/Instagram parity)
+   */
+  handleRemoteMediaControl: (data) => {
+    const state = get();
+    if (state.callId && data?.callId && state.callId !== data.callId) return;
+    if (data?.isAudioMuted !== undefined) {
+      set({ isRemoteAudioMuted: Boolean(data.isAudioMuted) });
+    }
+    if (data?.isVideoEnabled !== undefined) {
+      set({ isRemoteVideoDisabled: !data.isVideoEnabled });
+    }
+  },
+
+  /**
+   * Handle WebRTC Network Quality Telemetry
+   */
+  handleQualityReport: (report) => {
+    if (!report) return;
+    set((state) => ({
+      networkQuality: report.isPoor ? 'poor' : report.lossRate > 5 ? 'good' : 'excellent',
+      candidatePairType: report.candidatePairType || state.candidatePairType,
+    }));
+  },
+
+  /**
+   * Handle WebRTC Transport Disconnection & Trigger ICE Restart
+   */
+  handleConnectionReconnecting: () => {
+    const state = get();
+    if (state.callStatus === 'ACTIVE') {
+      callSoundService.playReconnect();
+      set({ callStatus: 'RECONNECTING', isReconnecting: true });
+
+      const socket = getSocket();
+      if (socket && socket.connected && state.callId) {
+        socket.emit('call:reconnecting', {
+          callId: state.callId,
+          reason: 'ICE_DISCONNECTED',
+          requestId: uuidv4(),
+        });
+      }
+
+      if (state.isInitiator) {
+        webRTCService.restartIce().then((offer) => {
+          if (offer && socket && socket.connected) {
+            socket.emit('call:signal:offer', {
+              callId: state.callId,
+              sdp: offer.sdp,
+              type: offer.type || 'offer',
+              generation: offer.generation,
+              requestId: uuidv4(),
+            });
+          }
+        }).catch((err) => console.warn('[CALL STORE] ICE restart failed:', err));
+      }
+    }
   },
 
   /**
@@ -573,20 +653,38 @@ export const useCallStore = create((set, get) => ({
   },
 
   /**
-   * Toggle Microphones
+   * Toggle Microphones with remote socket synchronization
    */
   toggleAudio: () => {
     const muted = webRTCService.toggleAudio();
     set({ isAudioMuted: muted });
+    const state = get();
+    const socket = getSocket();
+    if (socket && socket.connected && state.callId) {
+      socket.emit('call:media-control', {
+        callId: state.callId,
+        isAudioMuted: muted,
+        requestId: uuidv4(),
+      });
+    }
     return muted;
   },
 
   /**
-   * Toggle Video Camera
+   * Toggle Video Camera with remote socket synchronization
    */
   toggleVideo: () => {
     const enabled = webRTCService.toggleVideo();
     set({ isVideoEnabled: enabled });
+    const state = get();
+    const socket = getSocket();
+    if (socket && socket.connected && state.callId) {
+      socket.emit('call:media-control', {
+        callId: state.callId,
+        isVideoEnabled: enabled,
+        requestId: uuidv4(),
+      });
+    }
     return enabled;
   },
 
@@ -602,8 +700,10 @@ export const useCallStore = create((set, get) => ({
   /**
    * Toggle Speakerphone
    */
-  toggleSpeaker: () => {
-    set((state) => ({ isSpeakerOn: !state.isSpeakerOn }));
+  toggleSpeaker: async () => {
+    const nextSpeaker = !get().isSpeakerOn;
+    set({ isSpeakerOn: nextSpeaker });
+    await callSoundService.setAudioRoute(nextSpeaker);
   },
 
   /**
@@ -636,6 +736,9 @@ export const useCallStore = create((set, get) => ({
       remoteStream: null,
       isHandlingAction: false,
       isCallMinimized: false,
+      isReconnecting: false,
+      isRemoteAudioMuted: false,
+      isRemoteVideoDisabled: false,
     }));
 
     console.log(`[CALL STORE] Cleaned up with reason: ${reason}`);
@@ -661,6 +764,11 @@ export const useCallStore = create((set, get) => ({
       remoteStream: null,
       reconnectGraceExpiresAt: null,
       isCallMinimized: false,
+      isReconnecting: false,
+      isRemoteAudioMuted: false,
+      isRemoteVideoDisabled: false,
+      networkQuality: 'excellent',
+      candidatePairType: null,
     });
   },
 }));

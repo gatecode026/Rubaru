@@ -59,6 +59,7 @@ const SocketEvents = Object.freeze({
   CALL_DISMISSED: 'call:dismissed',
   CALL_END: 'call:end',
   CALL_SYNC: 'call:sync',
+  CALL_MEDIA_CONTROL: 'call:media-control',
 
   CALL_INCOMING: 'call:incoming',
   CALL_RINGING: 'call:ringing',

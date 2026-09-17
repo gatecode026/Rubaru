@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { IncomingCallProvider } from '../src/components/common/IncomingCallContext';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { LanguageProvider } from '../src/localization/LanguageContext';
+import NotificationBanner from '../src/components/common/NotificationBanner';
 import { useFonts, Jaro_400Regular } from '@expo-google-fonts/jaro';
 import {
   Poppins_400Regular,
@@ -78,7 +79,9 @@ export default function RootLayout() {
               <Stack.Screen name="faqs" />
               <Stack.Screen name="add-story" options={{ presentation: 'modal', headerShown: false }} />
               <Stack.Screen name="view-story" options={{ presentation: 'fullScreenModal', headerShown: false }} />
+              <Stack.Screen name="follow-requests" />
             </Stack>
+            <NotificationBanner />
           </IncomingCallProvider>
         </ThemeProvider>
       </LanguageProvider>

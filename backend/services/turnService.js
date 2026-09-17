@@ -8,9 +8,9 @@ class TurnService {
   /**
    * Generate short-lived HMAC-SHA1 TURN credentials
    * @param {string} username - Client user identifier
-   * @param {number} ttlSeconds - Duration in seconds (default 24h = 86400)
+   * @param {number} ttlSeconds - Duration in seconds (default 1h = 3600)
    */
-  generateTurnCredentials(username, ttlSeconds = 86400) {
+  generateTurnCredentials(username, ttlSeconds = 3600) {
     const turnSecret = process.env.COTURN_SECRET || process.env.TURN_SECRET;
     const turnUrls = (process.env.TURN_URLS || process.env.COTURN_URLS || 'stun:stun.l.google.com:19302')
       .split(',')
@@ -25,10 +25,19 @@ class TurnService {
       );
     }
 
+    const defaultStunServers = [
+      'stun:stun.l.google.com:19302',
+      'stun:stun1.l.google.com:19302',
+      'stun:stun2.l.google.com:19302',
+    ];
+
     if (!turnSecret) {
       // Return public STUN only in development
       return {
-        iceServers: [{ urls: turnUrls }],
+        iceServers: [
+          { urls: defaultStunServers },
+          { urls: turnUrls },
+        ],
         username: null,
         credential: null,
         expiresAt: null,
@@ -45,6 +54,9 @@ class TurnService {
 
     return {
       iceServers: [
+        {
+          urls: defaultStunServers,
+        },
         {
           urls: turnUrls,
           username: timedUsername,
