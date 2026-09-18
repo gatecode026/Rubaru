@@ -25,7 +25,6 @@ const getPreferences = async (req, res) => {
     });
   }
 };
-
 /**
  * @desc    Partially update authenticated user's dating preferences
  * @route   PATCH /v1/dating/preferences

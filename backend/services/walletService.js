@@ -61,7 +61,10 @@ async function getOrCreateWallet(userId, session = null) {
           [
             {
               transactionId: uuidv4(),
+              idempotencyKey: uuidv4(),
               userId,
+              walletId: wallet._id,
+              balanceBefore: 0,
               entryType: LedgerEntryTypes.CREDIT,
               transactionType: LedgerTransactionTypes.INITIAL_MIGRATION,
               amount: startingPoints,
@@ -93,7 +96,10 @@ async function getOrCreateWallet(userId, session = null) {
       try {
         await WalletLedger.create({
           transactionId: uuidv4(),
+          idempotencyKey: uuidv4(),
           userId,
+          walletId: wallet._id,
+          balanceBefore: 0,
           entryType: LedgerEntryTypes.CREDIT,
           transactionType: LedgerTransactionTypes.INITIAL_MIGRATION,
           amount: startingPoints,

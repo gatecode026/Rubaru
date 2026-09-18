@@ -5,6 +5,36 @@ import callSoundService from '../services/callSoundService';
 import paidCommunicationClient from '../services/paidCommunicationService';
 import { usePointsStore } from './pointsStore';
 
+let callDiagnosticsService;
+try {
+  const diag = require('../services/calling/CallDiagnosticsService');
+  callDiagnosticsService = diag && diag.default ? diag.default : diag;
+} catch (e) {
+  callDiagnosticsService = {
+    recordTimelineEvent: () => {},
+    recordEvent: () => {},
+    processStatsReport: () => null,
+    classifyFailure: () => 'UNKNOWN FAILURE',
+    exportEvidenceReport: () => ({ summary: 'FALLBACK' }),
+    startSession: () => {},
+    reset: () => {},
+  };
+}
+
+let api;
+try {
+  const apiModule = require('../services/api');
+  api = apiModule.default || apiModule;
+} catch (e) {
+  api = null;
+}
+
+const uuidv4 = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+  const r = (Math.random() * 16) | 0;
+  const v = c === 'x' ? r : (r & 0x3) | 0x8;
+  return v.toString(16);
+});
+
 /**
  * Single Application-Level Call Store for Rubaru Calling (R4-C4)
  * Authoritative client state controller synchronized with Socket.IO backend
@@ -39,10 +69,12 @@ export const useCallStore = create((set, get) => ({
   isVideoEnabled: true,
   isFrontCamera: true,
   isSpeakerOn: true,
+  audioRoute: 'speaker', // 'speaker' | 'earpiece' | 'bluetooth' | 'wired'
 
   // Transient stream references (never persisted to storage)
   localStream: null,
   remoteStream: null,
+  remoteStreamVersion: 0,
 
   // Minimization / PiP State
   isCallMinimized: false,
@@ -51,11 +83,34 @@ export const useCallStore = create((set, get) => ({
   activeRequestId: null,
   isHandlingAction: false,
 
+  // Watchdog Timers (transient)
+  _ringTimeoutTimer: null,
+  _ringbackTimeoutTimer: null,
+  _reconnectTimeoutTimer: null,
+
   // Actions
+  _clearTimers: () => {
+    const s = get();
+    if (s._ringTimeoutTimer) clearTimeout(s._ringTimeoutTimer);
+    if (s._ringbackTimeoutTimer) clearTimeout(s._ringbackTimeoutTimer);
+    if (s._reconnectTimeoutTimer) clearTimeout(s._reconnectTimeoutTimer);
+    set({
+      _ringTimeoutTimer: null,
+      _ringbackTimeoutTimer: null,
+      _reconnectTimeoutTimer: null,
+    });
+  },
+
   setMinimized: (minimized) => set({ isCallMinimized: Boolean(minimized) }),
   setStreams: ({ localStream, remoteStream }) => set((state) => ({
     localStream: localStream !== undefined ? localStream : state.localStream,
     remoteStream: remoteStream !== undefined ? remoteStream : state.remoteStream,
+    remoteStreamVersion: (state.remoteStreamVersion || 0) + 1,
+  })),
+  handleRemoteTrack: ({ track, kind, stream }) => set((state) => ({
+    remoteStream: stream || state.remoteStream,
+    remoteStreamVersion: (state.remoteStreamVersion || 0) + 1,
+    isRemoteVideoDisabled: kind === 'video' ? !track?.enabled : state.isRemoteVideoDisabled,
   })),
 
   /**
@@ -74,14 +129,45 @@ export const useCallStore = create((set, get) => ({
       return;
     }
 
+    // Reject stale incoming calls where request has already expired
+    const expiresAt = data.expiresAt || data.requestExpiresAt;
+    if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
+      console.log('[CALL STORE] Incoming call is already expired, ignoring stale call:', data.callId || data.sessionId);
+      return;
+    }
+
+    current._clearTimers();
+
     const type = data.callType === 'video' || data.callType === 'VIDEO' || data.communicationType === 'VIDEO' ? 'video' : 'audio';
     const rate = Number(data.ratePerMinute) || (type === 'video' ? 10 : 5);
     const callerName = data.caller?.displayName || data.callerName || data.initiatorName || data.contactName || 'Rubaru User';
     const callerAvatar = data.caller?.avatarUrl || data.callerAvatar || data.initiatorAvatar || data.avatarUri || '';
 
+    callDiagnosticsService.startSession(data.callId || data.sessionId, {
+      isInitiator: false,
+      callType: type,
+      peerId: data.callerId || data.initiatorId || data.caller?.id,
+    });
+    callDiagnosticsService.recordTimelineEvent('T2');
+
     callSoundService.playRingtone();
 
+    // Client-side ringing watchdog fallback: server timeout is 45s, watchdog allows +2s buffer
+    const timeoutMs = expiresAt
+      ? Math.max(5000, new Date(expiresAt).getTime() - Date.now() + 2000)
+      : 47000;
+
+    const ringTimer = setTimeout(() => {
+      const s = get();
+      if (s.callStatus === 'INCOMING') {
+        console.log('[CALL STORE] Incoming call ring timeout watchdog fired; resetting to IDLE');
+        callSoundService.stopAll();
+        get().resetToIdle();
+      }
+    }, timeoutMs);
+
     set({
+      _ringTimeoutTimer: ringTimer,
       callId: data.callId || data.sessionId,
       callStatus: 'INCOMING',
       callType: type,
@@ -104,6 +190,10 @@ export const useCallStore = create((set, get) => ({
    */
   initiateCall: async ({ receiverId, callType = 'audio', contactName = 'User', avatarUri = '' }) => {
     const state = get();
+    if (state.isHandlingAction) {
+      console.warn('[CALL STORE] Action in progress, ignoring duplicate initiate');
+      return { success: false, error: 'ACTION_IN_PROGRESS' };
+    }
     if (state.callStatus !== 'IDLE' && state.callStatus !== 'ENDED') {
       console.warn('[CALL STORE] Cannot initiate: call already active.');
       return { success: false, error: 'CALL_ALREADY_ACTIVE' };
@@ -114,11 +204,14 @@ export const useCallStore = create((set, get) => ({
       return { success: false, error: 'SOCKET_DISCONNECTED' };
     }
 
+    state._clearTimers();
+
     const requestId = uuidv4();
     const isVideo = callType === 'video';
 
     set({
       callStatus: 'INITIATING',
+      isHandlingAction: true,
       callType: isVideo ? 'video' : 'audio',
       peerId: receiverId,
       peerName: contactName,
@@ -131,8 +224,16 @@ export const useCallStore = create((set, get) => ({
       errorMessage: null,
       billingSummary: null,
       durationSeconds: 0,
+      audioRoute: isVideo ? 'speaker' : 'earpiece',
     });
     callSoundService.setAudioRoute(isVideo);
+
+    callDiagnosticsService.startSession(null, {
+      isInitiator: true,
+      callType: isVideo ? 'video' : 'audio',
+      peerId: receiverId,
+    });
+    callDiagnosticsService.recordTimelineEvent('T0');
 
     try {
       // 1. Capture local media tracks
@@ -141,6 +242,7 @@ export const useCallStore = create((set, get) => ({
 
       // 2. Emit canonical call:initiate
       return new Promise((resolve) => {
+        callDiagnosticsService.recordTimelineEvent('T1');
         socket.emit(
           'call:initiate',
           {
@@ -151,14 +253,25 @@ export const useCallStore = create((set, get) => ({
             requestId,
           },
           (ack) => {
+            set({ isHandlingAction: false });
             const isOk = ack?.ok === true || ack?.success === true;
             if (isOk) {
               const session = ack.data;
+              callDiagnosticsService.callId = session.callId;
+              callDiagnosticsService.sessionId = session.sessionId || session.callId;
+              const ringbackTimer = setTimeout(() => {
+                const s = get();
+                if (s.callStatus === 'RINGING' || s.callStatus === 'INITIATING') {
+                  console.log('[CALL STORE] Caller ringback watchdog fired; cancelling call');
+                  get().cancelCall('RING_TIMEOUT');
+                }
+              }, 50000);
               set({
                 callId: session.callId,
                 callStatus: 'RINGING',
                 errorMessage: null,
                 ratePerMinute: session.ratePerMinuteSnapshot || (isVideo ? 10 : 5),
+                _ringbackTimeoutTimer: ringbackTimer,
               });
               callSoundService.playRingback();
               resolve({ success: true, callId: session.callId });
@@ -172,6 +285,7 @@ export const useCallStore = create((set, get) => ({
         );
       });
     } catch (err) {
+      set({ isHandlingAction: false });
       console.error('[CALL STORE] Initiation error:', err);
       set({ errorMessage: err.message });
       get().cleanup('CAPTURE_FAILED');
@@ -184,9 +298,15 @@ export const useCallStore = create((set, get) => ({
    */
   acceptIncomingCall: async () => {
     const state = get();
+    if (state.isHandlingAction) {
+      console.warn('[CALL STORE] Action in progress, ignoring duplicate accept');
+      return { success: false, error: 'ACTION_IN_PROGRESS' };
+    }
     if (state.callStatus !== 'INCOMING' || !state.callId) {
       return { success: false, error: 'NO_INCOMING_CALL' };
     }
+
+    state._clearTimers();
 
     const socket = getSocket();
     if (!socket || !socket.connected) {
@@ -194,10 +314,16 @@ export const useCallStore = create((set, get) => ({
     }
 
     callSoundService.stopAll();
+    callDiagnosticsService.recordTimelineEvent('T3');
     const requestId = uuidv4();
     const isVideo = state.callType === 'video';
 
-    set({ callStatus: 'CONNECTING', isHandlingAction: true, isSpeakerOn: isVideo });
+    set({
+      callStatus: 'CONNECTING',
+      isHandlingAction: true,
+      isSpeakerOn: isVideo,
+      audioRoute: isVideo ? 'speaker' : 'earpiece',
+    });
     callSoundService.setAudioRoute(isVideo);
 
     try {
@@ -240,6 +366,19 @@ export const useCallStore = create((set, get) => ({
    */
   rejectIncomingCall: async (reason = 'USER_BUSY') => {
     const state = get();
+    if (state.isHandlingAction) {
+      console.warn('[CALL STORE] Action in progress, ignoring duplicate reject');
+      return;
+    }
+    if (state.callStatus !== 'INCOMING' || !state.callId) {
+      console.warn('[CALL STORE] Cannot reject: no incoming call');
+      return;
+    }
+    set({ isHandlingAction: true });
+    state._clearTimers();
+    callSoundService.stopAll();
+    webRTCService.destroy();
+
     const socket = getSocket();
     const callId = state.callId;
 
@@ -255,7 +394,7 @@ export const useCallStore = create((set, get) => ({
       paidCommunicationClient.declineSession(callId, reason).catch(() => {});
     }
 
-    get().cleanup(reason);
+    get().resetToIdle();
   },
 
   /**
@@ -263,6 +402,18 @@ export const useCallStore = create((set, get) => ({
    */
   cancelCall: async (reason = 'CALLER_CANCELLED') => {
     const state = get();
+    if (state.isHandlingAction) {
+      console.warn('[CALL STORE] Action in progress, ignoring duplicate cancel');
+      return;
+    }
+    if (state.callStatus === 'IDLE' || state.callStatus === 'ENDED') {
+      console.warn('[CALL STORE] Cannot cancel: call is not active');
+      return;
+    }
+    set({ isHandlingAction: true });
+    state._clearTimers();
+    callSoundService.stopAll();
+
     const socket = getSocket();
     const callId = state.callId;
 
@@ -286,6 +437,18 @@ export const useCallStore = create((set, get) => ({
    */
   hangupCall: async (reason = 'USER_HUNG_UP') => {
     const state = get();
+    if (state.isHandlingAction) {
+      console.warn('[CALL STORE] Action in progress, ignoring duplicate hangup');
+      return;
+    }
+    if (state.callStatus === 'IDLE' || state.callStatus === 'ENDED') {
+      console.warn('[CALL STORE] Cannot hangup: call is not active');
+      return;
+    }
+    set({ isHandlingAction: true });
+    state._clearTimers();
+    callSoundService.stopAll();
+
     const socket = getSocket();
     const callId = state.callId;
 
@@ -408,7 +571,7 @@ export const useCallStore = create((set, get) => ({
     if (state.callId !== data.callId) return;
 
     try {
-      await webRTCService.addIceCandidate(data.candidate);
+      await webRTCService.addIceCandidate(data.candidate ? { ...data.candidate, generation: data.generation } : data);
     } catch (err) {
       console.error('[CALL STORE] Handle ICE candidate error:', err);
     }
@@ -435,6 +598,7 @@ export const useCallStore = create((set, get) => ({
     const state = get();
     if (state.callId !== data.callId) return;
 
+    state._clearTimers();
     callSoundService.stopAll();
     callSoundService.playConnect();
 
@@ -443,6 +607,9 @@ export const useCallStore = create((set, get) => ({
       callStatus: 'ACTIVE',
       connectedAt: connectedAtTime,
       ratePerMinute: data.ratePerMinuteSnapshot || state.ratePerMinute,
+      isHandlingAction: false,
+      isReconnecting: false,
+      reconnectGraceExpiresAt: null,
     });
   },
 
@@ -453,11 +620,23 @@ export const useCallStore = create((set, get) => ({
     const state = get();
     if (state.callId !== data.callId) return;
 
+    state._clearTimers();
     callSoundService.playReconnect();
+
+    const deadline = data.gracePeriodExpiresAt ? new Date(data.gracePeriodExpiresAt).getTime() : Date.now() + 20000;
+    const reconnectTimer = setTimeout(() => {
+      const s = get();
+      if (s.callStatus === 'RECONNECTING') {
+        console.log('[CALL STORE] Reconnect grace period watchdog fired; cleaning up');
+        get().cleanup('RECONNECT_TIMEOUT');
+      }
+    }, Math.max(5000, deadline - Date.now() + 2000));
 
     set({
       callStatus: 'RECONNECTING',
-      reconnectGraceExpiresAt: data.gracePeriodExpiresAt ? new Date(data.gracePeriodExpiresAt).getTime() : Date.now() + 15000,
+      isReconnecting: true,
+      reconnectGraceExpiresAt: deadline,
+      _reconnectTimeoutTimer: reconnectTimer,
     });
   },
 
@@ -468,6 +647,7 @@ export const useCallStore = create((set, get) => ({
     const state = get();
     if (state.callId !== data.callId) return;
 
+    state._clearTimers();
     callSoundService.stopAll();
     callSoundService.playConnect();
 
@@ -543,6 +723,7 @@ export const useCallStore = create((set, get) => ({
   handleDismissed: (data) => {
     const current = get();
     if (current.callId === data?.callId || current.callStatus === 'INCOMING') {
+      current._clearTimers();
       callSoundService.stopAll();
       get().resetToIdle();
     }
@@ -551,19 +732,37 @@ export const useCallStore = create((set, get) => ({
   /**
    * Handle Call Sync from Server
    */
-  handleSync: (session) => {
-    if (!session) return;
+  handleSync: (data) => {
+    if (!data) return;
     const current = get();
 
-    if (session.handledByOtherDevice) {
+    // Support both direct session object and wrapped { hasActiveCall, call }
+    const hasActiveCall = data.hasActiveCall !== undefined ? Boolean(data.hasActiveCall) : Boolean(data.call || data.status);
+    const session = data.call || (data.status ? data : null);
+
+    if (data.handledByOtherDevice || session?.handledByOtherDevice) {
       if (current.callStatus === 'INCOMING') {
+        current._clearTimers();
         callSoundService.stopAll();
         get().resetToIdle();
       }
       return;
     }
 
+    if (!hasActiveCall || !session) {
+      // Server authoritatively indicates no active call exists for this user.
+      if (current.callStatus !== 'IDLE' && current.callStatus !== 'ENDED') {
+        console.log('[CALL STORE] Server reports no active call; tearing down local call state');
+        current._clearTimers();
+        callSoundService.stopAll();
+        get().cleanup('SESSION_EXPIRED');
+      }
+      return;
+    }
+
+    // Call is active on server
     if (session.status === 'ACTIVE') {
+      current._clearTimers();
       callSoundService.stopAll();
       set({
         callId: session.callId,
@@ -571,16 +770,47 @@ export const useCallStore = create((set, get) => ({
         connectedAt: session.connectedAt ? new Date(session.connectedAt).getTime() : current.connectedAt || Date.now(),
         ratePerMinute: session.ratePerMinuteSnapshot || current.ratePerMinute,
         reconnectGraceExpiresAt: null,
+        isReconnecting: false,
       });
     } else if (session.status === 'RECONNECTING') {
       callSoundService.playReconnect();
+      const deadline = session.reconnectionDeadline ? new Date(session.reconnectionDeadline).getTime() : Date.now() + 15000;
+      current._clearTimers();
+      const reconnectTimer = setTimeout(() => {
+        const s = get();
+        if (s.callStatus === 'RECONNECTING') {
+          console.log('[CALL STORE] Sync reconnect timeout fired');
+          get().cleanup('RECONNECT_TIMEOUT');
+        }
+      }, Math.max(5000, deadline - Date.now() + 2000));
       set({
         callId: session.callId,
         callStatus: 'RECONNECTING',
-        reconnectGraceExpiresAt: session.reconnectionDeadline ? new Date(session.reconnectionDeadline).getTime() : null,
+        isReconnecting: true,
+        reconnectGraceExpiresAt: deadline,
+        _reconnectTimeoutTimer: reconnectTimer,
       });
-    } else if (['ENDED', 'COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED', 'MISSED', 'EXPIRED'].includes(session.status)) {
+    } else if (session.status === 'RINGING' || session.status === 'INITIATED') {
+      if (current.isInitiator && current.callId === session.callId) {
+        set({ callStatus: 'RINGING' });
+      }
+    } else if (['ENDED', 'COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED', 'MISSED', 'EXPIRED', 'DECLINED'].includes(session.status)) {
+      current._clearTimers();
       get().cleanup(session.endReason || session.status, session.billingSummary || null);
+    }
+  },
+
+  /**
+   * Proactively request call state synchronization from server
+   */
+  syncWithServer: () => {
+    const socket = getSocket();
+    if (socket && socket.connected) {
+      socket.emit('call:sync', { requestId: uuidv4() }, (ack) => {
+        if (ack?.ok || ack?.success) {
+          get().handleSync(ack.data);
+        }
+      });
     }
   },
 
@@ -623,7 +853,7 @@ export const useCallStore = create((set, get) => ({
       return;
     }
 
-    if (state.callStatus === 'IDLE') {
+    if (state.callStatus === 'IDLE' || state.callStatus === 'ENDED') {
       return;
     }
 
@@ -702,7 +932,8 @@ export const useCallStore = create((set, get) => ({
    */
   toggleSpeaker: async () => {
     const nextSpeaker = !get().isSpeakerOn;
-    set({ isSpeakerOn: nextSpeaker });
+    const nextRoute = nextSpeaker ? 'speaker' : 'earpiece';
+    set({ isSpeakerOn: nextSpeaker, audioRoute: nextRoute });
     await callSoundService.setAudioRoute(nextSpeaker);
   },
 
@@ -721,10 +952,17 @@ export const useCallStore = create((set, get) => ({
    * Single Idempotent Cleanup Path
    */
   cleanup: (reason = 'TERMINATED', billingSummary = null) => {
+    const currentState = get();
+    const isAlreadyEnded = currentState.callStatus === 'ENDED' || currentState.callStatus === 'IDLE';
+
+    currentState._clearTimers();
+    callDiagnosticsService.classifyFailure(reason);
+    callDiagnosticsService.recordEvent('cleanup');
     webRTCService.destroy();
     callSoundService.stopAll();
+    callSoundService.restoreAudioMode();
 
-    if (reason && reason !== 'IDLE' && reason !== 'INITIAL' && reason !== 'RESET') {
+    if (!isAlreadyEnded && reason && reason !== 'IDLE' && reason !== 'INITIAL' && reason !== 'RESET') {
       callSoundService.playEnd();
     }
 
@@ -734,12 +972,29 @@ export const useCallStore = create((set, get) => ({
       billingSummary: billingSummary || state.billingSummary,
       localStream: null,
       remoteStream: null,
+      remoteStreamVersion: 0,
       isHandlingAction: false,
       isCallMinimized: false,
       isReconnecting: false,
       isRemoteAudioMuted: false,
       isRemoteVideoDisabled: false,
+      audioRoute: 'speaker',
     }));
+
+    // Asynchronously submit sanitized evidence report without blocking local cleanup
+    const endingCallId = currentState.callId;
+    if (endingCallId && api && typeof api.post === 'function') {
+      try {
+        const report = callDiagnosticsService && typeof callDiagnosticsService.exportEvidenceReport === 'function'
+          ? callDiagnosticsService.exportEvidenceReport(reason)
+          : null;
+        if (report) {
+          api.post(`/calls/${endingCallId}/diagnostics`, { callId: endingCallId, diagnostics: report }).catch(() => {});
+        }
+      } catch (uploadErr) {
+        // Non-blocking
+      }
+    }
 
     console.log(`[CALL STORE] Cleaned up with reason: ${reason}`);
   },
@@ -748,6 +1003,8 @@ export const useCallStore = create((set, get) => ({
    * Reset to IDLE
    */
   resetToIdle: () => {
+    get()._clearTimers();
+    callDiagnosticsService.reset();
     callSoundService.stopAll();
     set({
       callId: null,
@@ -762,13 +1019,16 @@ export const useCallStore = create((set, get) => ({
       billingSummary: null,
       localStream: null,
       remoteStream: null,
+      remoteStreamVersion: 0,
       reconnectGraceExpiresAt: null,
       isCallMinimized: false,
       isReconnecting: false,
       isRemoteAudioMuted: false,
       isRemoteVideoDisabled: false,
+      isHandlingAction: false,
       networkQuality: 'excellent',
       candidatePairType: null,
+      audioRoute: 'speaker',
     });
   },
 }));

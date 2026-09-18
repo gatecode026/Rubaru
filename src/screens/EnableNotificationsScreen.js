@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
+import callPushClientService from '../services/callPushClientService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -19,7 +20,10 @@ export default function EnableNotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { isDarkMode } = useTheme();
 
-  const handleEnableNotifications = () => {
+  const handleEnableNotifications = async () => {
+    try {
+      await callPushClientService.requestNotificationPermissions();
+    } catch (e) {}
     router.replace('/(tabs)');
   };
 

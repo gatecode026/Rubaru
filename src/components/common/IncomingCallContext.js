@@ -6,6 +6,7 @@ import IncomingCallBanner from './IncomingCallBanner';
 import MiniCallOverlay from './MiniCallOverlay';
 import { connectSocket, getSocket } from '../../services/socket';
 import { useCallStore } from '../../store/callStore';
+import { useCallController } from '../../hooks/useCallController';
 import callPushClientService from '../../services/callPushClientService';
 import paidCommunicationClient from '../../services/paidCommunicationService';
 
@@ -14,6 +15,14 @@ const IncomingCallContext = createContext();
 export function IncomingCallProvider({ children }) {
   const router = useRouter();
   const coldStartHandledRef = useRef(false);
+
+  // Registers all WebRTC signaling listeners (call:accepted, call:signal:offer/answer/ice,
+  // call:connected, etc.) at app-root mount time so they are live BEFORE any call is
+  // accepted. These must not be registered lazily inside ActiveCallScreen: the caller can
+  // emit its offer within milliseconds of the receiver's call:accept ack (media is already
+  // captured by then), which can race ahead of the receiver navigating to and mounting
+  // ActiveCallScreen, silently dropping the offer with no retry.
+  useCallController();
 
   const callStore = useCallStore();
   const {
@@ -28,9 +37,11 @@ export function IncomingCallProvider({ children }) {
     rejectIncomingCall,
   } = callStore;
 
-  // Cold-Start & Runtime Deep Link Action Handling (R4-C6)
+  // Cold-Start & Runtime Deep Link Action Handling (R4-C6 / R4-C15)
   useEffect(() => {
-    callPushClientService.initialize();
+    callPushClientService.initialize().then(() => {
+      callPushClientService.requestNotificationPermissions().catch(() => {});
+    });
 
     async function handleInitialUrl() {
       if (coldStartHandledRef.current) return;
@@ -61,6 +72,9 @@ export function IncomingCallProvider({ children }) {
 
   // Connect socket and listen to canonical calling events
   useEffect(() => {
+    let activeSocket = null;
+    let registeredHandlers = null;
+
     async function initSocket() {
       try {
         const token = await AsyncStorage.getItem('userToken');
@@ -77,6 +91,7 @@ export function IncomingCallProvider({ children }) {
       const socket = getSocket();
       if (socket && !socket._incomingCallRegistered) {
         socket._incomingCallRegistered = true;
+        activeSocket = socket;
         console.log('[SOCKET] Registering canonical call:incoming & paid_session.requested listeners');
 
         const handleEndOrCancel = (data) => {
@@ -85,32 +100,31 @@ export function IncomingCallProvider({ children }) {
             return;
           }
           console.log('[SOCKET] Incoming call ended/cancelled event received:', data);
+          callPushClientService.processCallCancellationPush(data);
           useCallStore.getState().handleCallEnded(data);
         };
 
-        // Canonical call:incoming
-        socket.on('call:incoming', (data) => {
+        const handleIncoming = (data) => {
           const commType = (data?.communicationType || data?.callType || '').toUpperCase();
           if (commType === 'MESSAGE') return;
-          console.log('[SOCKET] Canonical call:incoming received:', data);
+          console.log('[SOCKET] Incoming call received:', data);
+          const cid = data.sessionId || data.callId;
+          if (cid) {
+            callPushClientService.markCallProcessed(cid);
+          }
           useCallStore.getState().handleIncomingCall(data);
-        });
+        };
 
-        // Legacy incoming_call
-        socket.on('incoming_call', (data) => {
-          const commType = (data?.communicationType || data?.callType || '').toUpperCase();
-          if (commType === 'MESSAGE') return;
-          console.log('[SOCKET] Legacy incoming_call received:', data);
-          useCallStore.getState().handleIncomingCall(data);
-        });
-
-        // Paid Session Request
-        socket.on('paid_session.requested', (data) => {
+        const handlePaidRequested = (data) => {
           console.log('[SOCKET] paid_session.requested received:', data);
           const commType = (data.communicationType || 'AUDIO').toUpperCase();
           if (commType === 'MESSAGE') {
             console.log('[SOCKET] paid_session.requested is MESSAGE type - not a voice/video call, ignoring in IncomingCallContext');
             return;
+          }
+          const cid = data.sessionId || data.callId;
+          if (cid) {
+            callPushClientService.markCallProcessed(cid);
           }
           useCallStore.getState().handleIncomingCall({
             callId: data.sessionId || data.callId,
@@ -122,28 +136,62 @@ export function IncomingCallProvider({ children }) {
             communicationType: commType,
             ratePerMinute: data.ratePerMinute || (commType === 'VIDEO' ? 10 : 5),
           });
-        });
+        };
 
-        // Cancellation & End Events across protocols
-        socket.on('call:cancelled', handleEndOrCancel);
-        socket.on('call.cancelled', handleEndOrCancel);
-        socket.on('call:ended', handleEndOrCancel);
-        socket.on('call.ended', handleEndOrCancel);
-        socket.on('call_hungup', handleEndOrCancel);
-        socket.on('call:rejected', handleEndOrCancel);
-        socket.on('call_declined', handleEndOrCancel);
-        socket.on('call:dismissed', (data) => {
+        const handleDismissed = (data) => {
           console.log('[SOCKET] Call dismissed event:', data);
           useCallStore.getState().handleDismissed(data);
+        };
+
+        const handleSync = (data) => {
+          console.log('[SOCKET] Call sync event:', data);
+          useCallStore.getState().handleSync(data);
+        };
+
+        const handleConnect = () => {
+          console.log('[SOCKET] Socket connected, syncing calling state with server');
+          const currentStore = useCallStore.getState();
+          if (currentStore.callStatus === 'RECONNECTING' || currentStore.callStatus === 'ACTIVE') {
+            currentStore.reconnectCall();
+          }
+          currentStore.syncWithServer();
+        };
+
+        registeredHandlers = [
+          { event: 'connect', handler: handleConnect },
+          { event: 'call:incoming', handler: handleIncoming },
+          { event: 'incoming_call', handler: handleIncoming },
+          { event: 'paid_session.requested', handler: handlePaidRequested },
+          { event: 'call:cancelled', handler: handleEndOrCancel },
+          { event: 'call.cancelled', handler: handleEndOrCancel },
+          { event: 'call:ended', handler: handleEndOrCancel },
+          { event: 'call.ended', handler: handleEndOrCancel },
+          { event: 'call_hungup', handler: handleEndOrCancel },
+          { event: 'call:rejected', handler: handleEndOrCancel },
+          { event: 'call_declined', handler: handleEndOrCancel },
+          { event: 'call:dismissed', handler: handleDismissed },
+          { event: 'call:sync', handler: handleSync },
+          { event: 'paid_session.ended', handler: handleEndOrCancel },
+          { event: 'paid_session.cancelled', handler: handleEndOrCancel },
+          { event: 'paid_session.declined', handler: handleEndOrCancel },
+        ];
+
+        registeredHandlers.forEach(({ event, handler }) => {
+          socket.on(event, handler);
         });
-        socket.on('paid_session.ended', handleEndOrCancel);
-        socket.on('paid_session.cancelled', handleEndOrCancel);
-        socket.on('paid_session.declined', handleEndOrCancel);
       }
     }, 1000);
 
     return () => {
       clearInterval(interval);
+      if (activeSocket && registeredHandlers) {
+        registeredHandlers.forEach(({ event, handler }) => {
+          try {
+            activeSocket.off(event, handler);
+          } catch (e) {}
+        });
+        activeSocket._incomingCallRegistered = false;
+      }
     };
   }, []);
 

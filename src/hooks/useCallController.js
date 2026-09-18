@@ -1,27 +1,31 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useCallStore } from '../store/callStore';
 import { getSocket } from '../services/socket';
 import webRTCService from '../services/webRTCService';
 
 /**
  * useCallController
- * Single application-level calling controller hook
+ * Single application-level calling controller hook.
+ *
+ * Mounted once at the app root (see IncomingCallProvider) so signaling listeners are live
+ * before any call is ever accepted — NOT lazily inside ActiveCallScreen, which only mounts
+ * after accept and would race against the caller's near-instant offer emission.
  */
 export function useCallController() {
   const store = useCallStore();
-  const listenersAttachedRef = useRef(false);
 
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
-
-    // Attach WebRTC service listeners
+    // --- webRTCService listeners: independent of socket lifecycle, attach immediately ---
     const unsubLocalStream = webRTCService.on('onLocalStream', (stream) => {
       store.setStreams({ localStream: stream });
     });
 
     const unsubRemoteStream = webRTCService.on('onRemoteStream', (stream) => {
       store.setStreams({ remoteStream: stream });
+    });
+
+    const unsubRemoteTrack = webRTCService.on('onRemoteTrack', ({ track, kind, stream }) => {
+      store.handleRemoteTrack({ track, kind, stream });
     });
 
     const unsubMediaReady = webRTCService.on('onMediaReady', () => {
@@ -36,13 +40,25 @@ export function useCallController() {
       store.handleConnectionReconnecting();
     });
 
+    const unsubConnectionReconnected = webRTCService.on('onConnectionReconnected', () => {
+      const state = useCallStore.getState();
+      if (state.callStatus === 'RECONNECTING') {
+        store.handleReconnected({ callId: state.callId });
+        const socket = getSocket();
+        if (socket && socket.connected && state.callId) {
+          socket.emit('call:reconnected', { callId: state.callId, requestId: `${state.callId}_${Date.now()}` });
+        }
+      }
+    });
+
     const unsubQualityReport = webRTCService.on('onQualityReport', (report) => {
       store.handleQualityReport(report);
     });
 
     const unsubIceCandidate = webRTCService.on('onIceCandidate', ({ candidate, generation }) => {
       const state = useCallStore.getState();
-      if (state.callId && socket.connected) {
+      const socket = getSocket();
+      if (state.callId && socket && socket.connected) {
         socket.emit('call:signal:ice', {
           callId: state.callId,
           candidate,
@@ -52,7 +68,7 @@ export function useCallController() {
       }
     });
 
-    // Attach Socket.IO call listeners
+    // --- Socket.IO call listeners ---
     const onIncoming = (data) => {
       const commType = (data?.communicationType || data?.callType || '').toUpperCase();
       if (commType === 'MESSAGE') return;
@@ -66,6 +82,11 @@ export function useCallController() {
     const onConnected = (data) => store.handleConnected(data);
     const onReconnecting = (data) => store.handleReconnecting(data);
     const onReconnected = (data) => store.handleReconnected(data);
+    // Legacy 'call_connected' fires immediately on call:accept, before any SDP/ICE exchange —
+    // it must NOT drive UI state. The authoritative 'call:connected' (below) is only emitted by
+    // the backend once both peers report real WebRTC media-ready, and is the only event allowed
+    // to move callStatus to ACTIVE.
+    const onCallConnectedLegacy = () => {};
     const onMediaControl = (data) => store.handleRemoteMediaControl(data);
     const onCallEnded = (data) => store.handleCallEnded(data);
     const onCallRejected = (data) => store.handleCallEnded(data);
@@ -73,70 +94,102 @@ export function useCallController() {
     const onCallDismissed = (data) => store.handleDismissed(data);
     const onCallSync = (data) => store.handleSync(data);
 
-    socket.on('call:incoming', onIncoming);
-    socket.on('incoming_call', onIncoming);
-    socket.on('call:ringing', onRinging);
-    socket.on('call:accepted', onAccepted);
-    socket.on('call_accepted', onAccepted);
-    socket.on('call:signal:offer', onSignalOffer);
-    socket.on('call.offer', onSignalOffer);
-    socket.on('call:signal:answer', onSignalAnswer);
-    socket.on('call.answer', onSignalAnswer);
-    socket.on('call:signal:ice', onSignalIce);
-    socket.on('call.ice_candidate', onSignalIce);
-    socket.on('call:connected', onConnected);
-    socket.on('call_connected', (data) => onConnected({ callId: data?.callSessionId || data?.callId, ...data }));
-    socket.on('call:media-control', onMediaControl);
-    socket.on('call:reconnecting', onReconnecting);
-    socket.on('call:reconnected', onReconnected);
-    socket.on('call:ended', onCallEnded);
-    socket.on('call_hungup', onCallEnded);
-    socket.on('call.ended', onCallEnded);
-    socket.on('call:rejected', onCallRejected);
-    socket.on('call_declined', onCallRejected);
-    socket.on('call:cancelled', onCallCancelled);
-    socket.on('call.cancelled', onCallCancelled);
-    socket.on('call:dismissed', onCallDismissed);
-    socket.on('call:sync', onCallSync);
+    // The socket singleton (services/socket.js) may not exist yet when this hook mounts at the
+    // app root (e.g. before login/connectSocket resolves), and may be replaced by a brand new
+    // instance across a logout/login cycle. Poll until a (possibly new, unregistered) socket
+    // instance is available and attach directly to it, rather than bailing out permanently.
+    let activeSocket = null;
 
-    listenersAttachedRef.current = true;
+    const detachSocketListeners = () => {
+      if (!activeSocket) return;
+      activeSocket.off('call:incoming', onIncoming);
+      activeSocket.off('incoming_call', onIncoming);
+      activeSocket.off('call:ringing', onRinging);
+      activeSocket.off('call:accepted', onAccepted);
+      activeSocket.off('call_accepted', onAccepted);
+      activeSocket.off('call:signal:offer', onSignalOffer);
+      activeSocket.off('call.offer', onSignalOffer);
+      activeSocket.off('call:signal:answer', onSignalAnswer);
+      activeSocket.off('call.answer', onSignalAnswer);
+      activeSocket.off('call:signal:ice', onSignalIce);
+      activeSocket.off('call.ice_candidate', onSignalIce);
+      activeSocket.off('call:connected', onConnected);
+      activeSocket.off('call_connected', onCallConnectedLegacy);
+      activeSocket.off('call:media-control', onMediaControl);
+      activeSocket.off('call:reconnecting', onReconnecting);
+      activeSocket.off('call:reconnected', onReconnected);
+      activeSocket.off('call:ended', onCallEnded);
+      activeSocket.off('call_hungup', onCallEnded);
+      activeSocket.off('call.ended', onCallEnded);
+      activeSocket.off('call:rejected', onCallRejected);
+      activeSocket.off('call_declined', onCallRejected);
+      activeSocket.off('call:cancelled', onCallCancelled);
+      activeSocket.off('call.cancelled', onCallCancelled);
+      activeSocket.off('call:dismissed', onCallDismissed);
+      activeSocket.off('call:sync', onCallSync);
+      activeSocket._callControllerRegistered = false;
+      activeSocket = null;
+    };
+
+    const attachSocketListeners = (socket) => {
+      socket._callControllerRegistered = true;
+      activeSocket = socket;
+
+      socket.on('call:incoming', onIncoming);
+      socket.on('incoming_call', onIncoming);
+      socket.on('call:ringing', onRinging);
+      socket.on('call:accepted', onAccepted);
+      socket.on('call_accepted', onAccepted);
+      socket.on('call:signal:offer', onSignalOffer);
+      socket.on('call.offer', onSignalOffer);
+      socket.on('call:signal:answer', onSignalAnswer);
+      socket.on('call.answer', onSignalAnswer);
+      socket.on('call:signal:ice', onSignalIce);
+      socket.on('call.ice_candidate', onSignalIce);
+      socket.on('call:connected', onConnected);
+      socket.on('call_connected', onCallConnectedLegacy);
+      socket.on('call:media-control', onMediaControl);
+      socket.on('call:reconnecting', onReconnecting);
+      socket.on('call:reconnected', onReconnected);
+      socket.on('call:ended', onCallEnded);
+      socket.on('call_hungup', onCallEnded);
+      socket.on('call.ended', onCallEnded);
+      socket.on('call:rejected', onCallRejected);
+      socket.on('call_declined', onCallRejected);
+      socket.on('call:cancelled', onCallCancelled);
+      socket.on('call.cancelled', onCallCancelled);
+      socket.on('call:dismissed', onCallDismissed);
+      socket.on('call:sync', onCallSync);
+    };
+
+    // Attach immediately if the socket already exists (no artificial delay in the common case).
+    const initialSocket = getSocket();
+    if (initialSocket && !initialSocket._callControllerRegistered) {
+      attachSocketListeners(initialSocket);
+    }
+
+    const socketPoll = setInterval(() => {
+      const socket = getSocket();
+      if (socket && socket !== activeSocket && !socket._callControllerRegistered) {
+        detachSocketListeners();
+        attachSocketListeners(socket);
+      } else if (!socket && activeSocket) {
+        detachSocketListeners();
+      }
+    }, 500);
 
     return () => {
+      clearInterval(socketPoll);
+      detachSocketListeners();
       unsubLocalStream();
       unsubRemoteStream();
+      unsubRemoteTrack();
       unsubMediaReady();
       unsubConnectionFailed();
       unsubConnectionReconnecting();
+      unsubConnectionReconnected();
       unsubQualityReport();
       unsubIceCandidate();
-
-      if (socket) {
-        socket.off('call:incoming', onIncoming);
-        socket.off('incoming_call', onIncoming);
-        socket.off('call:ringing', onRinging);
-        socket.off('call:accepted', onAccepted);
-        socket.off('call_accepted', onAccepted);
-        socket.off('call:signal:offer', onSignalOffer);
-        socket.off('call.offer', onSignalOffer);
-        socket.off('call:signal:answer', onSignalAnswer);
-        socket.off('call.answer', onSignalAnswer);
-        socket.off('call:signal:ice', onSignalIce);
-        socket.off('call.ice_candidate', onSignalIce);
-        socket.off('call:connected', onConnected);
-        socket.off('call_connected', onConnected);
-        socket.off('call:media-control', onMediaControl);
-        socket.off('call:reconnecting', onReconnecting);
-        socket.off('call:reconnected', onReconnected);
-        socket.off('call:ended', onCallEnded);
-        socket.off('call_hungup', onCallEnded);
-        socket.off('call.ended', onCallEnded);
-        socket.off('call:rejected', onCallRejected);
-        socket.off('call_declined', onCallRejected);
-        socket.off('call:cancelled', onCallCancelled);
-        socket.off('call.cancelled', onCallCancelled);
-        socket.off('call:dismissed', onCallDismissed);
-        socket.off('call:sync', onCallSync);
-      }
     };
   }, []);
 

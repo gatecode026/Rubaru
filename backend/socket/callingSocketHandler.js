@@ -327,24 +327,13 @@ function registerCallingHandlers(io, socket, userSocketMap) {
         type: data?.type || 'offer',
       };
 
-      io.to(`user:${peerId}`).emit(SocketEvents.CALL_SIGNAL_OFFER, offerPayload);
-      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
-        io.to(peerSocketId).emit(SocketEvents.CALL_SIGNAL_OFFER, offerPayload);
-      }
-
-      // Legacy call.offer support
-      io.to(`user:${peerId}`).emit('call.offer', {
+      const targetDestination = peerSocketId || `user:${peerId}`;
+      io.to(targetDestination).emit(SocketEvents.CALL_SIGNAL_OFFER, offerPayload);
+      io.to(targetDestination).emit('call.offer', {
         sessionId: callId,
         senderId: userId,
         sdp,
       });
-      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
-        io.to(peerSocketId).emit('call.offer', {
-          sessionId: callId,
-          senderId: userId,
-          sdp,
-        });
-      }
 
       return cb(formatAckSuccess(requestId, { callId, relayed: true }));
     } catch (err) {
@@ -399,24 +388,13 @@ function registerCallingHandlers(io, socket, userSocketMap) {
         type: data?.type || 'answer',
       };
 
-      io.to(`user:${peerId}`).emit(SocketEvents.CALL_SIGNAL_ANSWER, answerPayload);
-      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
-        io.to(peerSocketId).emit(SocketEvents.CALL_SIGNAL_ANSWER, answerPayload);
-      }
-
-      // Legacy call.answer support
-      io.to(`user:${peerId}`).emit('call.answer', {
+      const targetDestination = peerSocketId || `user:${peerId}`;
+      io.to(targetDestination).emit(SocketEvents.CALL_SIGNAL_ANSWER, answerPayload);
+      io.to(targetDestination).emit('call.answer', {
         sessionId: callId,
         senderId: userId,
         sdp,
       });
-      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
-        io.to(peerSocketId).emit('call.answer', {
-          sessionId: callId,
-          senderId: userId,
-          sdp,
-        });
-      }
 
       return cb(formatAckSuccess(requestId, { callId, relayed: true }));
     } catch (err) {
@@ -469,24 +447,13 @@ function registerCallingHandlers(io, socket, userSocketMap) {
         candidate,
       };
 
-      io.to(`user:${peerId}`).emit(SocketEvents.CALL_SIGNAL_ICE, icePayload);
-      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
-        io.to(peerSocketId).emit(SocketEvents.CALL_SIGNAL_ICE, icePayload);
-      }
-
-      // Legacy call.ice_candidate support
-      io.to(`user:${peerId}`).emit('call.ice_candidate', {
+      const iceDestination = peerSocketId || `user:${peerId}`;
+      io.to(iceDestination).emit(SocketEvents.CALL_SIGNAL_ICE, icePayload);
+      io.to(iceDestination).emit('call.ice_candidate', {
         sessionId: callId,
         senderId: userId,
         candidate,
       });
-      if (peerSocketId && peerSocketId !== `user:${peerId}`) {
-        io.to(peerSocketId).emit('call.ice_candidate', {
-          sessionId: callId,
-          senderId: userId,
-          candidate,
-        });
-      }
 
       return cb(formatAckSuccess(requestId, { callId, relayed: true }));
     } catch (err) {

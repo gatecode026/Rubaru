@@ -2,19 +2,21 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-export const getBaseUrl = () => {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (envUrl) {
-    return envUrl;
-  }
-  const debuggerHost = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost || Constants.manifest?.debuggerHost;
-  if (debuggerHost) {
-    const ip = debuggerHost.split(':')[0];
-    if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
-      return `http://${ip}:5000/api`;
-    }
-  }
-  return 'http://192.168.1.20:5000/api';
+const FALLBACK_URLS = [
+  process.env.EXPO_PUBLIC_API_URL,
+  'http://192.168.1.104:5000/api',
+  'http://127.0.0.1:5000/api',
+  'http://10.0.2.2:5000/api',
+].filter(Boolean);
+
+let activeBaseUrlIndex = 0;
+let currentBaseUrl = FALLBACK_URLS[0] || 'http://192.168.1.104:5000/api';
+
+export const getBaseUrl = () => currentBaseUrl;
+
+export const setBaseUrl = (newUrl) => {
+  currentBaseUrl = newUrl;
+  api.defaults.baseURL = newUrl;
 };
 
 const api = axios.create({
@@ -54,6 +56,15 @@ api.interceptors.response.use(
       console.warn(`[API ERROR ${error.response.status}] ${error.config?.method?.toUpperCase()} ${error.config?.url}:`, error.response.data);
     } else {
       console.warn(`[API NETWORK ERROR] ${error.config?.method?.toUpperCase()} ${error.config?.url}:`, error.message);
+      if (!error.config?._failoverRetried && activeBaseUrlIndex < FALLBACK_URLS.length - 1) {
+        activeBaseUrlIndex++;
+        currentBaseUrl = FALLBACK_URLS[activeBaseUrlIndex];
+        console.log(`[API FAILOVER] Switching baseUrl to ${currentBaseUrl} and retrying...`);
+        api.defaults.baseURL = currentBaseUrl;
+        error.config.baseURL = currentBaseUrl;
+        error.config._failoverRetried = true;
+        return api(error.config);
+      }
     }
     if (error.response && error.response.status === 401) {
       const requestUrl = error.config?.url || '';
