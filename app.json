@@ -18,7 +18,12 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Rubaru needs camera access for video calling.",
         "NSMicrophoneUsageDescription": "Rubaru needs microphone access for audio and video calling.",
-        "UIBackgroundModes": ["audio", "voip", "fetch", "remote-notification"]
+        "UIBackgroundModes": [
+          "audio",
+          "voip",
+          "fetch",
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -43,7 +48,8 @@
         "android.permission.USE_FULL_SCREEN_INTENT",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.WAKE_LOCK",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
     },
     "plugins": [
@@ -57,6 +63,12 @@
       "output": "single",
       "favicon": "./src/assets/images/icon.png"
     },
-    "scheme": "rubaru"
+    "scheme": "rubaru",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4a8e9e7e-3d99-4ac1-8b9c-cbcd9f2291bc"
+      }
+    }
   }
 }

@@ -16,6 +16,8 @@ const walletService = require('./walletService');
 const fraudProtectionService = require('./fraudProtectionService');
 const featureFlagService = require('./featureFlagService');
 const pushAdapter = require('./pushAdapter');
+const CallingConfig = require('../config/callingConfig');
+const callMetrics = require('./callMetrics');
 const { getSocketIO } = require('./socketDispatchService');
 
 const {
@@ -106,14 +108,30 @@ class CallService {
       }
     }
 
+    // 0. Environment Kill Switch Check
+    if (CallingConfig && CallingConfig.isCallingEnabled === false) {
+      throw new CallDomainError('CALLING_DISABLED', 'Calling is temporarily disabled by system administrators.', 503);
+    }
+
     // 4. Rate & emergency stop configuration
     const [activeConfig, featureFlags] = await Promise.all([
       PaidCommunicationConfig.getActiveConfig(),
       featureFlagService.getFeatureFlags(),
     ]);
 
-    if (featureFlags?.flags?.emergencyStop === true) {
+    if (featureFlags?.flags?.emergencyStop === true || activeConfig?.enabled?.EMERGENCY_STOP === true) {
       throw new CallDomainError('EMERGENCY_STOP_ACTIVE', 'Calling is temporarily halted due to an administrative emergency stop.', 503);
+    }
+
+    // Fail closed if communication type is disabled in activeConfig or featureFlags
+    if (activeConfig.enabled && activeConfig.enabled[normalizedType] === false) {
+      throw new CallDomainError('COMMUNICATION_TYPE_DISABLED', `Paid ${normalizedType} communication is currently disabled.`, 403);
+    }
+    if (normalizedType === CommunicationTypes.AUDIO && featureFlags?.flags?.PAID_AUDIO === false) {
+      throw new CallDomainError('COMMUNICATION_TYPE_DISABLED', 'Paid AUDIO communication is currently disabled.', 403);
+    }
+    if (normalizedType === CommunicationTypes.VIDEO && featureFlags?.flags?.PAID_VIDEO === false) {
+      throw new CallDomainError('COMMUNICATION_TYPE_DISABLED', 'Paid VIDEO communication is currently disabled.', 403);
     }
 
     const rate = activeConfig.rates[normalizedType];
@@ -787,6 +805,11 @@ class CallService {
       io.to(`user:${receiverId}`).emit('call:ended', failPayload);
     }
 
+    if (callMetrics) {
+      callMetrics.increment('failed_calls');
+      callMetrics.recordTerminalReason(reason || failureCode);
+    }
+
     return this.formatSessionDto(sessionDoc, sessionDoc.caller);
   }
 
@@ -842,6 +865,19 @@ class CallService {
       sessionDoc.billedMinutes = successfulMinutes;
       sessionDoc.totalCoinsCharged = successfulMinutes * sessionDoc.ratePerMinuteSnapshot;
       sessionDoc.totalCoinsEarned = sessionDoc.totalCoinsCharged;
+
+      if (callMetrics) {
+        callMetrics.increment('billable_calls');
+      }
+    } else {
+      if (callMetrics) {
+        callMetrics.increment('non_connected_calls');
+      }
+    }
+
+    if (callMetrics) {
+      callMetrics.increment('completed_calls');
+      callMetrics.recordTerminalReason(sessionDoc.endReason);
     }
 
     await sessionDoc.save();

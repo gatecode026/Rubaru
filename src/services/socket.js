@@ -12,19 +12,14 @@
 import { io } from 'socket.io-client';
 import Constants from 'expo-constants';
 
+import { getBaseUrl } from './api';
+
 export const getSocketUrl = () => {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (envUrl) {
-    return envUrl.replace(/\/api\/?$/, '');
+  const apiUrl = getBaseUrl();
+  if (apiUrl) {
+    return apiUrl.replace(/\/api\/?$/, '');
   }
-  const debuggerHost = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost || Constants.manifest?.debuggerHost;
-  if (debuggerHost) {
-    const ip = debuggerHost.split(':')[0];
-    if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
-      return `http://${ip}:5000`;
-    }
-  }
-  return 'http://192.168.1.20:5000';
+  return 'http://192.168.1.104:5000';
 };
 
 const SOCKET_URL = getSocketUrl();

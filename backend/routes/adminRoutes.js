@@ -990,4 +990,29 @@ const getAuditLogsHandler = async (req, res) => {
 router.get('/audit-log', protect, requirePermission('paidCommunication.view'), getAuditLogsHandler);
 router.get('/audit', protect, requirePermission('paidCommunication.view'), getAuditLogsHandler);
 
+/**
+ * Calling Operations Health & Real-time Metrics (R4-C20 / R4-C21)
+ */
+const getCallingHealthAdminHandler = async (req, res) => {
+  try {
+    const callMetrics = require('../services/callMetrics');
+    const CallingConfig = require('../config/callingConfig');
+    const pushAdapter = require('../services/pushAdapter');
+    const health = callMetrics.getOperationalHealth();
+    return res.json({
+      ok: true,
+      data: {
+        ...health,
+        config: CallingConfig.validateConfig().summary,
+        push: pushAdapter.getProviderStatus(),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, message: err.message });
+  }
+};
+
+router.get('/calling/health', protect, requirePermission('paidCommunication.viewOperations'), getCallingHealthAdminHandler);
+router.get('/calling/metrics', protect, requirePermission('paidCommunication.viewOperations'), getCallingHealthAdminHandler);
+
 module.exports = router;

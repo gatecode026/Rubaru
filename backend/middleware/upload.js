@@ -9,7 +9,7 @@ const uploadDirs = [
   'uploads/audio'
 ];
 uploadDirs.forEach(dir => {
-  const dirPath = path.join(__dirname, '..', dir);
+  const dirPath = path.resolve(dir);
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
   }
@@ -19,7 +19,7 @@ uploadDirs.forEach(dir => {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     let folder = 'uploads/';
-    
+
     if (file.mimetype.startsWith('image/')) {
       folder += 'images/';
     } else if (file.mimetype.startsWith('video/')) {
@@ -27,8 +27,8 @@ const storage = multer.diskStorage({
     } else if (file.mimetype.startsWith('audio/')) {
       folder += 'audio/';
     }
-    
-    cb(null, path.join(__dirname, '..', folder));
+
+    cb(null, path.resolve(folder));
   },
   filename: (req, file, cb) => {
     // Generate unique filename: timestamp + random number + original extension
@@ -47,7 +47,7 @@ const fileFilter = (req, file, cb) => {
     // Audio
     'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/m4a', 'audio/x-m4a', 'audio/aac', 'audio/ogg'
   ];
-  
+
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {

@@ -25,18 +25,15 @@ class TurnService {
       );
     }
 
-    const defaultStunServers = [
-      'stun:stun.l.google.com:19302',
-      'stun:stun1.l.google.com:19302',
-      'stun:stun2.l.google.com:19302',
-    ];
+    const defaultStunServers = (process.env.STUN_URLS || 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302,stun:stun2.l.google.com:19302')
+      .split(',')
+      .map((u) => u.trim());
 
     if (!turnSecret) {
       // Return public STUN only in development
       return {
         iceServers: [
           { urls: defaultStunServers },
-          { urls: turnUrls },
         ],
         username: null,
         credential: null,

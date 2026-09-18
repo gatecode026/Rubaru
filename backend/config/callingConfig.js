@@ -7,6 +7,8 @@ const CallingConfig = {
   environment: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
 
+  isCallingEnabled: process.env.CALLING_ENABLED !== 'false' && process.env.CALL_KILL_SWITCH !== 'true',
+
   // Database & Cache
   mongo: {
     uri: process.env.MONGO_URI || 'mongodb://localhost:27017/dating_app',
@@ -36,7 +38,7 @@ const CallingConfig = {
   security: {
     jwtSecret: process.env.JWT_SECRET || 'rubaru_super_secret_jwt_key_2026',
     callSigningSecret: process.env.CALL_SIGNING_SECRET || process.env.JWT_SECRET || 'rubaru_secure_call_signing_key_2026',
-    turnSecret: process.env.TURN_SECRET || 'rubaru_production_turn_secret_hmac_2026',
+    turnSecret: process.env.TURN_SECRET || process.env.COTURN_SECRET || 'rubaru_production_turn_secret_hmac_2026',
     isProductionSecretSet: Boolean(
       process.env.JWT_SECRET &&
       process.env.JWT_SECRET !== 'rubaru_super_secret_jwt_key_2026' &&
@@ -47,7 +49,7 @@ const CallingConfig = {
   // STUN / TURN Relay Servers
   webrtc: {
     stunUrls: (process.env.STUN_URLS || 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302').split(','),
-    turnUrls: (process.env.TURN_URLS || 'turn:turn.rubaru.app:3478,turns:turn.rubaru.app:5349').split(','),
+    turnUrls: (process.env.TURN_URLS || process.env.COTURN_URLS || 'turn:turn.rubaru.app:3478,turns:turn.rubaru.app:5349').split(','),
     turnCredentialTtlSeconds: parseInt(process.env.TURN_CREDENTIAL_TTL_SECONDS || '86400', 10), // 24 hours
   },
 
@@ -80,6 +82,10 @@ const CallingConfig = {
       warnings.push('JWT_SECRET or CALL_SIGNING_SECRET is using development default value.');
     }
 
+    if (this.isProduction && (!process.env.TURN_SECRET && !process.env.COTURN_SECRET)) {
+      errors.push('TURN_SECRET or COTURN_SECRET is required in production.');
+    }
+
     if (this.lifecycle.ringTimeoutSeconds < 10 || this.lifecycle.ringTimeoutSeconds > 120) {
       errors.push('CALL_RING_TIMEOUT_SECONDS must be between 10 and 120 seconds.');
     }
@@ -98,6 +104,7 @@ const CallingConfig = {
       warnings,
       summary: {
         environment: this.environment,
+        isCallingEnabled: this.isCallingEnabled,
         ringTimeoutSeconds: this.lifecycle.ringTimeoutSeconds,
         reconnectGraceSeconds: this.lifecycle.reconnectGraceSeconds,
         audioRatePerMinute: this.pricing.audioRatePerMinute,

@@ -11,12 +11,12 @@ import {
   Share,
   AppState,
   BackHandler,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useCallController } from '../hooks/useCallController';
 import { useCallStore } from '../store/callStore';
 import { RTCView } from '../services/webRTCService';
 import { usePointsStore } from '../store/pointsStore';
@@ -33,7 +33,11 @@ export default function ActiveCallScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
 
-  const callController = useCallController();
+  // Signaling listeners (call:accepted, offer/answer/ICE, call:connected, etc.) are registered
+  // once at app root by IncomingCallProvider via useCallController(), so they are live before
+  // any call is accepted. This screen only needs to subscribe to the shared store, not
+  // re-register listeners (which would double-handle every signaling event).
+  const callController = useCallStore();
   const {
     callId,
     callStatus,
@@ -48,6 +52,7 @@ export default function ActiveCallScreen() {
     isSpeakerOn,
     localStream,
     remoteStream,
+    remoteStreamVersion,
     isRemoteAudioMuted,
     isRemoteVideoDisabled,
     networkQuality,
@@ -59,6 +64,7 @@ export default function ActiveCallScreen() {
     switchCamera,
     toggleSpeaker,
     hangupCall,
+    cancelCall,
     initiateCall,
     cleanup,
   } = callController;
@@ -83,23 +89,50 @@ export default function ActiveCallScreen() {
   const [hasFilter, setHasFilter] = useState(false);
   const [isAppBackgrounded, setIsAppBackgrounded] = useState(false);
   const hasInitiatedRef = useRef(false);
+  const hangupTimeoutRef = useRef(null);
 
-  // AppState listener for background/foreground video suspension & audio preservation
+  // AppState listener for background/foreground video suspension & audio preservation.
+  // Only a genuine 'background' transition suspends the outgoing video track — 'inactive' is
+  // excluded because it can fire as a transient blip (permission dialogs, notification-launched
+  // cold starts, full-screen-intent incoming-call transitions) without a real backgrounding,
+  // and without a guaranteed matching 'active' event to restore it, which previously left the
+  // local video track permanently disabled (silently sending black video) for the rest of the call.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
-      const isBg = nextState === 'background' || nextState === 'inactive';
+      const isBg = nextState === 'background';
       setIsAppBackgrounded(isBg);
-      if (isBg && callType === 'video') {
-        console.log('[ACTIVE CALL] App backgrounded: video preview suspended, audio preserved.');
-      } else if (!isBg) {
-        console.log('[ACTIVE CALL] App foregrounded: video preview restored.');
+      if (callType === 'video' && localStream) {
+        const videoTracks = localStream.getVideoTracks ? localStream.getVideoTracks() : [];
+        if (isBg) {
+          console.log('[ACTIVE CALL] App backgrounded: video preview suspended, audio preserved.');
+          videoTracks.forEach((t) => { t.enabled = false; });
+        } else {
+          console.log('[ACTIVE CALL] App foregrounded: video preview restored.');
+          videoTracks.forEach((t) => { t.enabled = Boolean(isVideoEnabled); });
+        }
       }
     });
 
     return () => {
       sub.remove();
     };
-  }, [callType]);
+  }, [callType, localStream, isVideoEnabled]);
+
+  // Self-heal: whenever the local video track becomes available (or isVideoEnabled changes)
+  // while the app is actually in the foreground, force its enabled state to match isVideoEnabled.
+  // Guards against any missed/out-of-order AppState transition leaving the sender's video track
+  // stuck disabled from call start, which would silently send black video with no error anywhere
+  // in the signaling/negotiation pipeline.
+  useEffect(() => {
+    if (callType !== 'video' || !localStream || AppState.currentState !== 'active') return;
+    const videoTracks = localStream.getVideoTracks ? localStream.getVideoTracks() : [];
+    videoTracks.forEach((t) => {
+      if (t.enabled !== Boolean(isVideoEnabled)) {
+        console.log('[ACTIVE CALL] Re-syncing local video track enabled state on foreground mount.');
+        t.enabled = Boolean(isVideoEnabled);
+      }
+    });
+  }, [callType, localStream, isVideoEnabled]);
 
   // Mark screen un-minimized when entered
   useEffect(() => {
@@ -171,6 +204,10 @@ export default function ActiveCallScreen() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (hangupTimeoutRef.current) {
+        clearTimeout(hangupTimeoutRef.current);
+        hangupTimeoutRef.current = null;
+      }
       const status = useCallStore.getState().callStatus;
       if (status === 'ENDED') {
         useCallStore.getState().resetToIdle();
@@ -184,8 +221,14 @@ export default function ActiveCallScreen() {
       exitScreen();
       return;
     }
-    hangupCall('USER_HUNG_UP');
-    setTimeout(() => {
+    if (callStatus === 'INITIATING' || callStatus === 'RINGING') {
+      cancelCall('CALLER_CANCELLED');
+    } else {
+      hangupCall('USER_HUNG_UP');
+    }
+    if (hangupTimeoutRef.current) clearTimeout(hangupTimeoutRef.current);
+    hangupTimeoutRef.current = setTimeout(() => {
+      hangupTimeoutRef.current = null;
       if (!useCallStore.getState().billingSummary) {
         useCallStore.getState().resetToIdle();
         exitScreen();
@@ -232,6 +275,8 @@ export default function ActiveCallScreen() {
   };
 
   const isVideoCall = callType === 'video';
+  const remoteVideoTracks = remoteStream && typeof remoteStream.getVideoTracks === 'function' ? remoteStream.getVideoTracks() : [];
+  const hasRemoteVideoTrack = remoteVideoTracks.length > 0 && remoteVideoTracks.some((t) => t.enabled);
 
   return (
     <View style={styles.safeContainer}>
@@ -240,12 +285,14 @@ export default function ActiveCallScreen() {
 
       {/* Main Video View / Backdrop */}
       <View style={styles.fullScreenVideoWrapper}>
-        {isVideoCall && !isRemoteVideoDisabled && remoteStream && RTCView ? (
+        {isVideoCall && !isRemoteVideoDisabled && remoteStream && hasRemoteVideoTrack && RTCView ? (
           <RTCView
+            key={`remote-rtc-${typeof remoteStream.toURL === 'function' ? remoteStream.toURL() : 'remote'}-${remoteStreamVersion || 0}`}
             streamURL={typeof remoteStream.toURL === 'function' ? remoteStream.toURL() : ''}
             style={StyleSheet.absoluteFillObject}
             objectFit="cover"
             mirror={false}
+            zOrder={0}
           />
         ) : isVideoCall && isRemoteVideoDisabled ? (
           <View style={[StyleSheet.absoluteFillObject, styles.cameraOffPlaceholder]}>
@@ -259,6 +306,20 @@ export default function ActiveCallScreen() {
             <View style={styles.cameraOffNoticeBox}>
               <Ionicons name="videocam-off" size={18} color="#94A3B8" style={{ marginRight: 6 }} />
               <Text style={styles.cameraOffNoticeText}>{contactName} turned off camera</Text>
+            </View>
+          </View>
+        ) : isVideoCall && (!remoteStream || !hasRemoteVideoTrack) ? (
+          <View style={[StyleSheet.absoluteFillObject, styles.cameraOffPlaceholder]}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.cameraOffAvatar} />
+            ) : (
+              <View style={[styles.cameraOffAvatar, styles.avatarPlaceholderLarge]}>
+                <Text style={styles.avatarInitialLarge}>{contactName ? contactName.charAt(0).toUpperCase() : 'R'}</Text>
+              </View>
+            )}
+            <View style={styles.cameraOffNoticeBox}>
+              <ActivityIndicator size="small" color="#22C55E" style={{ marginRight: 8 }} />
+              <Text style={styles.cameraOffNoticeText}>Connecting {contactName}'s video...</Text>
             </View>
           </View>
         ) : avatarUri ? (
@@ -375,6 +436,7 @@ export default function ActiveCallScreen() {
           <View style={styles.pipThumbnailContainer}>
             {localStream && RTCView ? (
               <RTCView
+                key={`local-rtc-${typeof localStream.toURL === 'function' ? localStream.toURL() : 'local'}-${isFrontCamera ? 'front' : 'back'}`}
                 streamURL={typeof localStream.toURL === 'function' ? localStream.toURL() : ''}
                 style={styles.pipThumbnailImage}
                 objectFit="cover"

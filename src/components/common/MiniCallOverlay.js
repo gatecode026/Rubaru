@@ -45,10 +45,10 @@ export default function MiniCallOverlay() {
   const isOngoing = ['ACTIVE', 'CONNECTED', 'CONNECTING', 'RINGING', 'INITIATING', 'RECONNECTING'].includes(callStatus);
   const shouldShow = isOngoing && isCallMinimized;
 
-  // Active duration ticker
+  // Active duration ticker (only runs when minimized overlay is visible)
   useEffect(() => {
     let interval = null;
-    if (callStatus === 'ACTIVE') {
+    if (shouldShow && callStatus === 'ACTIVE') {
       interval = setInterval(() => {
         tickDuration();
       }, 1000);
@@ -56,7 +56,7 @@ export default function MiniCallOverlay() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [callStatus, tickDuration]);
+  }, [shouldShow, callStatus, tickDuration]);
 
   // Draggable position
   const pan = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 210, y: Platform.OS === 'ios' ? 60 : 40 })).current;

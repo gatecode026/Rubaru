@@ -15,6 +15,13 @@ try {
   // expo-av not available
 }
 
+let ReactNative = null;
+try {
+  ReactNative = require('react-native');
+} catch (e) {
+  // react-native not available in unit test runner
+}
+
 const SOUND_ASSETS = {
   ringback: require('../assets/sounds/ringback.wav'),
   ringtone: require('../assets/sounds/ringtone.wav'),
@@ -29,6 +36,12 @@ class CallSoundService {
     this.currentSound = null;
     this.currentKey = null;
     this.isAudioModeConfigured = false;
+    this.currentAudioRoute = 'speaker';
+    this.playSequence = 0;
+  }
+
+  getAudioRoute() {
+    return this.currentAudioRoute;
   }
 
   async _configureAudioMode() {
@@ -55,7 +68,12 @@ class CallSoundService {
   }
 
   async playSound(key, { isLooping = false, volume = 1.0 } = {}) {
+    const seq = ++this.playSequence;
     await this._configureAudioMode();
+
+    if (this.playSequence !== seq) {
+      return;
+    }
 
     // If the same looping sound is already active, don't restart
     if (this.currentKey === key && (this.currentPlayer || this.currentSound) && isLooping) {
@@ -63,6 +81,7 @@ class CallSoundService {
     }
 
     await this.stopAll();
+    this.playSequence = seq;
 
     const asset = SOUND_ASSETS[key];
     if (!asset) {
@@ -133,6 +152,12 @@ class CallSoundService {
   }
 
   async playRingtone() {
+    try {
+      const RN = ReactNative?.default || ReactNative;
+      if (RN && RN.Vibration && typeof RN.Vibration.vibrate === 'function') {
+        RN.Vibration.vibrate([0, 1000, 1000], true);
+      }
+    } catch (e) {}
     return this.playSound('ringtone', { isLooping: true, volume: 1.0 });
   }
 
@@ -149,6 +174,14 @@ class CallSoundService {
   }
 
   async stopAll() {
+    this.playSequence++;
+    try {
+      const RN = ReactNative?.default || ReactNative;
+      if (RN && RN.Vibration && typeof RN.Vibration.cancel === 'function') {
+        RN.Vibration.cancel();
+      }
+    } catch (e) {}
+
     if (this.currentPlayer) {
       try {
         const player = this.currentPlayer;
@@ -171,17 +204,57 @@ class CallSoundService {
   }
 
   async setAudioRoute(isSpeakerOn = true) {
+    const prevRoute = this.currentAudioRoute;
+    this.currentAudioRoute = isSpeakerOn ? 'speaker' : 'earpiece';
     try {
+      if (ExpoAudio && typeof ExpoAudio.setAudioModeAsync === 'function') {
+        await ExpoAudio.setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldRouteThroughEarpiece: !isSpeakerOn,
+          allowsBackgroundRecording: true,
+          interruptionMode: 'doNotMix',
+        });
+      }
       if (ExpoAV && ExpoAV.Audio && typeof ExpoAV.Audio.setAudioModeAsync === 'function') {
         await ExpoAV.Audio.setAudioModeAsync({
           allowsRecordingIOS: true,
           playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
           shouldDuckAndroid: true,
           playThroughEarpieceAndroid: !isSpeakerOn,
         });
       }
+      console.log(`[AUDIO DEBUG] Route changed: previous=${prevRoute}, requested=${isSpeakerOn ? 'speaker' : 'earpiece'}, actual=${this.currentAudioRoute}`);
     } catch (e) {
       console.warn('[CALL SOUNDS] Failed to set audio route:', e.message);
+    }
+  }
+
+  async restoreAudioMode() {
+    const prevRoute = this.currentAudioRoute;
+    this.currentAudioRoute = 'speaker';
+    this.isAudioModeConfigured = false;
+    try {
+      if (ExpoAudio && typeof ExpoAudio.setAudioModeAsync === 'function') {
+        await ExpoAudio.setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldRouteThroughEarpiece: false,
+          allowsBackgroundRecording: false,
+          interruptionMode: 'mixWithOthers',
+        });
+      }
+      if (ExpoAV && ExpoAV.Audio && typeof ExpoAV.Audio.setAudioModeAsync === 'function') {
+        await ExpoAV.Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+        });
+      }
+      console.log(`[AUDIO DEBUG] Audio mode restored to normal (previous route: ${prevRoute})`);
+    } catch (e) {
+      console.warn('[CALL SOUNDS] Failed to restore normal audio mode:', e.message);
     }
   }
 }
